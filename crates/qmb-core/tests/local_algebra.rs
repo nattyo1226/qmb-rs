@@ -3,7 +3,7 @@
 use std::{fmt::Debug, num::NonZeroUsize, ops::Neg};
 
 use qmb_core::{
-    ActOn, Adjoint, Basis, Complex, DimensionOverflow, InnerProduct, LinearCombination,
+    Act, Adjoint, Basis, Complex, DimensionOverflow, InnerProduct, LinearCombination,
     LocalStructure, OperatorBasis, Product, StateBasis, Term, Trace,
     num_traits::{FromPrimitive, Num, ToPrimitive},
     operator_basis_len, state_basis_len,
@@ -97,12 +97,12 @@ impl<T: Real> Product<T> for Operator {
     }
 }
 
-impl<T: Real> ActOn<Ket, T> for Operator {
-    fn act_on(&self, state: &Ket) -> LinearCombination<Ket, T> {
-        match *self {
-            Self::Identity => LinearCombination::primitive(*state),
-            Self::Unit(i, j) => {
-                LinearCombination::term(state.coordinates::<T>()[j.index()], Ket::Unit(i))
+impl<T: Real> Act<Operator, T> for Ket {
+    fn act(&self, operator: &Operator) -> LinearCombination<Self, T> {
+        match *operator {
+            Operator::Identity => LinearCombination::primitive(*self),
+            Operator::Unit(i, j) => {
+                LinearCombination::term(self.coordinates::<T>()[j.index()], Self::Unit(i))
             }
         }
     }
@@ -293,8 +293,16 @@ fn product<T: Real>(
 
 fn action<T: Real>(a: &LinearCombination<Operator, T>, state: &Ket) -> Vector<T> {
     state_value(&LinearCombination::from_terms(a.terms().flat_map(|t| {
-        t.primitive.act_on(state).scaled(t.coefficient).into_iter()
+        state.act(&t.primitive).scaled(t.coefficient).into_iter()
     })))
+}
+
+// LocalStructure alone must expose the state's action capability.
+fn act_primitive<L, T>(state: &L::State, operator: &L::Operator) -> LinearCombination<L::State, T>
+where
+    L: LocalStructure<T>,
+{
+    state.act(operator)
 }
 
 fn inner<T: Real>(a: &LinearCombination<Ket, T>, b: &LinearCombination<Ket, T>) -> Complex<T> {
@@ -348,7 +356,7 @@ fn check_rules<T: Real>() {
         let expected_trace = (0..3).fold(c(0.0, 0.0), |sum, i| sum + a_matrix[i][i]);
         assert_complex(<Operator as Trace<T>>::trace(&a), expected_trace);
         for state in KETS {
-            let applied = <Operator as ActOn<Ket, T>>::act_on(&a, &state);
+            let applied = act_primitive::<ThreeLevel, T>(&state, &a);
             assert_vector(state_value(&applied), matvec(a_matrix, state.coordinates()));
             assert_vector(action(&identity, &state), state.coordinates());
             for x in KETS {
@@ -366,7 +374,7 @@ fn check_rules<T: Real>() {
                     action(&ab, &state),
                     matvec(
                         a_matrix,
-                        state_value(&<Operator as ActOn<Ket, T>>::act_on(&b, &state)),
+                        state_value(&<Ket as Act<Operator, T>>::act(&state, &b)),
                     ),
                 );
             }

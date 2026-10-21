@@ -6,10 +6,10 @@
 //! from the result or specified through a qualified trait call.
 //!
 //! ```
-//! use qmb_core::{ActOn, Complex, LinearCombination, Product};
+//! use qmb_core::{Act, Complex, LinearCombination, Product};
 //! use qmb_spin_half::{SpinHalfOperator as Op, SpinHalfState as State};
 //!
-//! let raised: LinearCombination<State, f64> = Op::SPlus.act_on(&State::Down);
+//! let raised: LinearCombination<State, f64> = State::Down.act(&Op::SPlus);
 //! assert_eq!(raised, LinearCombination::primitive(State::Up));
 //!
 //! let squared = <Op as Product<f32>>::product(&Op::Sx, &Op::Sx);

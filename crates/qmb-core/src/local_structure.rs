@@ -2,7 +2,7 @@
 
 use core::num::NonZeroUsize;
 
-use crate::{ActOn, Adjoint, InnerProduct, LinearCombination, Product, Trace};
+use crate::{Act, Adjoint, InnerProduct, LinearCombination, Product, Trace};
 
 /// A fixed, finite-dimensional local structure at coefficient precision `T`.
 ///
@@ -16,10 +16,10 @@ use crate::{ActOn, Adjoint, InnerProduct, LinearCombination, Product, Trace};
 /// trace. Primitives may be linearly dependent; rules must preserve their linear
 /// relations. No blanket cloning, comparison, or thread-safety bound is imposed.
 pub trait LocalStructure<T> {
-    /// The state primitive type for this structure.
-    type State: InnerProduct<T>;
+    /// The state primitive type and its required local capabilities.
+    type State: InnerProduct<T> + Act<Self::Operator, T>;
     /// The operator primitive type and its required local capabilities.
-    type Operator: Product<T> + ActOn<Self::State, T> + Adjoint<T> + Trace<T>;
+    type Operator: Product<T> + Adjoint<T> + Trace<T>;
 
     /// The positive dimension of the local state space.
     const DIMENSION: NonZeroUsize;

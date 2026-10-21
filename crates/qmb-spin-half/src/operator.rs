@@ -1,16 +1,13 @@
-//! Spin primitives and direct product, action, adjoint, and trace rules.
+//! Spin primitives and direct product, adjoint, and trace rules.
 
 use core::ops::{Div, Neg};
 
 use qmb_core::{
-    ActOn, Adjoint, Complex, LinearCombination, Product, Trace,
+    Adjoint, Complex, LinearCombination, Product, Trace,
     num_traits::{One, Zero},
 };
 
-use crate::{
-    SpinHalfState,
-    coefficient::{half, imaginary, quarter, real},
-};
+use crate::coefficient::{half, imaginary, quarter, real};
 
 /// The identity, Cartesian spins, and ladder operators with `hbar = 1`.
 ///
@@ -70,30 +67,6 @@ where
             (SPlus, SPlus) | (SMinus, SMinus) => Lc::zero(),
             (SPlus, SMinus) => Lc::term(real(half()), I) + Lc::primitive(Sz),
             (SMinus, SPlus) => Lc::term(real(half()), I) + Lc::term(real(-T::one()), Sz),
-        }
-    }
-}
-
-impl<T> ActOn<SpinHalfState, T> for SpinHalfOperator
-where
-    T: Zero + One + Div<Output = T> + Neg<Output = T>,
-{
-    fn act_on(&self, state: &SpinHalfState) -> LinearCombination<SpinHalfState, T> {
-        use LinearCombination as Lc;
-        use SpinHalfOperator::*;
-        use SpinHalfState::*;
-
-        match (*self, *state) {
-            (I, state) => Lc::primitive(state),
-            (Sx, Up) => Lc::term(real(half()), Down),
-            (Sx, Down) => Lc::term(real(half()), Up),
-            (Sy, Up) => Lc::term(imaginary(half()), Down),
-            (Sy, Down) => Lc::term(imaginary(-half::<T>()), Up),
-            (Sz, Up) => Lc::term(real(half()), Up),
-            (Sz, Down) => Lc::term(real(-half::<T>()), Down),
-            (SPlus, Up) | (SMinus, Down) => Lc::zero(),
-            (SPlus, Down) => Lc::primitive(Up),
-            (SMinus, Up) => Lc::primitive(Down),
         }
     }
 }

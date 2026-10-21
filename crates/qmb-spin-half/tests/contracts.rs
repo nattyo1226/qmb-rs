@@ -3,7 +3,7 @@
 use std::{fmt::Debug, hash::Hash, ops::Neg};
 
 use qmb_core::{
-    ActOn, Adjoint, Basis, Complex, InnerProduct, LinearCombination as Lc, LocalStructure,
+    Act, Adjoint, Basis, Complex, InnerProduct, LinearCombination as Lc, LocalStructure,
     OperatorBasis, Product, StateBasis, Trace,
     num_traits::{FromPrimitive, Num, ToPrimitive},
     operator_basis_len, state_basis_len,
@@ -127,7 +127,7 @@ fn product<T: Real>(a: &Lc<Op, T>, b: &Lc<Op, T>) -> Lc<Op, T> {
 fn action<T: Real>(op: &Lc<Op, T>, state: &Lc<State, T>) -> Lc<State, T> {
     Lc::from_terms(op.terms().flat_map(|x| {
         state.terms().flat_map(move |y| {
-            <Op as ActOn<State, T>>::act_on(&x.primitive, &y.primitive)
+            <State as Act<Op, T>>::act(&y.primitive, &x.primitive)
                 .scaled(x.coefficient * y.coefficient)
         })
     }))
@@ -203,7 +203,7 @@ fn check_all_local_rules<T: Real>() {
             assert_matrix::<T>(operator_value(&actual), multiply(matrix(a), matrix(b)));
         }
         for (j, state) in STATES.into_iter().enumerate() {
-            let actual = <Op as ActOn<State, T>>::act_on(&a, &state);
+            let actual = <State as Act<Op, T>>::act(&state, &a);
             assert_eq!(
                 actual.terms().map(|t| t.primitive).collect::<Vec<_>>(),
                 action_primitives[i][j]

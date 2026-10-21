@@ -18,25 +18,25 @@ pub trait Product<T>: Sized {
     fn product(&self, rhs: &Self) -> LinearCombination<Self, T>;
 }
 
-/// The action of an operator primitive on a compatible state primitive.
+/// A state primitive that can receive the left action of an operator primitive.
 ///
-/// Implementing one action does not enable action on arbitrary state types:
+/// Implementing one action does not enable action by arbitrary operator types:
 ///
 /// ```compile_fail
-/// use qmb_core::{ActOn, LinearCombination};
+/// use qmb_core::{Act, LinearCombination};
 /// struct Operator;
 /// struct State;
-/// struct OtherState;
-/// impl ActOn<State, f64> for Operator {
-///     fn act_on(&self, _: &State) -> LinearCombination<State, f64> {
+/// struct OtherOperator;
+/// impl Act<Operator, f64> for State {
+///     fn act(&self, _: &Operator) -> LinearCombination<Self, f64> {
 ///         LinearCombination::primitive(State)
 ///     }
 /// }
-/// let _ = Operator.act_on(&OtherState);
+/// let _ = State.act(&OtherOperator);
 /// ```
-pub trait ActOn<S, T> {
-    /// Returns the result of acting on `state`.
-    fn act_on(&self, state: &S) -> LinearCombination<S, T>;
+pub trait Act<O, T>: Sized {
+    /// Returns `operator * self` as a finite linear combination of states.
+    fn act(&self, operator: &O) -> LinearCombination<Self, T>;
 }
 
 /// The adjoint of an operator primitive.

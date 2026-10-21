@@ -18,9 +18,9 @@ norm・正規化・bra は、実数値の扱いと API を別途検討してか�
 
 内部を局所式、構築構文、評価、比較・表示に分け、主要な公開型を crate root から再公開する。`qmb-spin-half` は開発用依存に置き、通常依存へ具体的代数を持ち込まない。
 
-### 1.1. 実装前の前提作業：状態 primitive の Act の整備
+### 1.1. 実装前の前提作業：状態 primitive の Act の整備（完了）
 
-`qmb-algebra` の実装に着手する前に、`qmb-core` の作用 API を以下の状態 primitive 側の `Act<O, T>` の契約に揃える。この整備は今後行う前提作業であり、本書の記録時点で完了したことを意味しない。
+`qmb-algebra` の実装前の前提作業として、`qmb-core` の作用 API を以下の状態 primitive 側の `Act<O, T>` の契約に揃えた。この整備は 2026-10-21 に完了した。`qmb-algebra` 自体は未実装である。
 
 `Act` は「この状態 primitive に、指定した演算子 primitive を作用させられる」能力を表す。
 
@@ -31,19 +31,19 @@ pub trait Act<O, T>: Sized {
 }
 ```
 
-`LocalStructure<T>` の関連型の制約は次の形に変更する。`DIMENSION` と `identity()` の契約は維持する。
+`LocalStructure<T>` の関連型の制約は次の形とした。`DIMENSION` と `identity()` の契約は維持している。
 
 ```rust
 type State: InnerProduct<T> + Act<Self::Operator, T>;
 type Operator: Product<T> + Adjoint<T> + Trace<T>;
 ```
 
-前提作業には、以下を含める。
+以下の前提作業を完了した。
 
-1. core の trait 定義・再公開・関連型の制約を変更する。
-2. spin の作用規則を `Act<SpinHalfOperator, T> for SpinHalfState` として実装し、局所規則の数値制約と数学的結果を維持する。
-3. 三次元局所代数などのテスト実装、呼び出し箇所、doc test、作用の実装先を説明する既存ドキュメントを新しい契約に揃える。
-4. 局所規則と型制約のテスト、workspace の test・format check・Clippy・ドキュメント生成を既存の direnv 環境で確認してから、`qmb-algebra` の実装を開始する。
+1. core の trait 定義・再公開・関連型の制約を変更した。
+2. spin の作用規則を `Act<SpinHalfOperator, T> for SpinHalfState` として実装し、局所規則の数値制約と数学的結果を維持した。
+3. 三次元局所代数などのテスト実装、呼び出し箇所、doc test、作用の実装先を説明する既存ドキュメントを契約に揃えた。
+4. 既存の direnv 環境（Rust 1.98.0）で、局所規則・型制約を含む workspace の全26テスト（doc test 含む）、format check、Clippy、警告をエラーとするドキュメント生成の成功を確認した。
 
 Act は状態をメソッドの受け手とし、数学的には演算子の左作用を計算する。primitive の `Act::act` は局所規則を計算して有限線型結合を返す。一方、状態式の `act` は遅延した作用を構築し、`evaluate` が必要な primitive の `Act::act` を呼ぶ。両者の役割を区別する。
 

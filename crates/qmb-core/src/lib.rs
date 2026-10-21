@@ -51,4 +51,4 @@ pub use linear_combination::{IntoTerms, LinearCombination, Term};
 pub use local_structure::LocalStructure;
 pub use num_complex::Complex;
 pub use num_traits;
-pub use ops::{ActOn, Adjoint, InnerProduct, Product, Trace};
+pub use ops::{Act, Adjoint, InnerProduct, Product, Trace};

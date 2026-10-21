@@ -3,7 +3,7 @@
 use std::ops::{Add, Div, Mul, Neg};
 
 use qmb_core::{
-    ActOn, Adjoint, Basis, InnerProduct, LinearCombination as Lc, LocalStructure, OperatorBasis,
+    Act, Adjoint, Basis, InnerProduct, LinearCombination as Lc, LocalStructure, OperatorBasis,
     Product, StateBasis, Trace,
     num_traits::{One, Zero},
 };
@@ -226,7 +226,7 @@ fn products_and_actions_use_exact_fractions_without_clone_copy_or_num() {
             }
         }
         for state in [Up, Down] {
-            let action: Lc<State, Rational> = a.act_on(&state);
+            let action: Lc<State, Rational> = state.act(&a);
             assert!(action.len() <= 1);
             for (re, im, _) in terms(action) {
                 assert!([1, 2].contains(&re.1));
@@ -247,11 +247,11 @@ fn products_and_actions_use_exact_fractions_without_clone_copy_or_num() {
         [((1, 2), (0, 1), I), ((-1, 1), (0, 1), Sz),]
     );
     assert_eq!(
-        terms(<Op as ActOn<State, Rational>>::act_on(&Sy, &Down)),
+        terms(<State as Act<Op, Rational>>::act(&Down, &Sy)),
         [((0, 1), (-1, 2), Up)]
     );
     assert!(<Op as Product<Rational>>::product(&SPlus, &SPlus).is_empty());
-    assert!(<Op as ActOn<State, Rational>>::act_on(&SPlus, &Up).is_empty());
+    assert!(<State as Act<Op, Rational>>::act(&Up, &SPlus).is_empty());
 }
 
 #[test]
