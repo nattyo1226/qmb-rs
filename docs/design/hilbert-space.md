@@ -1,10 +1,12 @@
 # Hilbert 空間の再帰構造
 
-更新日: 2026-10-21
+更新日: 2026-10-22
 
 ## 1. 対象と合意した契約
 
 本書は、[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づき、具体的な自由度を持つ Hilbert 空間の構成、grouping、および互換性を定める。
+
+Index・自由度・Hilbert 空間と、その上の共通の式・評価は `qmb-core` が担当する。Site への対応付けは `qmb-geometry` に置き、空間の構築・合成に Geometry を必須としない。
 
 Hilbert 空間自体を再帰的な構造とし、基本自由度の空間と、順序付きの子空間の tensor product を表す。複合空間をさらに複合させられるようにし、grouping はその木の括り方で表す。提供する能力は構築・合成、構成要素・Index の列挙、互換性判定、および部分系判定とする。任意の因子集合を指定した部分系の取得と Regrouping の操作は提供しない。Grouping のための独立した Group 型は追加しない。Factor と Tensor は概念上の名前であり、具体的な Rust の型・公開 API を指定するものではない。
 

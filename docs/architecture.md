@@ -1,6 +1,6 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-21
+更新日: 2026-10-22
 
 ## 1. 文書の位置づけ
 
@@ -23,9 +23,13 @@
 
 ### 2.1. crate の構成
 
-代数 core は、抽象契約と最小限の共通型を提供する `qmb-core` と、Index・Hilbert 空間・共通式木・評価・基底処理を実装する `qmb-algebra` に分ける。本文書と詳細設計でいう「代数 core」は、この2 crate を合わせた層を指す。
+代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得・写像の表現係数を同じ crate が所有する。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
-具体的代数は専用 crate とし、初期版の `qmb-spin-half` は `qmb-core` の契約だけを実装する。Geometry・配置は `qmb-geometry`、数値変換は `qmb-export`、再公開とモデル構築補助は `qmb` が担当する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
+具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、再公開とモデル構築補助は `qmb` が担当する。初期版はこの5 crate とし、spin・geometry・export は core に依存する。core は具体的代数・Geometry・数値 backend に依存しない。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
+
+core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。有限線型結合・式木・局所規則の返却形式は一体で設計し、crate の統合だけで要素型変換がなくなるとはみなさない。具体的な接続は未決とする。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
+
+この分割は、共通型と基本演算を所有する [tensory-core](https://github.com/todo-group/tensory/blob/c84f091e5c65f1408dee91db3730bdb8729e966e/tensory-core/src/lib.rs)と、公開テンソル表現の所有先を集約しつつ実行系・演算群を分ける [tenferro-rs の crate 設計](https://github.com/tensor4all/tenferro-rs/blob/f1d4d8d961ff6b937768111888ad2a493314892a/docs/architecture/tenferro-crates.md)を参考にした。qmb では primitive の局所規則と共通合成則に基づく評価を core に含め、外部数値 backend との接続を分離する。
 
 ## 3. Index・自由度・局所構造・空間
 
@@ -53,7 +57,7 @@ Index は UUID のような衝突確率が十分低い生成方式を用いて�
 
 詳細は [Index の契約](design/index.md)に定める。Index の具体的な生成方式・バージョン、および Rust の型・API は未決とする。
 
-保存・復元と複数ランタイムの契約は、[既存テンソルネットワークライブラリの脚の管理方式](design/tensor-leg-identity-survey.md)の調査を参考に、以下のとおり採用する。詳細は [Index の契約の 7 節](design/index.md#7-保存復元と複数ランタイム)に定める。
+保存・復元と複数ランタイムの契約は以下のとおりとする。詳細は [Index の契約の 7 節](design/index.md#7-保存復元と複数ランタイム)に定める。
 
 | 操作 | 契約 |
 | --- | --- |
@@ -65,11 +69,11 @@ Index は UUID のような衝突確率が十分低い生成方式を用いて�
 
 ## 5. Primitive・式木の数学的能力
 
-状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供する。Product・Act・随伴は、同じ局所構造の primitive の有限線型結合を返す。局所構造はこれらの能力を関連付け、次元、所属、表現パラメータ、恒等演算子と、結合則・作用・内積・随伴などの整合性を定める。
+状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供する。Product・Act・随伴の結果は、数学的には同じ局所構造の primitive の有限線型結合とする。具体的な返却形式は、線型結合と式木の接続と併せて設計する。局所構造はこれらの能力を関連付け、次元、所属、表現パラメータ、恒等演算子と、結合則・作用・内積・随伴などの整合性を定める。
 
-Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。必要な評価時に線型性・半双線型性・共役線型性を用いて primitive の規則へ委譲し、構築時には式全体を展開しない。Norm、bra、期待値、commutator、Hilbert–Schmidt 内積などは共通機構から導出する。
+Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。必要な評価時に線型性・半双線型性・共役線型性を用いて primitive の規則へ委譲し、構築時には式全体を展開しない。状態式の `act` は `Act` 節点による遅延した作用を構築し、`evaluate` は基底を指定せず局所規則に基づいて状態式を評価する。`ψ.act(&b).act(&a)` は `A(Bψ)` を表す。Norm、bra、期待値、commutator、Hilbert–Schmidt 内積などは共通機構から導出する。
 
-Primitive の線型独立性は要求せず、source の構造比較と数学的な等価性を区別する。指定基底への座標取得は別の接続として扱う。詳細は [局所 primitive・式木の数学的能力](design/primitive-expression.md)に定める。具体的な Rust の型・trait シグネチャ・式木の内部表現は未決とする。
+Primitive の線型独立性は要求せず、数学的に同じ対象を表す結果の式構造が一致することも要求しない。指定基底への座標取得は別の接続として扱う。式の操作は入力を変更しない。評価前の source の自動保持、式の構造比較・表示は後続へ延期し、初期版の必須機能にしない。詳細は [局所 primitive・式木の数学的能力](design/primitive-expression.md)に定める。具体的な Rust の型・trait シグネチャ・式木の内部表現は未決とする。
 
 ## 6. 基底の数学的能力
 
@@ -79,7 +83,7 @@ Primitive の線型独立性は要求せず、source の構造比較と数学的
 
 Core の共通機構が展開を線型に式全体へ拡張し、順序番号から座標を得る。内積・Gram 行列・双対基底は展開の実装に利用できるが、Basis の必須の独立能力とはしない。詳細は [基底の数学的能力](design/basis.md)に定める。具体的な Rust の API・保持形式・共有方式は未決とする。
 
-初期版で利用者が明示的に式を整理する操作は、指定基底への展開と係数取得に限定する。分配だけ、局所積だけなど、特定の簡約ルールのみを選択して適用する独立した操作は future work とする。必要な分配・局所積・係数の結合は、基底展開や作用・内積・trace の内部処理として維持する。元の source を保持し、通常の評価に基底展開を必須としない。
+初期版では局所規則に基づく `evaluate` に加え、指定基底への展開と係数取得を提供する。分配だけ、局所積だけなど、特定の簡約ルールのみを選択して適用する独立した操作は future work とする。必要な分配・局所積・係数の結合は、基底展開や作用・内積・trace の内部処理として維持する。入力の式は変更せず、通常の評価に基底展開を必須としない。
 
 複合基底は基本因子ごとの局所基底の tensor product に限定し、Hilbert 空間の因子順序と既存の mixed-radix に従う。Grouping は基底を変えない。展開結果は通常の式木とし、基底識別情報や展開済み状態を保持させない。別基底への変更は再展開で扱い、Index・局所構造・確定した空間を保持する。数値座標を export する場合は、その基底・順序などの解釈を別途確定する。
 
@@ -109,6 +113,6 @@ Geometry と確定した配置は構築後に不変とし、別の幾何や配�
 
 初期版は、spin-1/2 の 1D Chain を代数的に構築・評価して密・疎の数値表現へ変換する版とする。ユーザ定義の有限次元局所構造の単独利用、同種の基本因子による ordinary な入れ子空間、状態・演算子の演算と full/partial trace、指定基底への展開・再展開・係数取得、写像の表現行列、および単精度・倍精度の複素数を提供する。
 
-標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、Graded・fermion、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
+標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
 
 完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開と表現行列の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。詳細は [初期版の提供範囲と完成条件](design/initial-release.md)に定める。API・内部表現・数値 backend の具体的な選択は別途行う。

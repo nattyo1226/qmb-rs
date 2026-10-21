@@ -1,10 +1,12 @@
 # Geometry・Site と自由度の配置
 
-更新日: 2026-10-21
+更新日: 2026-10-22
 
 ## 1. 対象と責任分担
 
 本書は、[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づき、Geometry の Site・関係と、Site への自由度の配置に関する契約を定める。具体的な Rust の型・公開 API・内部表現は定めない。
+
+Geometry・Site・近接関係と Site への対応付けは `qmb-geometry` が担当する。`qmb-core` が所有する Index・空間・共通式を利用し、局所式への Index 付与・作用空間への束縛・代数的評価は core に委譲する。モデル構築補助は `qmb` に置く。
 
 | 対象 | 責任 |
 | --- | --- |
