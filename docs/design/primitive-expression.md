@@ -1,14 +1,16 @@
 # 局所 primitive・式木の数学的能力
 
-更新日: 2026-10-17
+更新日: 2026-10-21
 
 ## 1. 対象と責任分担
 
 本書は、状態・演算子の primitive と、それらを葉とする局所式の数学的能力を定める。[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づく詳細設計であり、[局所構造](local-structure.md)が対応する primitive と能力を関連付け、その整合性を要求する。
 
-Primitive は局所的な演算規則を実装し、core の共通の式木・評価機構が線型結合、積、作用、随伴などへ拡張する。独自の局所代数を追加する際は、primitive と規則を実装し、共通の式木を利用する。具体的な Rust の型、trait シグネチャ、および内部表現は本書では定めない。Product と ActOn は能力を区別する設計上の名前として用いる。
+Primitive は局所的な演算規則を実装し、core の共通の式木・評価機構が線型結合、積、作用、随伴などへ拡張する。独自の局所代数を追加する際は、primitive と規則を実装し、共通の式木を利用する。具体的な Rust の型、trait シグネチャ、および内部表現は本書では定めない。Product と Act は能力を区別する設計上の名前として用いる。
 
 本書の局所式は、一つの局所構造の上の式を扱う。Index の付与と全作用空間への束縛は、[Index の契約](index.md)および要件の 5.1 節に従う。複合空間の tensor product、因子間の grading、partial trace は共通の合成・埋め込み・評価機構が担当する。
+
+初期版では、複合式へ配置した後も全基本因子の局所構造を同じ型 `L` に揃える。独自代数は別の `L` として別の系で単独利用できるが、一つの系への異種局所構造の混在・合成は後続へ延期する。局所式の取り込みに異種構造の型消去を要求しない。
 
 複合空間は [Hilbert 空間の再帰構造](hilbert-space.md)で表す。局所複合代数の数学的能力は、この空間構成に沿って子の局所規則と共通の合成・評価機構から処理する。空間の木の構築・基本因子の列挙によって、状態・演算子の式を全展開することは要求しない。
 
@@ -22,14 +24,14 @@ Primitive は局所的な演算規則を実装し、core の共通の式木・�
 | --- | --- | --- | --- |
 | 状態 primitive | 内積 | 状態 primitive 二つ | 複素 scalar |
 | 演算子 primitive | Product | 演算子 primitive 二つ | 演算子 primitive の有限線型結合 |
-| 演算子 primitive | ActOn | 演算子 primitive と状態 primitive | 状態 primitive の有限線型結合 |
+| 状態 primitive | Act | 状態 primitive と演算子 primitive | 状態 primitive の有限線型結合 |
 | 演算子 primitive | 随伴 | 演算子 primitive | 演算子 primitive の有限線型結合 |
 | 演算子 primitive | trace | 演算子 primitive | 複素 scalar |
 | 状態・演算子 primitive | parity の取得〈graded の場合〉 | primitive | even / odd |
 
-Product と ActOn は演算子 primitive 側の能力とする。ActOn の規則は、演算子 primitive 型と作用先の状態 primitive 型の組に対応する。対応する型と表現パラメータの整合性は局所構造の契約に従う。
+Product は演算子 primitive 側、Act は状態 primitive 側の能力とする。Act の規則は、作用先の状態 primitive 型と演算子 primitive 型の組に対応し、`state.act(&operator)` は数学的には `operator * state` を計算する。対応する型と表現パラメータの整合性は局所構造の契約に従う。
 
-Product・ActOn・随伴の結果は、同じ局所構造の primitive の有限線型結合とする。単一 primitive への閉性は要求しない。この線型結合も core の共通の式で表す。加算、scalar multiplication、および zero は共通の式側で提供する。
+Product・Act・随伴の結果は、同じ局所構造の primitive の有限線型結合とする。単一 primitive への閉性は要求しない。この線型結合も core の共通の式で表す。加算、scalar multiplication、および zero は共通の式側で提供する。
 
 trace は局所 Hilbert 空間上の通常の非正規化 trace を返す。正規直交基底、作用、内積から数学的に導出できるが、通常の評価経路では primitive の trace を直接利用できるようにし、基底展開や数値行列の生成を必須としない。
 
@@ -43,7 +45,7 @@ Graded な primitive は homogeneous なものとし、混合 parity の対象�
 | 状態式 | 他の状態式との内積 | 半双線型性による拡張と、状態 primitive の内積への委譲 |
 | 演算子式 | 加算、scalar multiplication、zero | 線型結合の処理 |
 | 演算子式 | 積 | 双線型性と積の順序を扱い、必要な primitive 間の Product へ委譲 |
-| 演算子式 | 状態式への作用 | 両引数の線型性を扱い、必要な primitive 間の ActOn へ委譲 |
+| 状態式 | 演算子式の作用を受ける | `act` で遅延した作用を構築し、必要な評価時に両引数の線型性を扱って primitive の Act へ委譲 |
 | 演算子式 | 随伴 | 係数の共役、積の順序反転、primitive の随伴への委譲 |
 | 演算子式 | trace | 線型性による拡張と、primitive の trace への委譲 |
 
@@ -74,6 +76,8 @@ A(aB+bC)=a(AB)+b(AC),
 内積は第一引数について共役線型、第二引数について線型とする。積は両引数について線型、作用は演算子・状態の両引数について線型、随伴は共役線型、trace は線型とする。`AB` は状態に右側から作用し、`B` が先に、`A` が後に作用する。
 
 これらの規則は、式の構築時に全展開する要求ではない。積・作用・随伴などを未評価の式として保持し、内積、trace、作用の結果、または指定基底への展開・座標取得が必要な時点で、必要な部分だけを処理する。primitive の規則はその評価の過程で呼び出す。
+
+状態式の `state.act(&operator)` は作用を表す遅延式を返し、`state.evaluate()` は状態式に含まれる作用を評価する。primitive の Act はその局所計算を担当する。`ψ.act(&b).act(&a)` は `A(Bψ)` を表す。
 
 初期版で利用者が明示的に式を整理する操作は、指定基底への展開と係数取得とする。分配・局所積などの特定の簡約ルールのみを適用する独立した操作は future work とする。評価や基底展開に必要な内部処理として、分配・局所積・係数の結合を行うことは維持する。
 
@@ -107,7 +111,7 @@ Source の構造比較では、同じ局所構造のもとで primitive の種�
 
 ## 6. 整合性の検証対象と未決事項
 
-各局所実装では、Product の結合則、Product と ActOn の整合性、恒等演算子、内積と随伴、通常の trace、および primitive の線型関係の保存を検証対象とする。数学的な契約は[局所構造の設計](local-structure.md)に定める。式側では、線型性・半双線型性・共役線型性の拡張、右側からの作用、随伴の積順序反転、および lazy 評価を検証する。
+各局所実装では、Product の結合則、Product と Act の整合性、恒等演算子、内積と随伴、通常の trace、および primitive の線型関係の保存を検証対象とする。数学的な契約は[局所構造の設計](local-structure.md)に定める。式側では、線型性・半双線型性・共役線型性の拡張、右側からの作用、随伴の積順序反転、および lazy 評価を検証する。
 
 これらの等式は数学的な意味について要求し、浮動小数点計算のビット単位の一致とは区別する。数値精度、特殊値、および近似比較は既存要件の規約に従う。
 
