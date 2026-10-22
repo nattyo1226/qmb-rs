@@ -8,7 +8,7 @@ use qmb_core::{
 fn term(primitive: u8, re: f64, im: f64) -> Term<u8, f64> {
     Term {
         coefficient: Complex::new(re, im),
-        primitive,
+        operand: primitive,
     }
 }
 
@@ -35,6 +35,53 @@ fn construction_keeps_order_duplicates_and_zero_coefficients() {
     let zero_term = LinearCombination::term(Complex::new(0.0, 0.0), 0);
     assert!(!zero_term.is_empty());
     assert_ne!(zero_term, LinearCombination::zero());
+}
+
+#[test]
+fn map_moves_opaque_coefficients_and_operands_once_in_order() {
+    struct Scalar(u8);
+    struct Operand(u8);
+    let original = LinearCombination::from_terms((0..4).map(|i| Term {
+        coefficient: Complex::new(Scalar(i), Scalar(7 - i)),
+        operand: Operand(i % 2),
+    }));
+    let mut seen = Vec::new();
+    let mapped = original.map(|operand| {
+        seen.push(operand.0);
+        operand.0 + 10
+    });
+    assert_eq!(seen, vec![0, 1, 0, 1]);
+    for (i, term) in mapped.into_iter().enumerate() {
+        assert_eq!(term.coefficient.re.0, i as u8);
+        assert_eq!(term.coefficient.im.0, 7 - i as u8);
+        assert_eq!(term.operand, 10 + (i as u8) % 2);
+    }
+    let zero = LinearCombination::<Operand, Scalar>::zero().map(|_| panic!("empty map"));
+    assert!(zero.is_empty());
+}
+
+#[test]
+fn sum_parts_support_borrowed_and_owned_mixed_end_iteration() {
+    use qmb_core::expr::parts::SumExpr;
+    for n in 0..5 {
+        let sum: SumExpr<_> = (0..n).collect();
+        assert_eq!(sum.len(), n);
+        assert_eq!(
+            sum.iter().copied().collect::<Vec<_>>(),
+            (0..n).collect::<Vec<_>>()
+        );
+        let mut iter = sum.into_iter();
+        if n > 0 {
+            assert_eq!(iter.next_back(), Some(n - 1));
+        }
+        if n > 1 {
+            assert_eq!(iter.next(), Some(0));
+        }
+        assert_eq!(
+            iter.collect::<Vec<_>>(),
+            (1..n.saturating_sub(1)).collect::<Vec<_>>()
+        );
+    }
 }
 
 fn check_iterator<I>(mut iter: I, expected: &[u8])
@@ -67,10 +114,10 @@ fn borrowed_and_owned_iterators_support_mixed_ends_and_exhaustion() {
         let expected: Vec<_> = (0..n).collect();
         let sum =
             LinearCombination::<_, f64>::from_terms(expected.iter().map(|&p| term(p, 0.0, 0.0)));
-        check_iterator(sum.terms().map(|t| t.primitive), &expected);
-        check_iterator((&sum).into_iter().map(|t| t.primitive), &expected);
-        check_iterator(sum.clone().into_terms().map(|t| t.primitive), &expected);
-        check_iterator(sum.into_iter().map(|t| t.primitive), &expected);
+        check_iterator(sum.terms().map(|t| t.operand), &expected);
+        check_iterator((&sum).into_iter().map(|t| t.operand), &expected);
+        check_iterator(sum.clone().into_terms().map(|t| t.operand), &expected);
+        check_iterator(sum.into_iter().map(|t| t.operand), &expected);
     }
 }
 
@@ -81,12 +128,12 @@ fn concatenation_and_owned_operations_require_no_scalar_or_primitive_traits() {
     fn combination(start: u8, len: u8) -> LinearCombination<Primitive, Scalar> {
         LinearCombination::from_terms((start..start + len).map(|p| Term {
             coefficient: Complex::new(Scalar, Scalar),
-            primitive: Primitive(p),
+            operand: Primitive(p),
         }))
     }
     let _: LinearCombination<Primitive, Scalar> = LinearCombination::default();
     let one = LinearCombination::term(Complex::new(Scalar, Scalar), Primitive(9));
-    assert_eq!(one.into_terms().next().unwrap().primitive.0, 9);
+    assert_eq!(one.into_terms().next().unwrap().operand.0, 9);
     // Covers all nine Zero / Term / Sum pairs with non-Clone, non-Debug,
     // non-PartialEq primitives and scalars that have no numeric capabilities.
     for left in 0..=3 {
@@ -95,7 +142,7 @@ fn concatenation_and_owned_operations_require_no_scalar_or_primitive_traits() {
             let expected: Vec<_> = (0..left).chain(10..10 + right).collect();
             assert_eq!(sum.len(), expected.len());
             assert_eq!(
-                sum.into_iter().map(|t| t.primitive.0).collect::<Vec<_>>(),
+                sum.into_iter().map(|t| t.operand.0).collect::<Vec<_>>(),
                 expected
             );
         }
@@ -202,14 +249,14 @@ fn scaling_needs_neither_copy_scalars_nor_clone_primitives() {
     for n in 0..=3 {
         let sum = LinearCombination::from_terms((0..n).map(|p| Term {
             coefficient: Complex::new(HeapReal::new(f64::from(p)), HeapReal::new(2.0)),
-            primitive: Primitive(p),
+            operand: Primitive(p),
         }));
         let scaled = sum.scaled(Complex::new(HeapReal::new(3.0), HeapReal::new(-1.0)));
         assert_eq!(scaled.len(), usize::from(n));
         for (p, t) in scaled.into_iter().enumerate() {
-            assert_eq!(usize::from(t.primitive.0), p);
-            assert_eq!(*t.coefficient.re.0, f64::from(t.primitive.0) * 3.0 + 2.0);
-            assert_eq!(*t.coefficient.im.0, 6.0 - f64::from(t.primitive.0));
+            assert_eq!(usize::from(t.operand.0), p);
+            assert_eq!(*t.coefficient.re.0, f64::from(t.operand.0) * 3.0 + 2.0);
+            assert_eq!(*t.coefficient.im.0, 6.0 - f64::from(t.operand.0));
         }
     }
     let primitive = LinearCombination::<_, HeapReal>::primitive(Primitive(8));
@@ -235,7 +282,7 @@ fn borrowed_non_send_primitives_and_partial_iterator_drop_are_supported() {
         drops.set(0);
         let sum = LinearCombination::<_, f64>::from_terms((0..n).map(|_| Term {
             coefficient: Complex::new(0.0, 0.0),
-            primitive: Primitive(&drops),
+            operand: Primitive(&drops),
         }));
         let mut iter = sum.into_terms();
         drop(iter.next());

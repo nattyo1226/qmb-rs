@@ -1,11 +1,16 @@
-//! Spin-1/2 state primitives and their orthonormal inner product.
+//! Spin-1/2 states, their orthonormal inner product, and operator actions.
+
+use core::ops::{Div, Neg};
 
 use qmb_core::{
-    Complex, InnerProduct,
+    Act, Complex, InnerProduct, LinearCombination,
     num_traits::{One, Zero},
 };
 
-use crate::coefficient::real;
+use crate::{
+    SpinHalfOperator,
+    coefficient::{half, imaginary, real},
+};
 
 /// The eigenstates of `Sz`, independent of coefficient precision.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -19,5 +24,32 @@ pub enum SpinHalfState {
 impl<T: Zero + One> InnerProduct<T> for SpinHalfState {
     fn inner_product(&self, rhs: &Self) -> Complex<T> {
         real(if self == rhs { T::one() } else { T::zero() })
+    }
+}
+
+impl<T> Act<T> for SpinHalfState
+where
+    T: Zero + One + Div<Output = T> + Neg<Output = T>,
+{
+    type Operator = SpinHalfOperator;
+    type Term = Self;
+
+    fn act(&self, operator: &SpinHalfOperator) -> LinearCombination<Self, T> {
+        use LinearCombination as Lc;
+        use SpinHalfOperator::*;
+        use SpinHalfState::*;
+
+        match (*operator, *self) {
+            (I, state) => Lc::primitive(state),
+            (Sx, Up) => Lc::term(real(half()), Down),
+            (Sx, Down) => Lc::term(real(half()), Up),
+            (Sy, Up) => Lc::term(imaginary(half()), Down),
+            (Sy, Down) => Lc::term(imaginary(-half::<T>()), Up),
+            (Sz, Up) => Lc::term(real(half()), Up),
+            (Sz, Down) => Lc::term(real(-half::<T>()), Down),
+            (SPlus, Up) | (SMinus, Down) => Lc::zero(),
+            (SPlus, Down) => Lc::primitive(Up),
+            (SMinus, Up) => Lc::primitive(Down),
+        }
     }
 }

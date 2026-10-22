@@ -1,16 +1,13 @@
-//! Spin primitives and direct product, action, adjoint, and trace rules.
+//! Spin primitives and direct product, adjoint, and trace rules.
 
 use core::ops::{Div, Neg};
 
 use qmb_core::{
-    ActOn, Adjoint, Complex, LinearCombination, Product, Trace,
+    Adjoint, Complex, LinearCombination, Product, Trace,
     num_traits::{One, Zero},
 };
 
-use crate::{
-    SpinHalfState,
-    coefficient::{half, imaginary, quarter, real},
-};
+use crate::coefficient::{half, imaginary, quarter, real};
 
 /// The identity, Cartesian spins, and ladder operators with `hbar = 1`.
 ///
@@ -36,6 +33,8 @@ impl<T> Product<T> for SpinHalfOperator
 where
     T: Zero + One + Div<Output = T> + Neg<Output = T>,
 {
+    type Term = Self;
+
     fn product(&self, rhs: &Self) -> LinearCombination<Self, T> {
         use LinearCombination as Lc;
         use SpinHalfOperator::*;
@@ -74,31 +73,9 @@ where
     }
 }
 
-impl<T> ActOn<SpinHalfState, T> for SpinHalfOperator
-where
-    T: Zero + One + Div<Output = T> + Neg<Output = T>,
-{
-    fn act_on(&self, state: &SpinHalfState) -> LinearCombination<SpinHalfState, T> {
-        use LinearCombination as Lc;
-        use SpinHalfOperator::*;
-        use SpinHalfState::*;
-
-        match (*self, *state) {
-            (I, state) => Lc::primitive(state),
-            (Sx, Up) => Lc::term(real(half()), Down),
-            (Sx, Down) => Lc::term(real(half()), Up),
-            (Sy, Up) => Lc::term(imaginary(half()), Down),
-            (Sy, Down) => Lc::term(imaginary(-half::<T>()), Up),
-            (Sz, Up) => Lc::term(real(half()), Up),
-            (Sz, Down) => Lc::term(real(-half::<T>()), Down),
-            (SPlus, Up) | (SMinus, Down) => Lc::zero(),
-            (SPlus, Down) => Lc::primitive(Up),
-            (SMinus, Up) => Lc::primitive(Down),
-        }
-    }
-}
-
 impl<T: Zero + One> Adjoint<T> for SpinHalfOperator {
+    type Term = Self;
+
     fn adjoint(&self) -> LinearCombination<Self, T> {
         LinearCombination::primitive(match self {
             Self::SPlus => Self::SMinus,

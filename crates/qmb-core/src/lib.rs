@@ -3,8 +3,7 @@
 //! Coefficients use [`Complex<T>`](Complex). Numeric bounds belong to individual
 //! operations; primitive types need not be tied to a numeric precision.
 //! This crate uses `alloc` but does not require `std` or a math-function backend.
-//! Unevaluated expressions, evaluation, sharing, and type erasure belong to the
-//! algebra layer.
+//! Local expressions share immutable nodes and evaluate using primitive rules.
 //!
 //! ```
 //! use qmb_core::{Complex, LinearCombination};
@@ -39,16 +38,21 @@
 
 extern crate alloc;
 
+#[cfg(test)]
+extern crate std;
+
 pub mod basis;
 pub mod error;
+pub mod expr;
 pub mod linear_combination;
 pub mod local_structure;
 pub mod ops;
 
-pub use basis::{Basis, OperatorBasis, StateBasis, operator_basis_len, state_basis_len};
+pub use basis::{Basis, operator_basis_len, state_basis_len};
 pub use error::DimensionOverflow;
+pub use expr::{LocalOperator, LocalState};
 pub use linear_combination::{IntoTerms, LinearCombination, Term};
-pub use local_structure::LocalStructure;
+pub use local_structure::{Identity, LocalStructure};
 pub use num_complex::Complex;
 pub use num_traits;
-pub use ops::{ActOn, Adjoint, InnerProduct, Product, Trace};
+pub use ops::{Act, Adjoint, InnerProduct, Product, Trace};

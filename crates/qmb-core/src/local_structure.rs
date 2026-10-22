@@ -1,29 +1,25 @@
-//! Static associations between a local structure and its primitives.
+//! Coefficient-independent associations for a fixed local structure.
 
+use crate::LinearCombination;
 use core::num::NonZeroUsize;
 
-use crate::{ActOn, Adjoint, InnerProduct, LinearCombination, Product, Trace};
-
-/// A fixed, finite-dimensional local structure at coefficient precision `T`.
+/// A static association of state and operator primitives with a finite dimension.
 ///
-/// The structure has no runtime definition parameters. For a given implementing
-/// type, `State`, `Operator`, and `DIMENSION` must remain the same across all
-/// supported `T`. This is an implementer contract, not enforced by the type
-/// system. Primitive types need not contain a numeric type parameter.
-///
-/// Concrete rules must respect linearity, product associativity, the action of
-/// products, the identity laws, the inner product and adjoint, and ordinary
-/// trace. Primitives may be linearly dependent; rules must preserve their linear
-/// relations. No blanket cloning, comparison, or thread-safety bound is imposed.
-pub trait LocalStructure<T> {
-    /// The state primitive type for this structure.
-    type State: InnerProduct<T>;
-    /// The operator primitive type and its required local capabilities.
-    type Operator: Product<T> + ActOn<Self::State, T> + Adjoint<T> + Trace<T>;
-
-    /// The positive dimension of the local state space.
+/// Metadata requires no numeric, cloning, or algebra capabilities. Operations
+/// request those capabilities where they are used. Concrete rules must preserve
+/// linear relations, associativity, identity, action, inner-product/adjoint
+/// compatibility, and the ordinary unnormalized trace.
+pub trait LocalStructure {
+    /// State primitive type.
+    type State;
+    /// Operator primitive type.
+    type Operator;
+    /// Positive dimension of the local state space.
     const DIMENSION: NonZeroUsize;
+}
 
-    /// Returns the identity, which need not be a single primitive.
+/// A local structure providing its identity at coefficient precision `T`.
+pub trait Identity<T>: LocalStructure {
+    /// Returns the identity as a finite combination of operator primitives.
     fn identity() -> LinearCombination<Self::Operator, T>;
 }
