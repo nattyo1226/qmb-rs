@@ -37,6 +37,20 @@
 //! This crate uses `qmb-core`'s finite linear combinations, and does not implement
 //! expression evaluation or operator syntax.
 
+//!
+//! Shared local expressions construct actions lazily and evaluate without a basis:
+//!
+//! ```
+//! use qmb_core::{Complex, LocalState, LocalOperator};
+//! use qmb_spin_half::{SpinHalf, SpinHalfState as State, SpinHalfOperator as Op};
+//! let up = LocalState::<SpinHalf, f64>::primitive(State::Up);
+//! let sx = LocalOperator::primitive(Op::Sx);
+//! let down = LocalState::primitive(State::Down);
+//! let result = up.act(&sx).evaluate();
+//! assert_eq!(down.inner_product(&result), Complex::new(0.5, 0.0));
+//! assert_eq!(sx.product(&sx).trace(), Complex::new(0.5, 0.0));
+//! ```
+
 #![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

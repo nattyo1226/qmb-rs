@@ -27,10 +27,13 @@ impl<T: Zero + One> InnerProduct<T> for SpinHalfState {
     }
 }
 
-impl<T> Act<SpinHalfOperator, T> for SpinHalfState
+impl<T> Act<T> for SpinHalfState
 where
     T: Zero + One + Div<Output = T> + Neg<Output = T>,
 {
+    type Operator = SpinHalfOperator;
+    type Term = Self;
+
     fn act(&self, operator: &SpinHalfOperator) -> LinearCombination<Self, T> {
         use LinearCombination as Lc;
         use SpinHalfOperator::*;

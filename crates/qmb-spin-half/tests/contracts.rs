@@ -3,8 +3,8 @@
 use std::{fmt::Debug, hash::Hash, ops::Neg};
 
 use qmb_core::{
-    Act, Adjoint, Basis, Complex, InnerProduct, LinearCombination as Lc, LocalStructure,
-    OperatorBasis, Product, StateBasis, Trace,
+    Act, Adjoint, Basis, Complex, Identity, InnerProduct, LinearCombination as Lc, LocalStructure,
+    Product, Trace,
     num_traits::{FromPrimitive, Num, ToPrimitive},
     operator_basis_len, state_basis_len,
 };
@@ -86,12 +86,12 @@ fn dot(x: Vector, y: Vector) -> Complex<f64> {
 }
 fn operator_value<T: Real>(sum: &Lc<Op, T>) -> Matrix {
     sum.terms().fold([[c(0.0, 0.0); 2]; 2], |v, t| {
-        add(v, scale(matrix(t.primitive), complex64(t.coefficient)))
+        add(v, scale(matrix(t.operand), complex64(t.coefficient)))
     })
 }
 fn state_value<T: Real>(sum: &Lc<State, T>) -> Vector {
     sum.terms().fold([c(0.0, 0.0); 2], |v, t| {
-        let x = vector(t.primitive);
+        let x = vector(t.operand);
         std::array::from_fn(|i| v[i] + complex64(t.coefficient) * x[i])
     })
 }
@@ -115,11 +115,11 @@ fn assert_matrix<T: Real>(actual: Matrix, expected: Matrix) {
 }
 
 // These lifting helpers are test-only. Products remain ordered and adjoints
-// conjugate coefficients; no expression evaluator is added to the crate.
+// conjugate coefficients independently of the production expression evaluator.
 fn product<T: Real>(a: &Lc<Op, T>, b: &Lc<Op, T>) -> Lc<Op, T> {
     Lc::from_terms(a.terms().flat_map(|x| {
         b.terms().flat_map(move |y| {
-            <Op as Product<T>>::product(&x.primitive, &y.primitive)
+            <Op as Product<T>>::product(&x.operand, &y.operand)
                 .scaled(x.coefficient * y.coefficient)
         })
     }))
@@ -127,20 +127,19 @@ fn product<T: Real>(a: &Lc<Op, T>, b: &Lc<Op, T>) -> Lc<Op, T> {
 fn action<T: Real>(op: &Lc<Op, T>, state: &Lc<State, T>) -> Lc<State, T> {
     Lc::from_terms(op.terms().flat_map(|x| {
         state.terms().flat_map(move |y| {
-            <State as Act<Op, T>>::act(&y.primitive, &x.primitive)
-                .scaled(x.coefficient * y.coefficient)
+            <State as Act<T>>::act(&y.operand, &x.operand).scaled(x.coefficient * y.coefficient)
         })
     }))
 }
 fn adjoint<T: Real>(op: &Lc<Op, T>) -> Lc<Op, T> {
     Lc::from_terms(
         op.terms()
-            .flat_map(|t| <Op as Adjoint<T>>::adjoint(&t.primitive).scaled(t.coefficient.conj())),
+            .flat_map(|t| <Op as Adjoint<T>>::adjoint(&t.operand).scaled(t.coefficient.conj())),
     )
 }
 fn trace<T: Real>(op: &Lc<Op, T>) -> Complex<T> {
     op.terms().fold(c::<T>(0.0, 0.0), |v, t| {
-        v + t.coefficient * <Op as Trace<T>>::trace(&t.primitive)
+        v + t.coefficient * <Op as Trace<T>>::trace(&t.operand)
     })
 }
 fn inner<T: Real>(x: &Lc<State, T>, y: &Lc<State, T>) -> Complex<T> {
@@ -150,7 +149,7 @@ fn inner<T: Real>(x: &Lc<State, T>, y: &Lc<State, T>) -> Complex<T> {
             result = result
                 + x.coefficient.conj()
                     * y.coefficient
-                    * <State as InnerProduct<T>>::inner_product(&x.primitive, &y.primitive);
+                    * <State as InnerProduct<T>>::inner_product(&x.operand, &y.operand);
         }
     }
     result
@@ -158,13 +157,13 @@ fn inner<T: Real>(x: &Lc<State, T>, y: &Lc<State, T>) -> Complex<T> {
 fn expand<T: Real, B: Basis<Op, T>>(basis: &B, sum: &Lc<Op, T>) -> Lc<Op, T> {
     Lc::from_terms(
         sum.terms()
-            .flat_map(|t| basis.expand(&t.primitive).scaled(t.coefficient)),
+            .flat_map(|t| basis.expand(&t.operand).scaled(t.coefficient)),
     )
 }
 fn coordinates<T: Real, B: Basis<Op, T>>(basis: &B, sum: &Lc<Op, T>) -> [Complex<T>; 4] {
     let mut result = [c(0.0, 0.0); 4];
     for t in expand(basis, sum) {
-        let i = basis.index(&t.primitive).unwrap();
+        let i = basis.index(&t.operand).unwrap();
         result[i] = result[i] + t.coefficient;
     }
     result
@@ -191,21 +190,21 @@ fn check_all_local_rules<T: Real>() {
         [&[Down], &[]],
     ];
     let adjoints = [I, Sx, Sy, Sz, SMinus, SPlus];
-    let identity = <SpinHalf as LocalStructure<T>>::identity();
+    let identity = <SpinHalf as Identity<T>>::identity();
     assert_eq!(identity, Lc::primitive(I));
     for (i, a) in OPS.into_iter().enumerate() {
         for (j, b) in OPS.into_iter().enumerate() {
             let actual = <Op as Product<T>>::product(&a, &b);
             assert_eq!(
-                actual.terms().map(|t| t.primitive).collect::<Vec<_>>(),
+                actual.terms().map(|t| t.operand).collect::<Vec<_>>(),
                 product_primitives[i][j]
             );
             assert_matrix::<T>(operator_value(&actual), multiply(matrix(a), matrix(b)));
         }
         for (j, state) in STATES.into_iter().enumerate() {
-            let actual = <State as Act<Op, T>>::act(&state, &a);
+            let actual = <State as Act<T>>::act(&state, &a);
             assert_eq!(
-                actual.terms().map(|t| t.primitive).collect::<Vec<_>>(),
+                actual.terms().map(|t| t.operand).collect::<Vec<_>>(),
                 action_primitives[i][j]
             );
             assert_vector::<T>(state_value(&actual), apply(matrix(a), vector(state)));
@@ -231,7 +230,7 @@ fn check_all_local_rules<T: Real>() {
 }
 
 fn check_algebra_laws<T: Real>() {
-    let identity = <SpinHalf as LocalStructure<T>>::identity();
+    let identity = <SpinHalf as Identity<T>>::identity();
     for a in OPS {
         let pa = Lc::<_, T>::primitive(a);
         assert_matrix::<T>(operator_value(&product(&identity, &pa)), matrix(a));
@@ -345,10 +344,10 @@ fn check_spin_relations<T: Real>() {
     }
 }
 
-fn check_operator_basis<T: Real, B: OperatorBasis<SpinHalf, T>>(basis: &B, expected: [Op; 4]) {
+fn check_operator_basis<T: Real, B: Basis<Op, T>>(basis: &B, expected: [Op; 4]) {
     let elements: Vec<_> = basis.elements().collect();
     assert_eq!(elements, expected);
-    assert_eq!(elements.len(), operator_basis_len::<SpinHalf, T>().unwrap());
+    assert_eq!(elements.len(), operator_basis_len::<SpinHalf>().unwrap());
     for op in OPS {
         assert_eq!(basis.index(&op), expected.iter().position(|&p| p == op));
         let expanded = basis.expand(&op);
@@ -357,23 +356,23 @@ fn check_operator_basis<T: Real, B: OperatorBasis<SpinHalf, T>>(basis: &B, expec
             if basis.index(&op).is_some() { 1 } else { 2 }
         );
         assert_matrix::<T>(operator_value(&expanded), matrix(op));
-        let primitives: Vec<_> = expanded.terms().map(|t| t.primitive).collect();
+        let primitives: Vec<_> = expanded.terms().map(|t| t.operand).collect();
         if basis.index(&op).is_some() {
             assert_eq!(expanded, Lc::primitive(op));
         } else {
             assert_eq!(primitives, expected[1..3]);
         }
         for term in &expanded {
-            assert!(basis.index(&term.primitive).is_some());
+            assert!(basis.index(&term.operand).is_some());
         }
     }
 }
 
 fn check_bases<T: Real>() {
-    fn state_basis<T: Real, B: StateBasis<SpinHalf, T>>(basis: &B) {
+    fn state_basis<T: Real, B: Basis<State, T>>(basis: &B) {
         let elements: Vec<_> = basis.elements().collect();
         assert_eq!(elements, STATES);
-        assert_eq!(elements.len(), state_basis_len::<SpinHalf, T>());
+        assert_eq!(elements.len(), state_basis_len::<SpinHalf>());
         for (i, state) in STATES.into_iter().enumerate() {
             assert_eq!(basis.index(&state), Some(i));
             assert_eq!(basis.expand(&state), Lc::primitive(state));
@@ -434,21 +433,9 @@ fn basis_contracts_and_round_trips_at_both_precisions() {
 }
 #[test]
 fn precision_independent_primitives_and_public_type_contracts() {
-    fn same_primitives<
-        L: LocalStructure<f32>
-            + LocalStructure<
-                f64,
-                State = <L as LocalStructure<f32>>::State,
-                Operator = <L as LocalStructure<f32>>::Operator,
-            >,
-    >() {
-    }
-    same_primitives::<SpinHalf>();
-    assert_eq!(
-        <SpinHalf as LocalStructure<f32>>::DIMENSION,
-        <SpinHalf as LocalStructure<f64>>::DIMENSION
-    );
-    assert_eq!(<SpinHalf as LocalStructure<f64>>::DIMENSION.get(), 2);
+    fn metadata<L: LocalStructure<State = State, Operator = Op>>() {}
+    metadata::<SpinHalf>();
+    assert_eq!(<SpinHalf as LocalStructure>::DIMENSION.get(), 2);
     fn discrete<T: Clone + Copy + Debug + Eq + Hash>() {}
     fn parameter_free<T: Default + Clone + Copy + Debug + Eq + Hash>() {}
     discrete::<State>();
@@ -461,4 +448,263 @@ fn precision_independent_primitives_and_public_type_contracts() {
     let _: qmb_spin_half::state::SpinHalfState = Up;
     let _: qmb_spin_half::operator::SpinHalfOperator = I;
     let _: qmb_spin_half::basis::CartesianBasis = CartesianBasis;
+}
+
+// Expression evaluation is checked against the literal matrices above, not the
+// primitive lifting helpers. Projections also exercise inner-product evaluation.
+fn expression_vector<T: Real>(state: &qmb_core::LocalState<SpinHalf, T>) -> Vector {
+    use qmb_core::LocalState;
+    STATES.map(|basis| complex64(LocalState::<SpinHalf, T>::primitive(basis).inner_product(state)))
+}
+fn expression_matrix<T: Real>(op: &qmb_core::LocalOperator<SpinHalf, T>) -> Matrix {
+    use qmb_core::LocalState;
+    let columns = STATES.map(|basis| expression_vector(&LocalState::primitive(basis).act(op)));
+    std::array::from_fn(|i| std::array::from_fn(|j| columns[j][i]))
+}
+fn matrix_trace(matrix: Matrix) -> Complex<f64> {
+    matrix[0][0] + matrix[1][1]
+}
+
+fn check_local_expressions<T: Real>() {
+    use qmb_core::{LocalOperator, LocalState};
+    type O<T> = LocalOperator<SpinHalf, T>;
+    type S<T> = LocalState<SpinHalf, T>;
+    let up = S::<T>::primitive(Up);
+    let down = S::<T>::primitive(Down);
+    let state = up.scaled(c(0.7, 0.2)) + down.scaled(c(-0.3, 0.5));
+    let reference = [c::<f64>(0.7, 0.2), c(-0.3, 0.5)];
+    assert_vector::<T>(expression_vector(&state), reference);
+    assert_complex::<T>(
+        complex64(state.inner_product(&state)),
+        dot(reference, reference),
+    );
+    for a in OPS {
+        let a_expr = O::<T>::primitive(a).scaled(c(0.4, -0.2)) + O::identity().scaled(c(-0.3, 0.1));
+        let a_matrix = add(
+            scale(matrix(a), c(0.4, -0.2)),
+            scale(matrix(I), c(-0.3, 0.1)),
+        );
+        assert_matrix::<T>(expression_matrix(&a_expr), a_matrix);
+        assert_complex::<T>(complex64(a_expr.trace()), matrix_trace(a_matrix));
+        assert_complex::<T>(
+            complex64(state.expectation(&a_expr)),
+            dot(reference, apply(a_matrix, reference)),
+        );
+        for b in OPS {
+            let b_expr = O::<T>::primitive(b) + O::primitive(Sy).scaled(c(0.2, 0.3));
+            let b_matrix = add(matrix(b), scale(matrix(Sy), c(0.2, 0.3)));
+            let product = a_expr.product(&b_expr);
+            let product_matrix = multiply(a_matrix, b_matrix);
+            assert_matrix::<T>(expression_matrix(&product), product_matrix);
+            assert_matrix::<T>(
+                expression_matrix(&product.adjoint()),
+                dagger(product_matrix),
+            );
+            assert_complex::<T>(complex64(product.trace()), matrix_trace(product_matrix));
+            assert_complex::<T>(
+                complex64(product.adjoint().trace()),
+                matrix_trace(dagger(product_matrix)),
+            );
+            assert_complex::<T>(
+                complex64(a_expr.hilbert_schmidt_inner_product(&b_expr)),
+                matrix_trace(multiply(dagger(a_matrix), b_matrix)),
+            );
+            assert_matrix::<T>(
+                expression_matrix(&a_expr.commutator(&b_expr)),
+                add(
+                    product_matrix,
+                    scale(multiply(b_matrix, a_matrix), c(-1.0, 0.0)),
+                ),
+            );
+            assert_matrix::<T>(
+                expression_matrix(&a_expr.anticommutator(&b_expr)),
+                add(product_matrix, multiply(b_matrix, a_matrix)),
+            );
+            let chain = state.act(&b_expr).act(&a_expr);
+            let result = chain.evaluate();
+            assert_vector::<T>(expression_vector(&chain), apply(product_matrix, reference));
+            assert_vector::<T>(expression_vector(&result), apply(product_matrix, reference));
+            assert_vector::<T>(
+                expression_vector(&result.evaluate()),
+                apply(product_matrix, reference),
+            );
+            assert_complex::<T>(
+                complex64(chain.inner_product(&state.act(&b_expr))),
+                dot(apply(product_matrix, reference), apply(b_matrix, reference)),
+            );
+            assert_vector::<T>(expression_vector(&state), reference);
+        }
+    }
+    for basis in [CartesianBasis] {
+        for primitive in OPS {
+            let expanded = <CartesianBasis as Basis<Op, T>>::expand(&basis, &primitive);
+            let expression = O::from_linear_combination(expanded.map(O::primitive));
+            assert_matrix::<T>(expression_matrix(&expression), matrix(primitive));
+        }
+    }
+    for primitive in OPS {
+        let expanded = <LadderBasis as Basis<Op, T>>::expand(&LadderBasis, &primitive);
+        assert_matrix::<T>(
+            expression_matrix(&O::from_linear_combination(expanded.map(O::primitive))),
+            matrix(primitive),
+        );
+    }
+    for primitive in STATES {
+        let expanded = <SzBasis as Basis<State, T>>::expand(&SzBasis, &primitive);
+        assert_vector::<T>(
+            expression_vector(&S::from_linear_combination(expanded.map(S::primitive))),
+            vector(primitive),
+        );
+    }
+    for op in [
+        O::<T>::zero(),
+        O::sum([]),
+        O::primitive(SPlus).product(&O::primitive(SPlus)),
+    ] {
+        assert_matrix::<T>(expression_matrix(&op), [[c(0.0, 0.0); 2]; 2]);
+        assert_complex::<T>(complex64(op.trace()), c(0.0, 0.0));
+    }
+    assert_complex::<T>(complex64(O::<T>::product_all([]).trace()), c(2.0, 0.0));
+    assert_complex::<T>(
+        complex64(O::<T>::identity().hilbert_schmidt_inner_product(&O::identity())),
+        c(2.0, 0.0),
+    );
+    assert_vector::<T>(expression_vector(&S::<T>::zero()), [c(0.0, 0.0); 2]);
+}
+
+#[test]
+fn local_expressions_match_independent_matrices_at_both_precisions() {
+    check_local_expressions::<f32>();
+    check_local_expressions::<f64>();
+}
+
+#[test]
+#[allow(
+    clippy::op_ref,
+    reason = "Exercise the public borrowed scalar overloads"
+)]
+fn all_expression_operator_ownership_forms_agree() {
+    use qmb_core::{LocalOperator, LocalState};
+    type O = LocalOperator<SpinHalf, f64>;
+    type S = LocalState<SpinHalf, f64>;
+    let a = O::primitive(SPlus);
+    let b = O::primitive(SMinus);
+    let x = S::primitive(Up);
+    let y = S::primitive(Down);
+    for expression in [
+        a.clone() + b.clone(),
+        a.clone() + &b,
+        &a + b.clone(),
+        &a + &b,
+    ] {
+        assert_matrix::<f64>(
+            expression_matrix(&expression),
+            add(matrix(SPlus), matrix(SMinus)),
+        );
+    }
+    for expression in [
+        a.clone() - b.clone(),
+        a.clone() - &b,
+        &a - b.clone(),
+        &a - &b,
+    ] {
+        assert_matrix::<f64>(
+            expression_matrix(&expression),
+            add(matrix(SPlus), scale(matrix(SMinus), c(-1.0, 0.0))),
+        );
+    }
+    for expression in [
+        a.clone() * b.clone(),
+        a.clone() * &b,
+        &a * b.clone(),
+        &a * &b,
+    ] {
+        assert_matrix::<f64>(
+            expression_matrix(&expression),
+            multiply(matrix(SPlus), matrix(SMinus)),
+        );
+    }
+    for expression in [
+        a.clone() * y.clone(),
+        a.clone() * &y,
+        &a * y.clone(),
+        &a * &y,
+    ] {
+        assert_vector::<f64>(expression_vector(&expression), vector(Up));
+    }
+    for expression in [
+        x.clone() + y.clone(),
+        x.clone() + &y,
+        &x + y.clone(),
+        &x + &y,
+    ] {
+        assert_vector::<f64>(expression_vector(&expression), [c(1.0, 0.0); 2]);
+    }
+    for expression in [
+        x.clone() - y.clone(),
+        x.clone() - &y,
+        &x - y.clone(),
+        &x - &y,
+    ] {
+        assert_vector::<f64>(expression_vector(&expression), [c(1.0, 0.0), c(-1.0, 0.0)]);
+    }
+    let coefficient = c(0.3, 0.7);
+    for expression in [
+        a.clone() * coefficient,
+        &a * coefficient,
+        coefficient * a.clone(),
+        coefficient * &a,
+        a.clone() * &coefficient,
+        &a * &coefficient,
+        &coefficient * a.clone(),
+        &coefficient * &a,
+    ] {
+        assert_matrix::<f64>(
+            expression_matrix(&expression),
+            scale(matrix(SPlus), coefficient),
+        );
+    }
+    for expression in [
+        x.clone() * coefficient,
+        &x * coefficient,
+        coefficient * x.clone(),
+        coefficient * &x,
+        x.clone() * &coefficient,
+        &x * &coefficient,
+        &coefficient * x.clone(),
+        &coefficient * &x,
+    ] {
+        assert_vector::<f64>(expression_vector(&expression), [coefficient, c(0.0, 0.0)]);
+    }
+    for expression in [-a.clone(), -&a] {
+        assert_matrix::<f64>(
+            expression_matrix(&expression),
+            scale(matrix(SPlus), c(-1.0, 0.0)),
+        );
+    }
+    for expression in [-x.clone(), -&x] {
+        assert_vector::<f64>(expression_vector(&expression), [c(-1.0, 0.0), c(0.0, 0.0)]);
+    }
+}
+
+#[test]
+fn long_operator_trace_and_destruction_fit_a_small_stack() {
+    std::thread::Builder::new()
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            use qmb_core::LocalOperator;
+            type O = LocalOperator<SpinHalf, f64>;
+            let mut expression = O::primitive(Sz);
+            for _ in 0..20_000 {
+                expression = expression
+                    .product(&O::identity())
+                    .adjoint()
+                    .scaled(c(1.0, 0.0));
+            }
+            assert_complex::<f64>(expression.trace(), c(0.0, 0.0));
+            drop(expression);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }

@@ -4,11 +4,11 @@
 
 ## 1. 位置付けと提供範囲
 
-本書は、[実装計画](implementation-plan.md)の Step 2「局所式と評価」に向けた一時的な作業用記録である。恒久的な仕様書として維持することは想定せず、既存の恒久ドキュメントからはリンクしない。ここに記す API や機能が実装済みであることは意味しない。
+本書は、[実装計画](implementation-plan.md)の Step 2「局所式と評価」に向けた一時的な作業用記録である。恒久的な仕様書として維持することは想定せず、既存の恒久ドキュメントからはリンクしない。Step 2 の局所式・評価と API 移行は実装済みであり、後続段階の機能と区別する。
 
 局所式の数学的契約は、[局所 primitive・式木の数学的能力](design/primitive-expression.md)と[要件](requirements.md)に従う。共通の代数処理は `qmb-core` に集約し、局所式・評価に加え、後続の Index・空間・複合式・基底処理も core に置く。具体的代数・Geometry・数値 export はそれぞれの crate に分離する。
 
-crate の責任、公開する式型、共通の構文パーツ、`Arc` による共有、作用の `act` と評価の `evaluate` の役割は確定事項とする。`LinearCombination<P, T>` は薄い有限線型結合型として維持し、演算 trait は `T` を型引数、返却要素を関連型 `Term` とする。局所規則・局所基底展開の結果は、式木側で `map` して取り込む。これらの API 整備と接続を Step 2 で行う。以下は今後の実装に向けた採用済みの設計であり、実装詳細と後続段階の設計事項は第6節にまとめる。
+crate の責任、公開する式型、共通の構文パーツ、`Arc` による共有、作用の `act` と評価の `evaluate` の役割は確定事項とする。`LinearCombination<P, T>` は薄い有限線型結合型として維持し、演算 trait は `T` を型引数、返却要素を関連型 `Term` とする。局所規則・局所基底展開の結果は、式木側で `map` して取り込む。これらの API 整備と接続を Step 2 で行う。以下は Step 2 で実装した採用済みの設計であり、後続段階の設計事項は第6節にまとめる。
 
 局所状態・演算子の構築、加算、係数乗算、zero・identity、演算子積、作用、内積、随伴、局所 trace を実装する。これらから作れる commutator・anticommutator、局所期待値、Hilbert–Schmidt 内積も含める。
 
@@ -20,34 +20,17 @@ core 内を局所契約、共通の構文パーツ、式・構築構文、空間
 
 source の自動保持、式の構造比較、`Debug`・`Display` を含む式表示は後続へ延期する。現在の式と source を別々に保持する二重のルートや、それらの参照・比較 API は導入しない。操作は入力を変更せず、利用者は必要なら評価前の式を変数に保持できる。不変実体の共有は維持する。
 
-### 1.1. 実装前の前提作業：状態 primitive の Act の整備（完了）
+### 1.1. 実装・検証状況（Step 2 完了）
 
-Step 2 の前提作業として、`qmb-core` の作用 API を以下の状態 primitive 側の `Act<O, T>` の契約に揃えた。この整備は 2026-10-21 に完了した。共通式木・評価は未実装である。以下は現在実装済みのシグネチャであり、第2.5節で定める関連型 `Operator`・`Term` を使う契約への移行はこれから行う。
+2026-10-22 に Step 2 の実装と検証を完了した。
 
-`Act` は「この状態 primitive に、指定した演算子 primitive を作用させられる」能力を表す。
+1. `LocalStructure` と `Identity<T>` を分離し、演算 trait を `T` と関連型 `Term`・`Act::Operator` の契約に移行した。`StateBasis`・`OperatorBasis` は定義・再公開・実装宣言・コード内の利用を削除した。
+2. 公開の共通パーツ、薄い線型結合と `map`、`Term` の型別名化、局所式の constructor と所有値・借用値の演算子構文を実装した。spin-half と非公開テスト用の三次元代数・基底も移行した。
+3. `Arc` による部分式の共有、基底を指定しない状態評価・作用・内積・期待値・随伴・積・trace・導出操作を実装した。評価・破棄は明示的な作業スタックで処理する。状態への作用評価は `Product` 能力を要求しない。
+4. spin と三次元代数の式を単精度・倍精度で独立した行列と照合し、非正規直交基底、型制約、共有、項順序・重複・零係数、空・単一項の無確保、2万段の式を 128 KiB のスタックで評価・破棄するケースを検証した。
+5. 既存の direnv 環境（Rust 1.98.0）で workspace の全46テスト（doc test 含む）、format check、Clippy、警告をエラーとするドキュメント生成の成功を確認した。通常依存の `std`・`libm` を有効にせず、新しい依存や feature を追加していない。MSRV（Rust 1.85）での実行と `std` のない target 向けビルドは未確認である。
 
-```rust
-pub trait Act<O, T>: Sized {
-    /// 数学的には operator * self を計算する。
-    fn act(&self, operator: &O) -> LinearCombination<Self, T>;
-}
-```
-
-`LocalStructure<T>` の関連型の制約は次の形とした。`DIMENSION` と `identity()` の契約は維持している。
-
-```rust
-type State: InnerProduct<T> + Act<Self::Operator, T>;
-type Operator: Product<T> + Adjoint<T> + Trace<T>;
-```
-
-以下の前提作業を完了した。
-
-1. core の trait 定義・再公開・関連型の制約を変更した。
-2. spin の作用規則を `Act<SpinHalfOperator, T> for SpinHalfState` として実装し、局所規則の数値制約と数学的結果を維持した。
-3. 三次元局所代数などのテスト実装、呼び出し箇所、doc test、作用の実装先を説明する既存ドキュメントを契約に揃えた。
-4. 既存の direnv 環境（Rust 1.98.0）で、局所規則・型制約を含む workspace の全26テスト（doc test 含む）、format check、Clippy、警告をエラーとするドキュメント生成の成功を確認した。
-
-Act は状態をメソッドの受け手とし、数学的には演算子の左作用を計算する。primitive の `Act::act` は局所規則を計算して `LinearCombination` を返す。一方、状態式の `act` は遅延した作用を構築し、`evaluate` が必要な primitive の `Act::act` を呼び、その結果を式木へ取り込む。両者の役割を区別する。
+`Act::act` は状態を受け手として局所規則を計算し、線型結合を返す。状態式の inherent method `act` は遅延した作用を構築し、`evaluate` が必要な規則を呼んで通常の状態式を返す。両者の役割を区別する。
 
 ## 2. 式の型・内部表現・共有
 
@@ -118,7 +101,7 @@ pub struct AdjointExpr<E> {
 }
 ```
 
-`LinearCombination<P, T>` は、要素 `P` と `Complex<T>` の係数からなる有限項列だけを表す薄い型として維持する。式木・局所構造・評価規則に依存させない。共通パーツを使った保持内容は次の形とする。既存の公開 API との調整は Step 2 で行う。
+`LinearCombination<P, T>` は、要素 `P` と `Complex<T>` の係数からなる有限項列だけを表す薄い型として維持する。式木・局所構造・評価規則に依存させない。共通パーツを使った保持内容は次の形とし、既存の公開 API も Step 2 で更新した。
 
 ```rust
 pub struct LinearCombination<P, T> {
@@ -188,7 +171,7 @@ zero は空の `Sum`、演算子の恒等元は `Identity` で表す。内積・
 | 演算子 primitive の基底展開 | `LinearCombination<L::Operator, T>` |
 | 内積・trace | 従来どおり `Complex<T>` |
 
-trait の形は以下とする。これは今後の移行先であり、第1.1節の実装済み API と区別する。
+実装した trait の契約は以下のとおりとする。
 
 ```rust
 pub trait Act<T> {
@@ -311,7 +294,7 @@ primitive の取り込みは所有値を受け取り、式同士の操作は `&s
 
 `product`・`act`・`adjoint` は遅延式を構築し、`inner_product`・`trace` は必要な処理を実行して `Complex<T>` を返す。`LocalState::act(&self, operator)` は `Act(ActExpr { state, operator })` 節点を含む状態式を構築し、その式に対する `LocalState::evaluate(&self) -> Self` が作用を評価する。
 
-以下は利用形の例であり、実装・検証済みのコードではない。
+以下は利用形の例である。同じ API の実行例を spin-half の doc test でも検証している。
 
 ```rust
 let expr = state.act(&operator); // 遅延した作用を構築する
@@ -367,15 +350,15 @@ core・spin-half・テスト・doc test の演算 trait を関連型 `Term` と 
 
 長い積・作用のチェーンを評価・破棄し、式の深さに比例した関数再帰を避けられることを検証する。破棄時には共有先が残る部分式を引き続き利用できることも確認する。Step 2 の性能上の合格条件は、部分式の共有、不要な primitive 複製の抑制、空・単一項のコンテナ無確保とする。`map` 全般の無確保や特定の実行時間は保証せず、速度比較・追加の割り当て最適化は後続で検証する。
 
-既存の direnv 環境で対象テスト、workspace の test・format check・Clippy・ドキュメント生成を確認する。これは今後の検証方針であり、Step 2 のチェックを実行済みとするものではない。
+既存の direnv 環境で対象テスト、workspace の test・format check・Clippy・警告をエラーとするドキュメント生成を実行し、成功を確認した。詳細は第1.1節に記録した。
 
-議論中の一時コードでは、共通パーツを使う再帰型、数値・`Clone` 制約を追加しない構築と共有、借用を含む primitive の保持を確認した。これは型構成の成立確認であり、今回決めた関連型・`map` の実装、実際の公開 API の移行、評価器全体、数学的整合性、性能の検証が完了したことを意味しない。
+共通パーツを使う再帰型、数値・`Clone` 制約を追加しない構築と共有、借用を含む primitive の保持、関連型・`map`・公開 API の移行を実際のコードとテストで確認した。性能の合格条件は上記の共有・複製・割り当て特性とし、速度比較・追加の最適化は未実施である。
 
 ## 6. 確定事項と後続の設計
 
-共通パーツの役割と公開範囲、局所式の節点構成、薄い `LinearCombination` と項型の統合、演算 trait の `T` と関連型 `Term`、`map` と共通 constructor による式木への取り込み、および `Arc` の共有目的は確定事項とする。局所構造と演算能力の分離、基底の marker trait の削除と `Basis` の直接利用、メソッドごとの型制約、所有値・借用値の構築経路、反復的な評価・破棄と性能上の合格条件も採用済みとし、core・spin-half の API 整備を Step 2 で行う。
+共通パーツの役割と公開範囲、局所式の節点構成、薄い `LinearCombination` と項型の統合、演算 trait の `T` と関連型 `Term`、`map` と共通 constructor による式木への取り込み、および `Arc` の共有目的は確定事項とする。局所構造と演算能力の分離、基底の marker trait の削除と `Basis` の直接利用、メソッドごとの型制約、所有値・借用値の構築経路、反復的な評価・破棄と性能上の合格条件も採用済みとし、core・spin-half の API 整備は Step 2 で完了した。
 
-非公開の作業スタックの型、一時領域の再利用方法、補助関数と module の分割、各数値演算を呼ぶ位置での具体的な制約は、この方針と検証条件の範囲で実装時に定める。採用済みの設計判断を未決事項へ戻さない。
+非公開の作業スタック・補助関数・module と各操作の型制約は実装に反映した。今後の最適化でも、この方針と検証条件を維持する。
 
 後続段階では次を扱う。
 

@@ -3,8 +3,8 @@
 use std::{fmt::Debug, num::NonZeroUsize, ops::Neg};
 
 use qmb_core::{
-    Act, Adjoint, Basis, Complex, DimensionOverflow, InnerProduct, LinearCombination,
-    LocalStructure, OperatorBasis, Product, StateBasis, Term, Trace,
+    Act, Adjoint, Basis, Complex, DimensionOverflow, Identity, InnerProduct, LinearCombination,
+    LocalStructure, Product, Term, Trace,
     num_traits::{FromPrimitive, Num, ToPrimitive},
     operator_basis_len, state_basis_len,
 };
@@ -86,6 +86,7 @@ enum Operator {
 }
 
 impl<T: Real> Product<T> for Operator {
+    type Term = Self;
     fn product(&self, rhs: &Self) -> LinearCombination<Self, T> {
         match (*self, *rhs) {
             (Self::Identity, op) | (op, Self::Identity) => LinearCombination::primitive(op),
@@ -97,7 +98,9 @@ impl<T: Real> Product<T> for Operator {
     }
 }
 
-impl<T: Real> Act<Operator, T> for Ket {
+impl<T: Real> Act<T> for Ket {
+    type Operator = Operator;
+    type Term = Self;
     fn act(&self, operator: &Operator) -> LinearCombination<Self, T> {
         match *operator {
             Operator::Identity => LinearCombination::primitive(*self),
@@ -109,6 +112,7 @@ impl<T: Real> Act<Operator, T> for Ket {
 }
 
 impl<T: Real> Adjoint<T> for Operator {
+    type Term = Self;
     fn adjoint(&self) -> LinearCombination<Self, T> {
         LinearCombination::primitive(match *self {
             Self::Unit(i, j) => Self::Unit(j, i),
@@ -127,14 +131,17 @@ impl<T: Real> Trace<T> for Operator {
 }
 
 struct ThreeLevel;
-impl<T: Real> LocalStructure<T> for ThreeLevel {
+impl LocalStructure for ThreeLevel {
     type State = Ket;
     type Operator = Operator;
     const DIMENSION: NonZeroUsize = NonZeroUsize::new(3).unwrap();
+}
+
+impl<T: Real> Identity<T> for ThreeLevel {
     fn identity() -> LinearCombination<Operator, T> {
         LinearCombination::from_terms(AXES.map(|i| Term {
             coefficient: c(1.0, 0.0),
-            primitive: Operator::Unit(i, i),
+            operand: Operator::Unit(i, i),
         }))
     }
 }
@@ -145,7 +152,7 @@ impl<T: Real> Basis<Ket, T> for Canonical {
         LinearCombination::from_terms(primitive.coordinates::<T>().into_iter().zip(AXES).map(
             |(coefficient, axis)| Term {
                 coefficient,
-                primitive: Ket::Unit(axis),
+                operand: Ket::Unit(axis),
             },
         ))
     }
@@ -159,7 +166,6 @@ impl<T: Real> Basis<Ket, T> for Canonical {
         AXES.into_iter().map(Ket::Unit)
     }
 }
-impl<T: Real> StateBasis<ThreeLevel, T> for Canonical {}
 
 struct NonOrthogonal;
 impl<T: Real> Basis<Ket, T> for NonOrthogonal {
@@ -168,15 +174,15 @@ impl<T: Real> Basis<Ket, T> for NonOrthogonal {
         LinearCombination::from_terms([
             Term {
                 coefficient: a - b,
-                primitive: Ket::Unit(Axis::A),
+                operand: Ket::Unit(Axis::A),
             },
             Term {
                 coefficient: b,
-                primitive: Ket::Sum,
+                operand: Ket::Sum,
             },
             Term {
                 coefficient: d,
-                primitive: Ket::Unit(Axis::C),
+                operand: Ket::Unit(Axis::C),
             },
         ])
     }
@@ -192,7 +198,6 @@ impl<T: Real> Basis<Ket, T> for NonOrthogonal {
         [Ket::Unit(Axis::A), Ket::Sum, Ket::Unit(Axis::C)].into_iter()
     }
 }
-impl<T: Real> StateBasis<ThreeLevel, T> for NonOrthogonal {}
 
 struct MatrixUnits;
 impl<T: Real> Basis<Operator, T> for MatrixUnits {
@@ -213,7 +218,6 @@ impl<T: Real> Basis<Operator, T> for MatrixUnits {
             .flat_map(|i| AXES.into_iter().map(move |j| Operator::Unit(i, j)))
     }
 }
-impl<T: Real> OperatorBasis<ThreeLevel, T> for MatrixUnits {}
 
 type Vector<T> = [Complex<T>; 3];
 type Matrix<T> = [[Complex<T>; 3]; 3];
@@ -255,7 +259,7 @@ fn matvec<T: Real>(a: Matrix<T>, x: Vector<T>) -> Vector<T> {
 fn operator_value<T: Real>(sum: &LinearCombination<Operator, T>) -> Matrix<T> {
     let mut result = [[c(0.0, 0.0); 3]; 3];
     for term in sum {
-        let m = matrix(term.primitive);
+        let m = matrix(term.operand);
         for i in 0..3 {
             for j in 0..3 {
                 result[i][j] = result[i][j] + term.coefficient * m[i][j];
@@ -268,7 +272,7 @@ fn operator_value<T: Real>(sum: &LinearCombination<Operator, T>) -> Matrix<T> {
 fn state_value<T: Real>(sum: &LinearCombination<Ket, T>) -> Vector<T> {
     let mut result = [c(0.0, 0.0); 3];
     for term in sum {
-        for (i, value) in term.primitive.coordinates::<T>().into_iter().enumerate() {
+        for (i, value) in term.operand.coordinates::<T>().into_iter().enumerate() {
             result[i] = result[i] + term.coefficient * value;
         }
     }
@@ -281,26 +285,28 @@ fn product<T: Real>(
 ) -> LinearCombination<Operator, T> {
     LinearCombination::from_terms(a.terms().flat_map(|left| {
         b.terms().flat_map(move |right| {
-            left.primitive.product(&right.primitive).into_iter().map(
-                move |term: Term<Operator, T>| Term {
+            left.operand
+                .product(&right.operand)
+                .into_iter()
+                .map(move |term: Term<Operator, T>| Term {
                     coefficient: left.coefficient * right.coefficient * term.coefficient,
-                    primitive: term.primitive,
-                },
-            )
+                    operand: term.operand,
+                })
         })
     }))
 }
 
 fn action<T: Real>(a: &LinearCombination<Operator, T>, state: &Ket) -> Vector<T> {
     state_value(&LinearCombination::from_terms(a.terms().flat_map(|t| {
-        state.act(&t.primitive).scaled(t.coefficient).into_iter()
+        state.act(&t.operand).scaled(t.coefficient).into_iter()
     })))
 }
 
-// LocalStructure alone must expose the state's action capability.
+// Evaluation requests action explicitly, independently of metadata.
 fn act_primitive<L, T>(state: &L::State, operator: &L::Operator) -> LinearCombination<L::State, T>
 where
-    L: LocalStructure<T>,
+    L: LocalStructure,
+    L::State: Act<T, Operator = L::Operator, Term = L::State>,
 {
     state.act(operator)
 }
@@ -309,8 +315,8 @@ fn inner<T: Real>(a: &LinearCombination<Ket, T>, b: &LinearCombination<Ket, T>) 
     let mut result = c(0.0, 0.0);
     for x in a {
         for y in b {
-            result = result
-                + x.coefficient.conj() * y.coefficient * x.primitive.inner_product(&y.primitive);
+            result =
+                result + x.coefficient.conj() * y.coefficient * x.operand.inner_product(&y.operand);
         }
     }
     result
@@ -341,7 +347,7 @@ fn check_rules<T: Real>() {
     let operators: Vec<_> = <MatrixUnits as Basis<Operator, T>>::elements(&MatrixUnits)
         .chain([Operator::Identity])
         .collect();
-    let identity = <ThreeLevel as LocalStructure<T>>::identity();
+    let identity = <ThreeLevel as Identity<T>>::identity();
     assert_eq!(identity.len(), 3);
     assert_matrix(operator_value(&identity), matrix(Operator::Identity));
     for &a in &operators {
@@ -372,10 +378,7 @@ fn check_rules<T: Real>() {
             for state in KETS {
                 assert_vector(
                     action(&ab, &state),
-                    matvec(
-                        a_matrix,
-                        state_value(&<Ket as Act<Operator, T>>::act(&state, &b)),
-                    ),
+                    matvec(a_matrix, state_value(&<Ket as Act<T>>::act(&state, &b))),
                 );
             }
             for &d in &operators {
@@ -389,7 +392,7 @@ fn check_rules<T: Real>() {
             // Cyclicity of the ordinary trace.
             let trace = |sum: &LinearCombination<Operator, T>| {
                 sum.terms().fold(c::<T>(0.0, 0.0), |v, t| {
-                    v + t.coefficient * <Operator as Trace<T>>::trace(&t.primitive)
+                    v + t.coefficient * <Operator as Trace<T>>::trace(&t.operand)
                 })
             };
             assert_complex(
@@ -415,9 +418,9 @@ fn check_rules<T: Real>() {
     assert_complex(inner(&dependent, &dependent), c(0.0, 0.0));
 }
 
-fn check_state_basis<T: Real, B: StateBasis<ThreeLevel, T>>(basis: &B) {
+fn check_state_basis<T: Real, B: Basis<Ket, T>>(basis: &B) {
     let elements: Vec<_> = basis.elements().collect();
-    assert_eq!(elements.len(), state_basis_len::<ThreeLevel, T>());
+    assert_eq!(elements.len(), state_basis_len::<ThreeLevel>());
     for (i, p) in elements.iter().enumerate() {
         assert_eq!(basis.index(p), Some(i));
     }
@@ -425,7 +428,7 @@ fn check_state_basis<T: Real, B: StateBasis<ThreeLevel, T>>(basis: &B) {
         let expanded = basis.expand(&p);
         assert_vector(state_value(&expanded), p.coordinates());
         for term in &expanded {
-            assert!(basis.index(&term.primitive).is_some());
+            assert!(basis.index(&term.operand).is_some());
         }
     }
 }
@@ -448,13 +451,10 @@ fn check_bases<T: Real>() {
         .terms()
         .fold(T::zero(), |v, t| v + t.coefficient.norm_sqr());
     assert_complex(Complex::new(coefficient_squares, T::zero()), c(2.0, 0.0));
-    fn require_operator_basis<T: Real, B: OperatorBasis<ThreeLevel, T>>(_: &B) {}
+    fn require_operator_basis<T: Real, B: Basis<Operator, T>>(_: &B) {}
     require_operator_basis::<T, _>(&MatrixUnits);
     let elements: Vec<_> = <MatrixUnits as Basis<Operator, T>>::elements(&MatrixUnits).collect();
-    assert_eq!(
-        elements.len(),
-        operator_basis_len::<ThreeLevel, T>().unwrap()
-    );
+    assert_eq!(elements.len(), operator_basis_len::<ThreeLevel>().unwrap());
     for (i, p) in elements.iter().enumerate() {
         assert_eq!(
             <MatrixUnits as Basis<Operator, T>>::index(&MatrixUnits, p),
@@ -487,55 +487,32 @@ fn three_level_rules_and_bases_work_at_both_precisions() {
     check_rules::<f64>();
     check_bases::<f32>();
     check_bases::<f64>();
-    assert_eq!(
-        <ThreeLevel as LocalStructure<f32>>::DIMENSION,
-        <ThreeLevel as LocalStructure<f64>>::DIMENSION
-    );
-    fn same_primitives<
-        L: LocalStructure<f32>
-            + LocalStructure<
-                f64,
-                State = <L as LocalStructure<f32>>::State,
-                Operator = <L as LocalStructure<f32>>::Operator,
-            >,
-    >() {
-    }
-    same_primitives::<ThreeLevel>();
+    assert_eq!(<ThreeLevel as LocalStructure>::DIMENSION.get(), 3);
 }
 
 struct Dimension<const D: usize>;
-impl<const D: usize> LocalStructure<f64> for Dimension<D> {
+impl<const D: usize> LocalStructure for Dimension<D> {
     type State = Ket;
     type Operator = Operator;
     const DIMENSION: NonZeroUsize = NonZeroUsize::new(D).unwrap();
-    fn identity() -> LinearCombination<Operator, f64> {
-        // Only the metadata arithmetic is exercised by this test fixture.
-        unimplemented!("dimension-only test fixture")
-    }
 }
 
 #[test]
 fn basis_dimensions_handle_unit_large_and_overflow_cases() {
-    assert_eq!(state_basis_len::<Dimension<1>, f64>(), 1);
-    assert_eq!(operator_basis_len::<Dimension<1>, f64>(), Ok(1));
-    assert_eq!(state_basis_len::<ThreeLevel, f64>(), 3);
-    assert_eq!(operator_basis_len::<ThreeLevel, f64>(), Ok(9));
+    assert_eq!(state_basis_len::<Dimension<1>>(), 1);
+    assert_eq!(operator_basis_len::<Dimension<1>>(), Ok(1));
+    assert_eq!(state_basis_len::<ThreeLevel>(), 3);
+    assert_eq!(operator_basis_len::<ThreeLevel>(), Ok(9));
     const FITS: usize = 1 << (usize::BITS / 2 - 1);
     const OVERFLOWS: usize = 1 << (usize::BITS / 2);
+    assert_eq!(operator_basis_len::<Dimension<FITS>>(), Ok(FITS * FITS));
     assert_eq!(
-        operator_basis_len::<Dimension<FITS>, f64>(),
-        Ok(FITS * FITS)
-    );
-    assert_eq!(
-        operator_basis_len::<Dimension<OVERFLOWS>, f64>(),
+        operator_basis_len::<Dimension<OVERFLOWS>>(),
         Err(DimensionOverflow)
     );
+    assert_eq!(state_basis_len::<Dimension<{ usize::MAX }>>(), usize::MAX);
     assert_eq!(
-        state_basis_len::<Dimension<{ usize::MAX }>, f64>(),
-        usize::MAX
-    );
-    assert_eq!(
-        operator_basis_len::<Dimension<{ usize::MAX }>, f64>(),
+        operator_basis_len::<Dimension<{ usize::MAX }>>(),
         Err(DimensionOverflow)
     );
     let error: &dyn core::error::Error = &DimensionOverflow;
@@ -544,4 +521,106 @@ fn basis_dimensions_handle_unit_large_and_overflow_cases() {
         "operator-space dimension overflows usize"
     );
     assert!(error.source().is_none());
+}
+
+fn expression_coordinates<T: Real>(state: &qmb_core::LocalState<ThreeLevel, T>) -> Vector<T> {
+    AXES.map(|axis| {
+        qmb_core::LocalState::<ThreeLevel, T>::primitive(Ket::Unit(axis)).inner_product(state)
+    })
+}
+fn expression_operator_matrix<T: Real>(
+    operator: &qmb_core::LocalOperator<ThreeLevel, T>,
+) -> Matrix<T> {
+    let columns = AXES.map(|axis| {
+        expression_coordinates(&qmb_core::LocalState::primitive(Ket::Unit(axis)).act(operator))
+    });
+    std::array::from_fn(|i| std::array::from_fn(|j| columns[j][i]))
+}
+fn check_three_level_expressions<T: Real>() {
+    use qmb_core::{LocalOperator, LocalState};
+    type S<T> = LocalState<ThreeLevel, T>;
+    type O<T> = LocalOperator<ThreeLevel, T>;
+    let state = S::<T>::primitive(Ket::Sum).scaled(c(0.2, 0.3))
+        + S::primitive(Ket::Phase).scaled(c(-0.4, 0.1));
+    let reference = state_value(
+        &(LinearCombination::term(c::<T>(0.2, 0.3), Ket::Sum)
+            + LinearCombination::term(c(-0.4, 0.1), Ket::Phase)),
+    );
+    assert_vector(expression_coordinates(&state), reference);
+    assert_complex(state.inner_product(&state), dot(reference, reference));
+    let operators: Vec<_> = <MatrixUnits as Basis<Operator, T>>::elements(&MatrixUnits)
+        .chain([Operator::Identity])
+        .collect();
+    for a in &operators {
+        let a_expr = O::<T>::primitive(*a).scaled(c(0.3, 0.2)) + O::identity();
+        let mut a_matrix = matrix::<T>(*a);
+        for (i, row) in a_matrix.iter_mut().enumerate() {
+            for (j, value) in row.iter_mut().enumerate() {
+                *value = *value * c(0.3, 0.2) + if i == j { c(1.0, 0.0) } else { c(0.0, 0.0) };
+            }
+        }
+        for b in &operators {
+            let product = a_expr.product(&O::primitive(*b));
+            let expected = matmul(a_matrix, matrix(*b));
+            let expected_adjoint =
+                std::array::from_fn(|i| std::array::from_fn(|j| expected[j][i].conj()));
+            assert_matrix(expression_operator_matrix(&product), expected);
+            assert_matrix(
+                expression_operator_matrix(&product.adjoint()),
+                expected_adjoint,
+            );
+            assert_complex(
+                product.trace(),
+                (0..3).fold(c(0.0, 0.0), |sum, i| sum + expected[i][i]),
+            );
+            assert_vector(
+                expression_coordinates(&state.act(&product).evaluate()),
+                matvec(expected, reference),
+            );
+            assert_complex(
+                state.expectation(&product),
+                dot(reference, matvec(expected, reference)),
+            );
+            let a_adjoint = std::array::from_fn(|i| std::array::from_fn(|j| a_matrix[j][i].conj()));
+            let hs = matmul(a_adjoint, matrix(*b));
+            assert_complex(
+                a_expr.hilbert_schmidt_inner_product(&O::primitive(*b)),
+                (0..3).fold(c(0.0, 0.0), |sum, i| sum + hs[i][i]),
+            );
+        }
+    }
+    // The nonorthogonal basis uses a dependent primitive; importing its terms
+    // must preserve overlaps, rather than interpreting coefficients as coordinates.
+    for primitive in KETS {
+        let terms = <NonOrthogonal as Basis<Ket, T>>::expand(&NonOrthogonal, &primitive);
+        let imported = S::from_linear_combination(terms.map(S::primitive));
+        assert_vector(expression_coordinates(&imported), primitive.coordinates());
+        assert_complex(
+            imported.inner_product(&imported),
+            dot(primitive.coordinates(), primitive.coordinates()),
+        );
+    }
+    let identity =
+        O::<T>::from_linear_combination(<ThreeLevel as Identity<T>>::identity().map(O::primitive));
+    assert_matrix(
+        expression_operator_matrix(&identity),
+        matrix(Operator::Identity),
+    );
+    assert_complex(O::<T>::identity().trace(), c(3.0, 0.0));
+    let basis_operator = O::from_linear_combination(
+        <MatrixUnits as Basis<Operator, T>>::expand(&MatrixUnits, &Operator::Identity)
+            .map(O::primitive),
+    );
+    assert_matrix(
+        expression_operator_matrix(&basis_operator),
+        matrix(Operator::Identity),
+    );
+    assert_vector(expression_coordinates(&S::<T>::zero()), [c(0.0, 0.0); 3]);
+    assert_complex(O::<T>::zero().trace(), c(0.0, 0.0));
+}
+
+#[test]
+fn three_level_expressions_and_nonorthogonal_basis_match_matrices() {
+    check_three_level_expressions::<f32>();
+    check_three_level_expressions::<f64>();
 }

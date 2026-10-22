@@ -22,28 +22,10 @@ pub trait Basis<P, T> {
     fn elements(&self) -> impl Iterator<Item = P> + '_;
 }
 
-/// A state basis for the indicated local structure.
-///
-/// Its number of elements must equal [`state_basis_len`].
-pub trait StateBasis<L, T>: Basis<L::State, T>
-where
-    L: LocalStructure<T>,
-{
-}
-
-/// A basis of the full operator space for the indicated local structure.
-///
-/// Its number of elements must equal [`operator_basis_len`].
-pub trait OperatorBasis<L, T>: Basis<L::Operator, T>
-where
-    L: LocalStructure<T>,
-{
-}
-
 /// Returns the number of elements in any complete state basis for `L`.
-pub fn state_basis_len<L, T>() -> usize
+pub fn state_basis_len<L>() -> usize
 where
-    L: LocalStructure<T>,
+    L: LocalStructure,
 {
     L::DIMENSION.get()
 }
@@ -53,9 +35,9 @@ where
 /// # Errors
 ///
 /// Returns [`DimensionOverflow`] if the square does not fit in `usize`.
-pub fn operator_basis_len<L, T>() -> Result<usize, DimensionOverflow>
+pub fn operator_basis_len<L>() -> Result<usize, DimensionOverflow>
 where
-    L: LocalStructure<T>,
+    L: LocalStructure,
 {
     let dimension = L::DIMENSION.get();
     dimension.checked_mul(dimension).ok_or(DimensionOverflow)

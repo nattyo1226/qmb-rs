@@ -3,12 +3,12 @@
 use core::ops::{Div, Neg};
 
 use qmb_core::{
-    Basis, LinearCombination, OperatorBasis, StateBasis,
+    Basis, LinearCombination,
     num_traits::{One, Zero},
 };
 
 use crate::{
-    SpinHalf, SpinHalfOperator, SpinHalfState,
+    SpinHalfOperator, SpinHalfState,
     coefficient::{half, imaginary},
 };
 
@@ -109,16 +109,4 @@ where
         use SpinHalfOperator::*;
         [I, SPlus, SMinus, Sz].into_iter()
     }
-}
-
-impl<T> StateBasis<SpinHalf, T> for SzBasis where T: Zero + One + Div<Output = T> + Neg<Output = T> {}
-
-impl<T> OperatorBasis<SpinHalf, T> for CartesianBasis where
-    T: Zero + One + Div<Output = T> + Neg<Output = T>
-{
-}
-
-impl<T> OperatorBasis<SpinHalf, T> for LadderBasis where
-    T: Zero + One + Div<Output = T> + Neg<Output = T>
-{
 }

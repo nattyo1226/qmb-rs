@@ -13,9 +13,11 @@ pub trait InnerProduct<T> {
 }
 
 /// Ordered multiplication of two operator primitives.
-pub trait Product<T>: Sized {
+pub trait Product<T> {
+    /// Element type in the product rule result.
+    type Term;
     /// Returns `self * rhs`; `rhs` acts first when applied to a state.
-    fn product(&self, rhs: &Self) -> LinearCombination<Self, T>;
+    fn product(&self, rhs: &Self) -> LinearCombination<Self::Term, T>;
 }
 
 /// A state primitive that can receive the left action of an operator primitive.
@@ -27,22 +29,30 @@ pub trait Product<T>: Sized {
 /// struct Operator;
 /// struct State;
 /// struct OtherOperator;
-/// impl Act<Operator, f64> for State {
+/// impl Act<f64> for State {
+///     type Operator = Operator;
+///     type Term = Self;
 ///     fn act(&self, _: &Operator) -> LinearCombination<Self, f64> {
 ///         LinearCombination::primitive(State)
 ///     }
 /// }
 /// let _ = State.act(&OtherOperator);
 /// ```
-pub trait Act<O, T>: Sized {
+pub trait Act<T> {
+    /// Operator type accepted by this action.
+    type Operator;
+    /// Element type in the action rule result.
+    type Term;
     /// Returns `operator * self` as a finite linear combination of states.
-    fn act(&self, operator: &O) -> LinearCombination<Self, T>;
+    fn act(&self, operator: &Self::Operator) -> LinearCombination<Self::Term, T>;
 }
 
 /// The adjoint of an operator primitive.
-pub trait Adjoint<T>: Sized {
+pub trait Adjoint<T> {
+    /// Element type in the adjoint rule result.
+    type Term;
     /// Returns the adjoint as a finite linear combination.
-    fn adjoint(&self) -> LinearCombination<Self, T>;
+    fn adjoint(&self) -> LinearCombination<Self::Term, T>;
 }
 
 /// The ordinary, unnormalized trace of an operator primitive.

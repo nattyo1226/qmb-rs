@@ -33,6 +33,8 @@ impl<T> Product<T> for SpinHalfOperator
 where
     T: Zero + One + Div<Output = T> + Neg<Output = T>,
 {
+    type Term = Self;
+
     fn product(&self, rhs: &Self) -> LinearCombination<Self, T> {
         use LinearCombination as Lc;
         use SpinHalfOperator::*;
@@ -72,6 +74,8 @@ where
 }
 
 impl<T: Zero + One> Adjoint<T> for SpinHalfOperator {
+    type Term = Self;
+
     fn adjoint(&self) -> LinearCombination<Self, T> {
         LinearCombination::primitive(match self {
             Self::SPlus => Self::SMinus,

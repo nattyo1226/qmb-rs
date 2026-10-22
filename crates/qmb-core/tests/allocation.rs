@@ -66,13 +66,13 @@ fn empty_and_single_term_storage_and_iteration_do_not_allocate() {
         assert_eq!(empty.into_iter().len(), 0);
         let single = LinearCombination::from_terms([Term {
             coefficient: Complex::new(2.0, 0.0),
-            primitive: 1,
+            operand: 1,
         }]);
         let single = single + LinearCombination::zero();
         assert_eq!(single.terms().len(), 1);
-        assert_eq!(single.into_terms().next().unwrap().primitive, 1);
+        assert_eq!(single.into_terms().next().unwrap().operand, 1);
         let single = LinearCombination::<_, f64>::primitive(2).scaled(Complex::new(0.0, 0.0));
-        assert_eq!(single.into_iter().next_back().unwrap().primitive, 2);
+        assert_eq!(single.into_iter().next_back().unwrap().operand, 2);
     });
 }
 
@@ -80,12 +80,24 @@ fn empty_and_single_term_storage_and_iteration_do_not_allocate() {
 fn owning_iteration_reuses_the_existing_multiple_term_storage() {
     let sum = LinearCombination::from_terms((0..5).map(|p| Term {
         coefficient: Complex::new(1.0, 0.0),
-        primitive: p,
+        operand: p,
     }));
     without_allocation(|| {
         let mut iter = sum.into_terms();
-        assert_eq!(iter.next().unwrap().primitive, 0);
-        assert_eq!(iter.next_back().unwrap().primitive, 4);
+        assert_eq!(iter.next().unwrap().operand, 0);
+        assert_eq!(iter.next_back().unwrap().operand, 4);
         assert_eq!(iter.len(), 3);
+    });
+}
+
+#[test]
+fn empty_and_single_term_mapping_do_not_allocate() {
+    without_allocation(|| {
+        let empty = LinearCombination::<u8, f64>::zero().map(u16::from);
+        assert!(empty.is_empty());
+        let single = LinearCombination::term(Complex::new(0.0, 1.0), 3_u8).map(u16::from);
+        let term = single.into_iter().next().unwrap();
+        assert_eq!(term.operand, 3_u16);
+        assert_eq!(term.coefficient, Complex::new(0.0, 1.0));
     });
 }

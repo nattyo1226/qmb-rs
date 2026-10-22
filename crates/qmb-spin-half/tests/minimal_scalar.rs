@@ -3,8 +3,8 @@
 use std::ops::{Add, Div, Mul, Neg};
 
 use qmb_core::{
-    Act, Adjoint, Basis, InnerProduct, LinearCombination as Lc, LocalStructure, OperatorBasis,
-    Product, StateBasis, Trace,
+    Act, Adjoint, Basis, Identity, InnerProduct, LinearCombination as Lc, LocalStructure, Product,
+    Trace,
     num_traits::{One, Zero},
 };
 use qmb_spin_half::{
@@ -69,7 +69,7 @@ fn inner_adjoint_trace_and_state_basis_only_need_zero_and_one() {
         let adjoint = <Op as Adjoint<Natural>>::adjoint(&op);
         assert_eq!(adjoint.len(), 1);
         let term = adjoint.into_iter().next().unwrap();
-        assert_eq!(term.primitive, expected);
+        assert_eq!(term.operand, expected);
         assert_eq!(term.coefficient.re.0, 1);
         assert_eq!(term.coefficient.im.0, 0);
         let trace = <Op as Trace<Natural>>::trace(&op);
@@ -86,7 +86,7 @@ fn inner_adjoint_trace_and_state_basis_only_need_zero_and_one() {
         let expanded = <SzBasis as Basis<State, Natural>>::expand(&SzBasis, &state);
         let mut terms = expanded.into_terms();
         let term = terms.next().unwrap();
-        assert_eq!(term.primitive, state);
+        assert_eq!(term.operand, state);
         assert_eq!(term.coefficient.re.0, 1);
         assert_eq!(term.coefficient.im.0, 0);
         assert!(terms.next().is_none());
@@ -110,7 +110,7 @@ fn cartesian_basis_needs_negation_but_not_division() {
         let expanded = <CartesianBasis as Basis<Op, Signed>>::expand(&CartesianBasis, &op);
         let actual: Vec<_> = expanded
             .into_terms()
-            .map(|t| (t.coefficient.re.0, t.coefficient.im.0, t.primitive))
+            .map(|t| (t.coefficient.re.0, t.coefficient.im.0, t.operand))
             .collect();
         assert_eq!(actual, expected);
         assert_eq!(
@@ -207,7 +207,7 @@ fn terms<P>(sum: Lc<P, Rational>) -> Vec<RecordedTerm<P>> {
             (
                 t.coefficient.re.parts(),
                 t.coefficient.im.parts(),
-                t.primitive,
+                t.operand,
             )
         })
         .collect()
@@ -247,23 +247,23 @@ fn products_and_actions_use_exact_fractions_without_clone_copy_or_num() {
         [((1, 2), (0, 1), I), ((-1, 1), (0, 1), Sz),]
     );
     assert_eq!(
-        terms(<State as Act<Op, Rational>>::act(&Down, &Sy)),
+        terms(<State as Act<Rational>>::act(&Down, &Sy)),
         [((0, 1), (-1, 2), Up)]
     );
     assert!(<Op as Product<Rational>>::product(&SPlus, &SPlus).is_empty());
-    assert!(<State as Act<Op, Rational>>::act(&Up, &SPlus).is_empty());
+    assert!(<State as Act<Rational>>::act(&Up, &SPlus).is_empty());
 }
 
 #[test]
-fn local_structure_and_all_basis_markers_accept_minimal_fractional_scalars() {
-    fn state_basis<B: StateBasis<SpinHalf, Rational>>(_: B) {}
-    fn operator_basis<B: OperatorBasis<SpinHalf, Rational>>(_: B) {}
+fn local_metadata_identity_and_bases_accept_minimal_fractional_scalars() {
+    fn state_basis<B: Basis<State, Rational>>(_: B) {}
+    fn operator_basis<B: Basis<Op, Rational>>(_: B) {}
     state_basis(SzBasis);
     operator_basis(CartesianBasis);
     operator_basis(LadderBasis);
-    assert_eq!(<SpinHalf as LocalStructure<Rational>>::DIMENSION.get(), 2);
+    assert_eq!(<SpinHalf as LocalStructure>::DIMENSION.get(), 2);
     assert_eq!(
-        terms(<SpinHalf as LocalStructure<Rational>>::identity()),
+        terms(<SpinHalf as Identity<Rational>>::identity()),
         [((1, 1), (0, 1), I)]
     );
     let trace = <Op as Trace<Rational>>::trace(&I);
