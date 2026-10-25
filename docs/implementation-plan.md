@@ -4,7 +4,7 @@
 
 ## 1. 目的と位置付け
 
-本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜3は実装済み、段階4以降は未実装である。
+本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜4は実装済み、段階5以降と係数型のリファクタリングは未実装である。
 
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
@@ -12,7 +12,7 @@ Step 2 の局所構造と演算能力の分離、共通パーツと項型、基�
 
 ## 2. crate の責任と依存関係
 
-初期版は以下の6 crate を `crates/` 以下に配置し、package 名は表の名称とする。現時点で実装済みの crate は `qmb-core`・`qmb-spin-half`・`qmb-basic` である。
+係数型の採用方針を反映し、計画上は以下の7 crate を `crates/` 以下に配置する。package 名は表の名称とする。現時点で実装済みの crate は `qmb-core`・`qmb-spin-half`・`qmb-basic`・`qmb-geometry`・`qmb` であり、`qmb-export`・`qmb-normalize` は未実装である。
 
 | crate | 責任 | workspace 内の通常依存 |
 | --- | --- | --- |
@@ -21,7 +21,8 @@ Step 2 の局所構造と演算能力の分離、共通パーツと項型、基�
 | `qmb-spin-half` | spin-1/2 の局所構造・primitive・局所規則・基底、Heisenberg・Neel の構築 utility | `qmb-core`、`qmb-geometry` |
 | `qmb-geometry` | Geometry・Site、Chain、近接関係、自由度と Site の対応付け、配置用 Index 発行の補助 | `qmb-core` |
 | `qmb-export` | 外部数値ライブラリへの密・疎変換、空間・基底・精度情報との対応付け | `qmb-core` |
-| `qmb` | 各 crate と構築 utility の再公開、利用例、縦断的な結合テスト | 上記5 crate |
+| `qmb-normalize` | 平方根を伴う norm・状態の正規化を拡張 trait で提供する。std を利用でき、実数型 R に Float を要求する | `qmb-core` |
+| `qmb` | 各 crate と構築 utility の再公開、利用例、縦断的な結合テスト | 上記6 crate |
 
 以下の矢印は「依存する」を表す。
 
@@ -32,16 +33,20 @@ graph TD
     Q --> S[qmb-spin-half]
     Q --> G[qmb-geometry]
     Q --> E[qmb-export]
+    Q --> N[qmb-normalize]
     S --> C
     S --> G
     G --> C
     E --> C
+    N --> C
     B --> C
 ```
 
 将来の別の具体的代数も、専用 crate として `qmb-core` の契約を実装し、共通型を直接利用できる。初期版には未実装の代数用 crate を作らない。core は具体的代数を列挙せず、独自代数も同じ式木・評価機構で扱う。core の通常依存に具体的代数・Geometry・数値 backend を持ち込まない。
 
 `qmb` は core・共通代数処理・basic の具体型 Id128・spin-1/2・Geometry を既定で再公開し、core の任意の `libm` feature を既定で有効にする。core 自体では libm を既定で有効にしない。数値 export は `export` feature で有効にし、数値 backend に依存せず代数計算だけを利用できる構成にする。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
+
+上記の libm 接続は Step 4 の現行実装である。係数型のリファクタリングでは norm・normalized を qmb-normalize の拡張 trait に移し、qmb と prelude から再公開する。core は norm squared・正規化期待値と共通エラーを保持する。既存 feature・API・利用例を移行し、core 単独の no_std + alloc を維持する。
 
 ## 3. 抽象契約と共通実装の境界
 
@@ -170,4 +175,6 @@ Step 3 の具体型は `HilbertSpace<I, L>`・`State<I, L, T>`・`Operator<I, L,
 
 State・Operator・Structure・Space の管理方法は、将来必ず再検討し、より適切な設計へリファクタリングする。所有・共有・関連付け、および Geometry と空間の依存関係を見直すことを後続の必須課題とし、現行設計を最終形として固定しない。具体的な設計と実施時期は後続で決定する。この見直しを Step 4 の完了条件には追加しない。詳細は [アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)に従う。
 
-同じリファクタリングで、core の `num-traits`・`num-complex` 依存を解消する。また、LocalStructure の必要性、操作的量子論に基づく Operator・State の一般の演算子の特別な形としての整理、Index と Grading だけによる HilbertSpace の構成、その構成から Grading を除いた Chain の内部表現について、議論して設計上の結論と根拠を記録する。これら五つの課題も将来の必須課題とし、Step 4 で依存解消や型の統合・廃止を先行して行う要求にはしない。
+同じリファクタリングで、core の係数型と数値能力を整理する。2026-10-25 の方針変更により `num-complex`・`num-traits` は core に含め、不足する能力 trait を `Complex<f32>`・`Complex<f64>` に直接実装し、必要な操作で必要な trait bound を課す。零・単位元には num-traits の Zero・One をそのまま使い、付随する能力も受け入れる。また、LocalStructure の必要性、操作的量子論に基づく Operator・State の一般の演算子の特別な形としての整理、Index と Grading だけによる HilbertSpace の構成、その構成から Grading を除いた Chain の内部表現について、議論して設計上の結論と根拠を記録する。これら五つの課題を必須課題とし、Step 4 の完了条件には追加しない。
+
+係数型の残る推奨案は同日にすべて採用した。係数全体 C への型引数の移行、個別の共役・実数値取得・実係数の埋め込み・純虚係数生成、qmb-normalize の拡張 trait、標準 Complex の左スカラー倍の個別実装と任意の C の scaled(c)、正規化期待値の純実分母の処理の維持を実装する。追加 provider は導入しない。移行順序と検証基準は [係数型の採用方針](refactoring-coefficient-proposal.md)に従う。

@@ -131,7 +131,7 @@ Cargo の feature は加算される。確認した `num-traits 0.2.19` は std 
 
 ## 9. 後続の必須課題
 
-State・Operator・Structure・Space の管理方法と Geometry との依存関係は将来必ず見直す。core の数値ライブラリ依存解消と四つの設計上の問いは、[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)を正として管理する。今回の Step 4 の完了条件には追加せず、現行の型構成・libm 方針で実装する。
+State・Operator・Structure・Space の管理方法と Geometry との依存関係は将来必ず見直す。core の係数型・数値能力の整理と四つの設計上の問いは、[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)を正として管理する。これらは Step 4 の完了条件に追加せず、Step 4 自体は本書の型構成・libm 方針で実装した。
 
 ## 10. 実装した構築 API と利用例
 

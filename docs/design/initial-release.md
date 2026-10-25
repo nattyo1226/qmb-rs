@@ -86,7 +86,7 @@ Index の一意性・同一性、不変な実体の共有、および個別ル�
 
 ## 5. 残る実装設計
 
-crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、利用窓口の `qmb` と合わせて6 crate を構成する。basic・spin・geometry・export は core に依存し、spin の構築 utility は geometry の公開契約を利用する。core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。
+crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、norm・状態の正規化の `qmb-normalize`、利用窓口の `qmb` と合わせて計画上は7 crate を構成する。basic・spin・geometry・export・normalize は core に依存し、spin の構築 utility は geometry の公開契約を利用する。core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。normalize は std を利用できる。
 
 式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, T>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数精度 `T` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装する。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
 
@@ -97,5 +97,7 @@ Step 2 の採用済み方針として、`LocalStructure` を係数型に依存�
 Step 3 の空間・複合式・共有・束縛・エラー・評価経路は [採用済みの実装方針](../step-3-design.md)に従う。局所構造は型 `L` による固定定義、空間は `Arc` の共有ハンドルとし、総次元の overflow は取得時に検出する。状態は常に所属空間を持ち、演算子の束縛は外側のハンドルへ集約する。検証が必要な複合操作は `Result` を返し、作用・内積・full trace を目的別に評価する。
 
 Norm・正規化・正規化期待値は、[Step 4 の合意事項](../step-4-decisions.md)に従って局所式・複合式に実装する。core の libm は任意 feature、qmb では既定で有効とする。Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。Partial trace・基底処理は Step 5、数値 backend は Step 6 で具体化し、初期版の必須範囲を維持する。bra 型・構築 API は初期版では導入しない。
+
+上記は Step 4 の実装を記録したものである。2026-10-25 に採用した[係数型の方針](../refactoring-coefficient-proposal.md)では、係数全体 C と個別の能力契約へ移行し、norm・normalized を qmb-normalize の拡張 trait へ移す。norm squared・正規化期待値は core に残し、Float は平方根を使う実数型 R に要求する。この移行は未実施である。
 
 非公開の節点・作業領域・補助関数、メソッド名・型引数・シグネチャの詳細、および追加依存の選択は採用済み方針の範囲で各段階に定める。Step 2 の局所式・評価と API の移行、および Step 3 の空間・配置・複合評価と basic の UUID Index は実装済みである。Step 4 以降の機能と初期版全体の完成とは区別する。

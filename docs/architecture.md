@@ -25,7 +25,7 @@
 
 代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得・写像の表現係数を同じ crate が所有する。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
-具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。初期版はこの6 crate とし、basic・spin・geometry・export は core に依存し、spin のモデル utility は geometry の公開契約を利用する。core は basic・UUID・乱数源・具体的代数・Geometry・数値 backend に依存せず、`no_std + alloc` を維持する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
+具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。2026-10-25 に平方根を伴う norm・状態の正規化を `qmb-normalize` へ分離する方針を採用したため、計画上は計7 crate とする。basic・spin・geometry・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core は basic・UUID・乱数源・具体的代数・Geometry・normalize・数値 backend に依存せず、`no_std + alloc` を維持する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
 
 core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, T>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装する。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
 
@@ -133,12 +133,14 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 このリファクタリングと併せて、以下を必須課題として扱う。
 
-1. **core の数値ライブラリ依存の解消**：`qmb-core` を `num-traits`・`num-complex` に依存しない構成にする。数値演算の契約と具体的な数値型の扱いを整理し、依存を解消するための設計・実装を行う。
+1. **core の係数型・数値能力の整理**：`qmb-core` に `num-complex`・`num-traits` を含め、係数型には必要な操作で必要な trait bound を課す。零・単位元には `num_traits::Zero`・`One` をそのまま使い、付随する能力も受け入れる。不足する能力 trait は core で定義し、`Complex<f32>`・`Complex<f64>` に直接実装できる構成にする。保持・構築へ不要な数値能力を要求せず、係数表現・演算・norm・正規化の責任を整理する。
 2. **LocalStructure の必要性**：`LocalStructure` は本当に必要かを議論し、解決する。現在担っている関連型や次元の責任も含めて見直し、維持・変更・廃止の結論と根拠を記録する。
 3. **Operator と State の整理**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。
 4. **HilbertSpace の最小構成**：HilbertSpace を Index と Grading だけで議論・表現できるかを検討し、解決する。局所構造などの追加情報を空間自体に保持する必要性と、その情報の責任の置き場所を明らかにする。
 5. **Chain の内部表現**：前項で検討する Index と Grading による HilbertSpace の構成から Grading を除いた構造で、Chain の内部表現を作れるかを議論し、解決する。現行の HilbertSpace を保持する構成との関係も含め、結論と根拠を記録する。
 
-数値ライブラリ依存の解消は将来の実装目標とし、残る四つの問いは議論だけで終わらせず、採否を含む設計上の結論を得る。LocalStructure の廃止、Operator と State の統合、HilbertSpace や Chain の表現変更は、現時点で採用した結論ではない。
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更した。残る四つの問いは議論だけで終わらせず、採否を含む設計上の結論を得る。LocalStructure の廃止、Operator と State の統合、HilbertSpace や Chain の表現変更は、現時点で採用した結論ではない。
+
+係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized は std を利用する qmb-normalize の拡張 trait へ移し、Float は平方根を使う実数型 R に要求する。norm squared と正規化期待値は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は未実施である。
 
 この見直しは将来の必須課題とし、Step 4 の完了条件には追加しない。当面は、Geometry の生成時に局所構造型を指定し、既存の HilbertSpace の共有構造を利用する方針で実装を進める。
