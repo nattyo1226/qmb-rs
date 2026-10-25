@@ -3,6 +3,7 @@ use crate::{
     Act, Adjoint, Complex, ExpressionError as E, HilbertSpace, InnerProduct,
     LinearCombination as Lc, LocalOperator, LocalState, LocalStructure, Operator, State,
 };
+use alloc::vec::Vec;
 use core::{cell::Cell, marker::PhantomData, num::NonZeroUsize};
 
 #[derive(PartialEq, Eq)]
@@ -10,6 +11,7 @@ struct Index(u8);
 #[derive(Default)]
 struct Counts {
     acts: Cell<usize>,
+    inner_products: Cell<usize>,
     drops: Cell<usize>,
 }
 struct Primitive<'a>(u8, &'a Counts);
@@ -42,12 +44,149 @@ impl Adjoint<f64> for Op {
 }
 impl InnerProduct<f64> for Primitive<'_> {
     fn inner_product(&self, rhs: &Self) -> Complex<f64> {
+        self.1.inner_products.set(self.1.inner_products.get() + 1);
         Complex::new(if self.0 == rhs.0 { 1.0 } else { 0.0 }, 0.0)
     }
 }
 type H<'a> = HilbertSpace<Index, L<'a>>;
 type S<'a, T = f64> = State<Index, L<'a>, T>;
 type O<'a, T = f64> = Operator<Index, L<'a>, T>;
+
+#[test]
+fn inner_product_contracts_independent_sums_without_global_expansion() {
+    let counts = Counts::default();
+    for n in [8, 32] {
+        let factors: Vec<_> = (0..n).map(|i| H::factor(Index(255 - i))).collect();
+        let before = S::tensor(factors.iter().map(|factor| {
+            (LocalState::primitive(Primitive(0, &counts))
+                + LocalState::primitive(Primitive(1, &counts)))
+            .at(factor)
+            .unwrap()
+        }))
+        .unwrap();
+        let after = S::tensor(factors.iter().map(|factor| {
+            let up = LocalState::primitive(Primitive(0, &counts))
+                .at(factor)
+                .unwrap();
+            let down = LocalState::primitive(Primitive(1, &counts))
+                .at(factor)
+                .unwrap();
+            up.add(&down).unwrap()
+        }))
+        .unwrap();
+        let expected = Complex::new(2_f64.powi(i32::from(n)), 0.0);
+        for (lhs, rhs) in [
+            (&before, &before),
+            (&before, &after),
+            (&after, &before),
+            (&after, &after),
+        ] {
+            counts.inner_products.set(0);
+            assert_eq!(lhs.inner_product(rhs).unwrap(), expected);
+            assert_eq!(counts.inner_products.get(), 4 * usize::from(n));
+        }
+        let op = LocalOperator::primitive(Op).at(&factors[0]).unwrap();
+        counts.inner_products.set(0);
+        assert_eq!(after.expectation(&op).unwrap(), expected);
+        assert_eq!(counts.inner_products.get(), 4 * usize::from(n));
+    }
+}
+
+#[test]
+fn inner_product_aligns_overlapping_subsystems_and_scalar_factors() {
+    let counts = Counts::default();
+    let factors = [5, 1, 9, 3].map(|i| H::factor(Index(i)));
+    let ket = |site: usize, value| {
+        LocalState::primitive(Primitive(value, &counts))
+            .at(&factors[site])
+            .unwrap()
+    };
+    let ab = ket(0, 0)
+        .tensor_product(&ket(1, 0))
+        .unwrap()
+        .add(
+            &ket(0, 1)
+                .tensor_product(&ket(1, 1))
+                .unwrap()
+                .scaled(Complex::new(0.0, 1.0)),
+        )
+        .unwrap();
+    let cd = ket(2, 0)
+        .tensor_product(&ket(3, 0))
+        .unwrap()
+        .add(
+            &ket(2, 1)
+                .tensor_product(&ket(3, 1))
+                .unwrap()
+                .scaled(Complex::new(1.0, 1.0)),
+        )
+        .unwrap();
+    let lhs = ab.tensor_product(&cd).unwrap();
+    let a = ket(0, 0)
+        .add(&ket(0, 1).scaled(Complex::new(2.0, 1.0)))
+        .unwrap();
+    let bc = ket(1, 0)
+        .tensor_product(&ket(2, 0))
+        .unwrap()
+        .add(
+            &ket(1, 1)
+                .tensor_product(&ket(2, 1))
+                .unwrap()
+                .scaled(Complex::new(2.0, -1.0)),
+        )
+        .unwrap();
+    let d = ket(3, 0)
+        .add(&ket(3, 1).scaled(Complex::new(0.0, 1.0)))
+        .unwrap();
+    let rhs = a.tensor_product(&bc.tensor_product(&d).unwrap()).unwrap();
+    // Independent amplitudes: the only shared nonzero coordinates are 0000
+    // and 1111, with amplitudes (1, -1+i) and (1, 5i), respectively.
+    assert_eq!(lhs.inner_product(&rhs).unwrap(), Complex::new(6.0, -5.0));
+    assert_eq!(rhs.inner_product(&lhs).unwrap(), Complex::new(6.0, 5.0));
+    assert_eq!(lhs.inner_product(&lhs).unwrap(), Complex::new(6.0, 0.0));
+    assert_eq!(rhs.inner_product(&rhs).unwrap(), Complex::new(72.0, 0.0));
+
+    let unit = S::unit();
+    let scalar = unit
+        .scaled(Complex::new(2.0, 1.0))
+        .add(&unit.scaled(Complex::new(-1.0, 2.0)))
+        .unwrap();
+    let with_scalar = S::tensor([
+        unit.clone(),
+        ab.clone(),
+        scalar.clone(),
+        cd.clone(),
+        unit.clone(),
+    ])
+    .unwrap();
+    assert_eq!(
+        with_scalar.inner_product(&rhs).unwrap(),
+        Complex::new(-9.0, -23.0)
+    );
+    assert_eq!(
+        rhs.inner_product(&with_scalar).unwrap(),
+        Complex::new(-9.0, 23.0)
+    );
+    assert_eq!(
+        scalar.inner_product(&scalar).unwrap(),
+        Complex::new(10.0, 0.0)
+    );
+    let zero = S::zero(lhs.space());
+    let with_zero = zero.add(&with_scalar).unwrap();
+    assert_eq!(
+        with_zero.inner_product(&rhs).unwrap(),
+        Complex::new(-9.0, -23.0)
+    );
+    let zero_tensor = S::tensor([S::zero(unit.space()), lhs.clone()]).unwrap();
+    assert_eq!(
+        zero_tensor.inner_product(&rhs).unwrap(),
+        Complex::new(0.0, 0.0)
+    );
+    assert_eq!(
+        lhs.inner_product(&zero_tensor).unwrap(),
+        Complex::new(0.0, 0.0)
+    );
+}
 
 #[test]
 fn construction_uses_opaque_scalars_and_shared_nonclone_borrowed_leaves() {

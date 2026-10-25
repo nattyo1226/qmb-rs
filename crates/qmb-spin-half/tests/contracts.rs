@@ -924,6 +924,82 @@ fn composite_expressions_match_independent_three_factor_matrices() {
     check_composite_expressions::<f64>();
 }
 
+fn check_subsystem_contractions<T: Real>() {
+    use qmb_core::{LocalOperator, LocalState};
+    let factors = [9, 2, 7].map(GlobalSpace::factor);
+    let ket = |site: usize, state| {
+        LocalState::<SpinHalf, T>::primitive(state)
+            .at(&factors[site])
+            .unwrap()
+    };
+    let ab = ket(0, Up)
+        .tensor_product(&ket(1, Up))
+        .unwrap()
+        .add(
+            &ket(0, Down)
+                .tensor_product(&ket(1, Down))
+                .unwrap()
+                .scaled(c(0.7, 0.2)),
+        )
+        .unwrap();
+    let last = ket(2, Up).add(&ket(2, Down).scaled(c(-0.3, 0.5))).unwrap();
+    let lhs = ab.tensor_product(&last).unwrap();
+    let first = ket(0, Up).add(&ket(0, Down).scaled(c(0.4, -0.6))).unwrap();
+    let bc = ket(1, Up)
+        .tensor_product(&ket(2, Up))
+        .unwrap()
+        .add(
+            &ket(1, Down)
+                .tensor_product(&ket(2, Down))
+                .unwrap()
+                .scaled(c(-0.2, 0.8)),
+        )
+        .unwrap();
+    let rhs = qmb_core::State::tensor([
+        qmb_core::State::unit(),
+        first,
+        qmb_core::State::tensor([bc]).unwrap(),
+    ])
+    .unwrap();
+
+    // Literal coordinates independently describe (AB)C and A(BC). Both AB and
+    // BC are entangled sums, so their subsystem boundaries overlap.
+    let mut left = vec![c::<f64>(0.0, 0.0); 8];
+    left[0] = c(1.0, 0.0);
+    left[1] = c(-0.3, 0.5);
+    left[6] = c(0.7, 0.2);
+    left[7] = left[6] * left[1];
+    let mut right = vec![c::<f64>(0.0, 0.0); 8];
+    right[0] = c(1.0, 0.0);
+    right[3] = c(-0.2, 0.8);
+    right[4] = c(0.4, -0.6);
+    right[7] = right[3] * right[4];
+    let op = LocalOperator::primitive(Sx).at(&factors[1]).unwrap();
+    let states = [lhs, rhs];
+    let vectors = [left, right];
+    for (i, state) in states.iter().enumerate() {
+        for (j, other) in states.iter().enumerate() {
+            assert_complex::<T>(
+                complex64(state.inner_product(other).unwrap()),
+                dense_dot(&vectors[i], &vectors[j]),
+            );
+        }
+        assert_complex::<T>(
+            complex64(state.expectation(&op).unwrap()),
+            dense_dot(
+                &vectors[i],
+                &dense_apply(&placed_matrix(Sx, 1), &vectors[i]),
+            ),
+        );
+    }
+}
+
+#[test]
+fn subsystem_contractions_match_independent_vectors_at_both_precisions() {
+    check_subsystem_contractions::<f32>();
+    check_subsystem_contractions::<f64>();
+}
+
 #[test]
 fn composite_empty_zero_spectator_and_overflow_contracts() {
     use qmb_core::{
