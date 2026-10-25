@@ -1,6 +1,6 @@
 # qmb-rs 実装計画
 
-更新日: 2026-10-23
+更新日: 2026-10-25
 
 ## 1. 目的と位置付け
 
@@ -8,7 +8,7 @@
 
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
-Step 2 の局所構造と演算能力の分離、共通パーツと項型、基底 trait、評価経路、所有権、反復的な評価・破棄の方針は採用済みであり、本書の実装内容と完了条件に含める。Step 3 の採用済みの型・共有・空間保持・エラー・評価方針は [Step 3 の実装方針](step-3-design.md)にまとめる。後続段階の API の詳細・数値 backend・追加依存は、各段階で設計する。数学的契約と初期版の提供範囲は既存文書に従う。
+Step 2 の局所構造と演算能力の分離、共通パーツと項型、基底 trait、評価経路、所有権、反復的な評価・破棄の方針は採用済みであり、本書の実装内容と完了条件に含める。Step 3 の採用済みの型・共有・空間保持・エラー・評価方針は [Step 3 の実装方針](step-3-design.md)にまとめる。Step 4 の採用済み方針と受入条件は [Step 4 の合意事項](step-4-decisions.md)にまとめる。それ以降の API の詳細・数値 backend・追加依存は、各段階で設計する。数学的契約と初期版の提供範囲は既存文書に従う。
 
 ## 2. crate の責任と依存関係
 
@@ -17,11 +17,11 @@ Step 2 の局所構造と演算能力の分離、共通パーツと項型、基�
 | crate | 責任 | workspace 内の通常依存 |
 | --- | --- | --- |
 | `qmb-core` | 数値精度・局所構造・primitive・基底の契約、有限線型結合、局所・複合式木、ジェネリックな Index の照合・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得・写像の表現係数 | なし |
-| `qmb-basic` | UUID による具体的な Index 型と、seed 指定を要求しない発行 API | `qmb-core` |
-| `qmb-spin-half` | spin-1/2 の局所構造、状態・演算子 primitive、局所規則、状態基底と二種類の演算子基底 | `qmb-core` |
+| `qmb-basic` | UUID による具体型 `Id128` と、seed 指定不要の new・Default による発行 API | `qmb-core` |
+| `qmb-spin-half` | spin-1/2 の局所構造・primitive・局所規則・基底、Heisenberg・Neel の構築 utility | `qmb-core`、`qmb-geometry` |
 | `qmb-geometry` | Geometry・Site、Chain、近接関係、自由度と Site の対応付け、配置用 Index 発行の補助 | `qmb-core` |
 | `qmb-export` | 外部数値ライブラリへの密・疎変換、空間・基底・精度情報との対応付け | `qmb-core` |
-| `qmb` | 各 crate の再公開、モデル構築補助、利用例、縦断的な結合テスト | 上記5 crate |
+| `qmb` | 各 crate と構築 utility の再公開、利用例、縦断的な結合テスト | 上記5 crate |
 
 以下の矢印は「依存する」を表す。
 
@@ -33,6 +33,7 @@ graph TD
     Q --> G[qmb-geometry]
     Q --> E[qmb-export]
     S --> C
+    S --> G
     G --> C
     E --> C
     B --> C
@@ -40,7 +41,7 @@ graph TD
 
 将来の別の具体的代数も、専用 crate として `qmb-core` の契約を実装し、共通型を直接利用できる。初期版には未実装の代数用 crate を作らない。core は具体的代数を列挙せず、独自代数も同じ式木・評価機構で扱う。core の通常依存に具体的代数・Geometry・数値 backend を持ち込まない。
 
-`qmb` は core・共通代数処理・basic の具体的 Index・spin-1/2・Geometry を既定で再公開する。数値 export は `export` feature で有効にし、数値 backend に依存せず代数計算だけを利用できる構成にする。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
+`qmb` は core・共通代数処理・basic の具体型 Id128・spin-1/2・Geometry を既定で再公開し、core の任意の `libm` feature を既定で有効にする。core 自体では libm を既定で有効にしない。数値 export は `export` feature で有効にし、数値 backend に依存せず代数計算だけを利用できる構成にする。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
 
 ## 3. 抽象契約と共通実装の境界
 
@@ -48,7 +49,7 @@ graph TD
 
 共通の代数処理を追加した後も `no_std + alloc` を維持する。Step 2 は既存の依存と標準機構で実装し、新しい production 依存や feature は追加しない。
 
-Step 3 以降の自由度・空間・配置済みの式は Index 型をジェネリックに扱い、同じ Index を照合できることを契約とする。UUID の表現・発行・乱数源は core に置かず、具体的な Index 型と seed 指定を要求しない発行 API を `qmb-basic` に置く。`qmb-basic` は core に依存し、core は basic に依存しない。Geometry の発行補助は外部の発行処理を利用し、UUID への依存を必須にしない。詳細は [Index の契約](design/index.md)に従う。
+Step 3 以降の自由度・空間・配置済みの式は Index 型をジェネリックに扱い、同じ Index を照合できることを契約とする。UUID の表現・発行・乱数源は core に置かず、具体的な Index 型と seed 指定を要求しない発行 API を `qmb-basic` に置く。`qmb-basic` は core に依存し、core は basic に依存しない。Geometry の発行補助は生成時にのみ `I: Default` を要求し、`I::default()` で新規 Index を発行する。専用の生成 trait は追加せず、UUID への依存を必須にしない。詳細は [Index の契約](design/index.md)に従う。
 
 基本自由度は Index と局所構造を持つ `HilbertSpace` の葉（Factor）に統合し、独立した `Dof` 型は設けない。葉と Tensor を同じ空間型で扱い、構築時に保持した葉を合成・局所式の配置先指定・部分系判定に再利用する。詳細は [Hilbert 空間の再帰構造](design/hilbert-space.md)に従う。
 
@@ -78,7 +79,9 @@ core の局所構造・恒等演算子・演算 trait と関連型の制約、�
 
 ### 3.3. Geometry・export・利用窓口
 
-Geometry は局所代数の種類を知らず、Site・関係・配置を担当する。Heisenberg Hamiltonian と Neel 状態の構築補助は `qmb` のモデル構築 module に置く。
+Geometry は利用者が指定した局所構造型で Site・関係・配置を保持し、具体的代数の規則は実装しない。Heisenberg Hamiltonian と Neel 状態の構築補助は `qmb-spin-half` の utility に置き、`qmb` は再公開と利用例を担当する。
+
+Step 4 の Geometry は、生成時に利用者が `L: LocalStructure` を指定し、Site ごとの `HilbertSpace<I, L>` と全 Hilbert 空間を保持する。既存の HilbertSpace を Site 順に渡す経路と、Site 数・各 Site 共通の局所自由度数から空間を構築する経路を提供する。生成後は保持済みの全 Hilbert 空間を取得でき、取得時に Index を再発行しない。詳細は [Step 4 の合意事項](step-4-decisions.md)に従う。
 
 代数的な座標取得と写像の表現係数の生成は `qmb-core`、外部のベクトル・行列型への格納は `qmb-export` が担当する。core での局所式への Index 付与・束縛と、Geometry での自由度と Site の対応付けを区別する。
 
@@ -93,7 +96,7 @@ crate ごとに完成させるのではなく、抽象契約と具体的代数�
 | 1. 抽象契約と具体例（実装済み） | `qmb-core` と `qmb-spin-half`。能力 trait、有限線型結合、spin の局所規則・基底 | core の公開契約だけで spin の積・作用・随伴・内積・trace・基底展開を記述できる |
 | 2. 局所式と評価・既存 API の整備（実装済み） | 3.1 節の採用済み方針に従い、局所構造と演算能力の分離、共通パーツ・項型の統合、関連型・map・constructor、局所式・共有・反復的な評価と破棄を core・spin-half・テストへ実装する。基底の marker trait を削除し、Basis を直接使う | 両 marker trait の定義・再公開・実装宣言・利用がコード・テスト・doc test から除去される。数値能力のない型での式構築、Product のない演算子の作用評価、所有値・借用値の4通り、長い式の評価・破棄、規則・基底の数学的結果、map の保持特性、入力の不変性・共有、空・単一項のコンテナ無確保を検証する |
 | 3. 空間と複合評価（実装済み） | [採用済み方針](step-3-design.md)に従い、`qmb-core` にジェネリックな Index の照合、HilbertSpace の葉と入れ子 Tensor、互換性・部分系判定、配置・束縛、複合作用・内積・期待値・随伴・full trace・導出操作。`qmb-basic` に UUID の具体型と発行 API | Geometry なしで同種の複数因子を評価でき、zero・identity の空間保持、明示空間の優先、早期のエラー検出、深い空間の反復的な走査・破棄、総次元 overflow と空間構築の分離を検証できる。core は独自 Index 型で動作し、basic は seed 指定なしで発行できる |
-| 4. 最初の縦断例と導出操作の補完 | `qmb-geometry` と `qmb`。Chain、配置、Heisenberg・Neel の構築。受入確認までに core の局所式・複合式へ norm・正規化・bra・正規化期待値を追加する | 行列化せず open chain の期待値 `−J(L−1)/4` を得る。Neel の norm、zero-norm の拒否、0-site と periodic の小規模規約も確認する |
+| 4. 最初の縦断例と導出操作の補完 | [合意事項](step-4-decisions.md)に従い、Geometry・Chain・近接関係、basic の Id128 への改名、spin-half の Heisenberg・Neel utility、qmb の再公開・縦断例を実装する。core の局所式・複合式へ norm・正規化・正規化期待値と libm feature を追加する。bra・内部ラベルは初期版に導入しない | 行列化せず open chain の期待値 `−J(L−1)/4` を得る。Neel の norm、zero-norm の拒否、0-site と periodic の小規模規約も確認する |
 | 5. 縮約・座標取得 | `qmb-core` に partial trace、複合基底、式の展開・再展開・係数取得、写像の表現係数 | 残存空間、mixed-radix 順序、非正規直交基底、入力ごとの共役指定を正しく扱える |
 | 6. 数値接続と受入確認 | `qmb-export`。密ベクトル・密行列、続いて疎ベクトル・疎行列を接続し、利用例を完成させる | 代数計算・表現係数・密・疎の各経路が一致し、疎変換が密表現を中間生成せず、初期版の完成条件を満たす |
 
@@ -148,6 +151,10 @@ Step 2 の局所構造と演算能力の分離、共通パーツの公開、項�
 
 Step 3 では、core の Index のジェネリック化と basic の UUID 発行、Dof の葉への統合、型 `L` による固定定義、`Arc` による空間・式の共有、反復的な走査・破棄、次元取得時の overflow 検出、常に空間を持つ状態、ハンドルに集約する演算子の束縛、fallible な複合操作、目的別の評価経路を採用済みとする。詳細は [Step 3 の実装方針](step-3-design.md)に従う。
 
-Step 3 の具体型は `HilbertSpace<I, L>`・`State<I, L, T>`・`Operator<I, L, T>` とし、Index には必要なメソッドで標準の `Eq` を要求する。非公開の節点・作業スタック、`SpaceError`・`ExpressionError`、basic の UUID v4 による具体型・発行 API も実装した。API と検証結果は [Step 3 の実装方針](step-3-design.md#11-実装した-api-と後続事項)に記録する。Norm・正規化・bra・正規化期待値の数値 API は段階4の受入確認までに、partial trace・基底処理は段階5、数値 backend は段階6で具体化する。実行時の局所構造パラメータ・異なる実装型間の定義照合は後続へ延期する。速度比較・追加の割り当て最適化も別途検証する。新しい production 依存は、採用理由と用途を具体化してから確認する。
+Step 3 の具体型は `HilbertSpace<I, L>`・`State<I, L, T>`・`Operator<I, L, T>` とし、Index には必要なメソッドで標準の `Eq` を要求する。非公開の節点・作業スタック、`SpaceError`・`ExpressionError`、basic の UUID v4 による具体型・発行 API も実装した。API と検証結果は [Step 3 の実装方針](step-3-design.md#11-実装した-api-と後続事項)に記録する。Norm・正規化・正規化期待値の数値 API は [Step 4 の合意事項](step-4-decisions.md)に従って実装する。bra は初期版では導入せず、braket は内積で計算する。Partial trace・基底処理は段階5、数値 backend は段階6で具体化する。実行時の局所構造パラメータ・異なる実装型間の定義照合は後続へ延期する。速度比較・追加の割り当て最適化も別途検証する。新しい production 依存は、採用理由と用途を具体化してから確認する。
 
 初期版は同種局所構造・ordinary・単一スレッドを対象とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加 Geometry、ML・tensor network などの接続は既存の初期版設計に従って延期する。これらのための crate は先に作らない。不変実体の共有と後続機能の数学的契約は維持する。
+
+State・Operator・Structure・Space の管理方法は、将来必ず再検討し、より適切な設計へリファクタリングする。所有・共有・関連付け、および Geometry と空間の依存関係を見直すことを後続の必須課題とし、現行設計を最終形として固定しない。具体的な設計と実施時期は後続で決定する。この見直しを Step 4 の完了条件には追加しない。詳細は [アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)に従う。
+
+同じリファクタリングで、core の `num-traits`・`num-complex` 依存を解消する。また、LocalStructure の必要性、操作的量子論に基づく Operator・State の一般の演算子の特別な形としての整理、Index と Grading だけによる HilbertSpace の構成、その構成から Grading を除いた Chain の内部表現について、議論して設計上の結論と根拠を記録する。これら五つの課題も将来の必須課題とし、Step 4 で依存解消や型の統合・廃止を先行して行う要求にはしない。

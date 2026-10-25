@@ -1,6 +1,6 @@
 # 初期版の提供範囲と完成条件
 
-更新日: 2026-10-23
+更新日: 2026-10-25
 
 ## 1. 初期版の目的と文書の位置付け
 
@@ -12,21 +12,21 @@
 
 | 対象 | 初期版で提供するもの |
 | --- | --- |
-| Index・自由度 | core では Index 型をジェネリックに扱い同一性を照合する。basic では UUID による具体型と seed 指定不要の独立した発行を提供する。再利用、局所構造との組による自由度の構築、局所式への明示的な Index の付与 |
+| Index・自由度 | core では Index 型をジェネリックに扱い同一性を照合する。basic では UUID による具体型 Id128 と new・Default による seed 指定不要の独立した発行を提供する。再利用、局所構造との組による自由度の構築、局所式への明示的な Index の付与 |
 | 局所構造 | Spin-1/2。状態 primitive は `up, down`、演算子 primitive は `I, Sx, Sy, Sz, S+, S-`。局所積・作用・内積・随伴・trace・恒等演算子と、その整合性 |
 | 拡張性 | ユーザ定義の有限次元局所構造・primitive・規則・基底を、別の系で単独利用できること |
 | Hilbert 空間 | 基本自由度を表す葉（Factor）と入れ子 Tensor を同じ HilbertSpace 型で扱い、独立した Dof 型は設けない。同じ局所構造の因子、ordinary tensor product、次元、構成要素・Index の列挙、互換性判定、部分系判定、空・単因子の契約 |
 | 状態・演算子式 | 合意済みの加算・scalar multiplication・zero・identity、状態の tensor product、演算子積、配置・束縛、作用・内積・随伴・full/partial trace |
-| 導出する操作 | Norm・正規化・bra、期待値・正規化期待値、commutator / anticommutator、Hilbert–Schmidt 内積 |
+| 導出する操作 | Norm・正規化、期待値・正規化期待値、commutator / anticommutator、Hilbert–Schmidt 内積 |
 | 基底 | 順序付き状態基底 `{up,down}`、演算子基底 `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}`、それらの tensor product 基底。指定基底への展開・再展開・係数取得 |
 | 写像の表現行列 | 基底列挙・通常の演算・出力基底への展開と係数取得を組み合わせる共通操作。線型・共役線型・双線型・半双線型な作用を扱い、専用 trait の実装は要求しない |
 | 数値 export | 状態の密・疎ベクトル、演算子の密・疎行列。外部数値ライブラリへの必要最小限の接続 |
-| Geometry・配置 | 1D Chain の open / periodic。Site ごとの入れ子の Index 列からの配置、既存 Factor・Tensor の配置、Site ごとの自由度数からの Index 発行。内部ラベルなどの共通配置契約 |
+| Geometry・配置 | 1D Chain の open / periodic。既存 Factor・Tensor からの配置、Site 数・各 Site 共通の自由度数から Default による Index 発行。Site は Vec の位置、grouping は HilbertSpace で表し、内部ラベルは導入しない |
 | 数値精度 | 単精度・倍精度の複素数。精度の混在を拒否し、変換は明示的に行う |
 
 演算子・状態の具体的な規約と各操作の空間選択は要件に従う。展開結果は基底情報を持たない通常の式木とし、入力の式を変更しない。状態式の `act` は遅延した作用を構築し、`evaluate` は基底を指定しない局所規則による評価を行う。通常の作用・内積・trace に基底展開や行列化を要求しない。
 
-Geometry の標準実装は 1D Chain のみとする。入力 `[[a,b],[c,d]]` の外側が Site 順序、内側が Site 内の自由度順序を表す。入力列を平坦化して Site ごとに分割し直す規則は要求しない。新たに全 Hilbert 空間を構成する際の因子順序は、外側から順に内側をたどった順序とする。詳細は [Chain の配置契約](geometry.md#41-初期版の-1d-chain-の配置規則)に定める。
+Geometry の標準実装は 1D Chain のみとする。生成時に局所構造型を指定し、Site 順の Vec に HilbertSpace を保持する。各空間の葉の順序が Site 内の自由度順序となる。新たに全 Hilbert 空間を構成する際は Site 順・葉の順に並べ、既存空間の因子順序は暗黙に変更しない。近接関係は Site 番号のペアから Index の全組合せまたは同じ位置同士へ変換できる。詳細は [Chain の配置契約](geometry.md#41-初期版の-1d-chain-の配置規則)に定める。
 
 標準提供する局所構造は spin-1/2 のみとする。非公開の別の局所代数や非正規直交基底による検証は、拡張性の完成条件であり、追加の builtin を公開する要求とは区別する。
 
@@ -66,11 +66,13 @@ Open chain の解析的な期待値、実数の結合定数による Hermiticity
 
 ### 3.5. 利用例と不正入力の検証が揃っている
 
-代表シナリオを実行可能な利用例として提供する。少なくとも Index の重複、局所構造・空間・精度の不整合、無効な縮約対象、zero-norm state の正規化、配置数の過不足、Site 間の Index 重複、および内部ラベルの不整合を検出する。必要な情報が揃う時点での検証と、元の対象を変更しない契約も確認する。
+代表シナリオを実行可能な利用例として提供する。少なくとも Index の重複、局所構造・空間・精度の不整合、無効な縮約対象、zero-norm state の正規化、配置数の過不足、Site 間の Index 重複、および範囲外の Site 指定を検出する。必要な情報が揃う時点での検証と、元の対象を変更しない契約も確認する。
 
-Index 発行後の配置と空間構築で同じ Index が保持されること、参照・列挙・複製で Index を再発行しないこと、Site の同一性と構築後の不変性も検証する。
+Index 発行後の配置と空間構築で同じ Index が保持されること、参照・列挙・複製で Index を再発行しないこと、Site 順序と構築後の不変性も検証する。Geometry を跨ぐ所属チェックは要求しない。
 
 ## 4. 後続へ延期するもの
+
+- bra 型・構築 API と内部ラベル。braket は内積で計算し、grouping は既存の HilbertSpace を用いる。
 
 - 異種局所構造を一つの系に混在・合成する機能と、そのための型消去・保持機構。
 - Graded tensor product・fermion の実装。合成・作用・随伴・通常の trace に関する既存の数学的契約は保持する。
@@ -84,7 +86,7 @@ Index の一意性・同一性、不変な実体の共有、および個別ル�
 
 ## 5. 残る実装設計
 
-crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、利用窓口の `qmb` と合わせて6 crate を構成する。basic・spin・geometry・export は core に依存し、core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。
+crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、利用窓口の `qmb` と合わせて6 crate を構成する。basic・spin・geometry・export は core に依存し、spin の構築 utility は geometry の公開契約を利用する。core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。
 
 式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, T>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数精度 `T` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装する。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
 
@@ -94,6 +96,6 @@ Step 2 の採用済み方針として、`LocalStructure` を係数型に依存�
 
 Step 3 の空間・複合式・共有・束縛・エラー・評価経路は [採用済みの実装方針](../step-3-design.md)に従う。局所構造は型 `L` による固定定義、空間は `Arc` の共有ハンドルとし、総次元の overflow は取得時に検出する。状態は常に所属空間を持ち、演算子の束縛は外側のハンドルへ集約する。検証が必要な複合操作は `Result` を返し、作用・内積・full trace を目的別に評価する。
 
-Norm・正規化・bra・正規化期待値は、局所式と複合式に共通する数値 API を別途設計し、Step 4 の受入確認までに実装する。Partial trace・基底処理は Step 5、数値 backend は Step 6 で具体化する。これらは本書の必須機能として維持する。
+Norm・正規化・正規化期待値は、[Step 4 の合意事項](../step-4-decisions.md)に従って局所式・複合式に実装する。core の libm は任意 feature、qmb では既定で有効とする。Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。Partial trace・基底処理は Step 5、数値 backend は Step 6 で具体化し、初期版の必須範囲を維持する。bra 型・構築 API は初期版では導入しない。
 
 非公開の節点・作業領域・補助関数、メソッド名・型引数・シグネチャの詳細、および追加依存の選択は採用済み方針の範囲で各段階に定める。Step 2 の局所式・評価と API の移行、および Step 3 の空間・配置・複合評価と basic の UUID Index は実装済みである。Step 4 以降の機能と初期版全体の完成とは区別する。

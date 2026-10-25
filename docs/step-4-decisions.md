@@ -1,129 +1,110 @@
-# Step 4 着手前の判断事項と推奨案
+# Step 4 の実装方針と合意事項
 
-作成日: 2026-10-25
+更新日: 2026-10-25
 
-本書は、Step 3 まで実装済みの qmb-rs における Step 4 の事前検討を一時的に記録する。第1・2節、第3.1節および第4〜8節は対話で合意済みであり、第3節の配置の構築経路・Index 発行・内部ラベルは採用前の推奨案である。いずれも実装済みの API を示すものではない。
+## 1. 位置付けと実装範囲
 
-第3節の推奨案と、合意済みの方針で未決としている具体的な API は引き続き検討する。
+本書は、[実装計画](implementation-plan.md)の Step 4 に適用する合意済みの設計と受入条件をまとめる。実装前の仕様であり、実装完了を示すものではない。数学的契約は[要件](requirements.md)、提供範囲は[初期版の設計](design/initial-release.md)に従う。
 
-## 1. Geometry・Site の型と同一性（合意済み）
+| crate | Step 4 の担当 |
+| --- | --- |
+| `qmb-core` | 局所式・複合式の norm、正規化、正規化期待値、共通エラー、任意の `libm` feature |
+| `qmb-basic` | UUID の具体型を `Index` から `Id128` へ改名し、関連する型別名・利用例・テストを移行 |
+| `qmb-geometry` | Chain、空間の保持と構築、Site・Index の近接ペア列挙。`no_std + alloc` を維持 |
+| `qmb-spin-half` | Heisenberg Hamiltonian・Neel 状態の構築 utility |
+| `qmb` | 各 crate の再公開、利用例、縦断的な結合テスト。既定で core の `libm` を有効化 |
 
-- Site は Geometry 内の `Vec` の位置を表す `usize` で指定する。専用の `SiteId` 型や Site ハンドルは設けない。
-- Geometry を跨ぐ Site の同一性を定義・管理せず、別 Geometry 由来の位置番号の混用も検出・拒否しない。位置番号は利用する Geometry の文脈で解釈し、混用を避ける責任はユーザに置く。
-- 所属を追跡する共有トークン、UUID、グローバル採番器は追加しない。
-- 範囲外の位置番号など、対象の Geometry の情報から検出できる不正は検証する。
-- 構築後は配置と順序を変更しない。
+Partial trace・複合基底・座標取得は Step 5、数値 backend・export は Step 6 とする。bra 型・内部ラベルは初期版では導入しない。
 
-## 2. Geometry と配置情報の保持・自動配置（合意済み）
+## 2. Geometry・空間の保持と構築
 
-- Geometry が配置情報も保持し、独立した `Placement` 型は設けない。初期版の Chain は境界条件、Site 順の配置、全 Hilbert 空間をまとめて保持する。
-- 入力された `Vec` の各要素を一つの Site に対応付け、並び順に自由度を自動配置する。ユーザに別の Site 対応表を要求しない。
-- 各要素は Factor・Tensor を扱え、要素内の因子順序・grouping と既存の Index を保持する。例えば `[a,b,c]` は Site ごとに一因子、`[Tensor(a,b),c]` は Site 0 に二因子、Site 1 に一因子を配置する。
-- 具体的には `Vec<HilbertSpace<I, L>>` として保持する。既存の `HilbertSpace` が内部の節点を `Arc` で共有するハンドルなので、追加の `Arc<HilbertSpace<…>>` は設けない。Site の空間と全空間で節点を共有し、Index や空間の木全体を複製しない。ただしハンドルの格納領域、節点の割り当て、参照カウントのコストは残る。
-- 全空間を新規構築するときは、この Site 順で tensor product を取る。
-- 既存空間を受け取る経路では、元の全空間と因子順序を保持する。Site 順に並べ直して再構築しない。
-- 局所式の `at(&factor)` に必要な葉を、保持したハンドルから参照できるようにする。
-- Chain の近接関係は、配置の長さと境界条件から位置番号の組として列挙する。
+- Geometry の生成時に `L: LocalStructure` を指定し、Site 順の `Vec<HilbertSpace<I, L>>` と全 Hilbert 空間を保持する。既存空間からは、その型により `L` が定まる。
+- HilbertSpace は内部の `Arc` で節点を共有するハンドルであり、追加の `Arc<HilbertSpace<…>>` は設けない。Site の空間と全空間で節点を共有する。
+- Site は `Vec` の位置を表す `usize` とする。専用の SiteId・所属トークンは設けず、Geometry を跨ぐ同一性・混用を管理しない。範囲外は検出する。
+- 配置情報は Geometry と一体で保持し、独立した Placement 型や対応表を要求しない。構築後の配置・順序は不変とする。
+- Grouping は HilbertSpace の構造をそのまま使う。Site 内の自由度は構成要素・葉の順序と既存 Factor のハンドルで参照し、内部ラベルの型・対応表・検証処理は追加しない。
 
-幾何・配置・モデル構築の責任は区別するが、それぞれを独立した公開型にすることは要求しない。
+構築経路は次の二つとする。
 
-## 3. 配置の構築経路・Index 発行・内部ラベル
+1. **既存空間から構築**：Site ごとの Factor・Tensor を Site 順に受け取り、Index・因子順序・grouping を保持する。異なる Site に重複する Index は拒否する。既存の全空間を受け取る場合も、その因子順序を暗黙に変更しない。
+2. **個数から構築**：Site 数と各 Site 共通の局所自由度数を受け取り、指定した Index 型と局所構造型で空間を構築する。自由度数は基本因子の個数を意味し、空間の次元とは区別する。
 
-既存契約に対応する次の三つの経路を提供する。
+全空間を新しく構成する場合は Site 順・Site 内の順に tensor product を取る。Site 数ゼロでは空の Geometry と単位空間を作る。各 Site の自由度数ゼロでは Site 数を保ち、各 Site に空の Tensor を対応付ける。保持済みの全 Hilbert 空間を取得するメソッドを提供し、取得時に Index を再発行したり空間を再構築したりしない。
 
-1. Site ごとの既存 Factor・Tensor を配置する。
-2. Site ごとの Index 列から、明示した局所構造で空間を構築する。
-3. 自由度数の列と `FnMut() -> I` を受け取り、Index 列を先に発行する。
+## 3. Index の発行と具体型
 
-発行済み Index から Factor への変換は所有権を移動して行い、`I: Clone` を一律に要求しない。検証も基本は `Eq` に限定する。
+個数からの構築など、新規 Index の発行が必要な箇所でのみ `I: Default` を要求し、`I::default()` を呼ぶ。この用途に指定する型は、呼び出すたびに新しい独立した Index を発行する契約を満たす。一般の Default 自体が一意性を保証するわけではなく、型の提供側が発行の意味と一意性の前提を満たす。
 
-内部ラベルはジェネリックな型とし、「ラベル→Site 内の自由度順序番号」の対応を保持する。Index を複製せず、ラベルなし・一部だけラベルありの配置も扱う。
+照合は標準の `Eq` を用いる。既存空間の保持・参照・構築には Default・Clone を一律に要求しない。専用の Index 生成 trait や生成関数を渡す引数は追加せず、UUID・乱数源への依存は具体型の実装側に置く。
 
-### 3.1. 幾何関係の trait 化（方針・近接関係の公開 API は合意済み）
+`qmb_basic::Index` は `qmb_basic::Id128` に改名する。UUID v4 を包む不透明な型、seed 指定不要の `new()`、Clone・Copy による同一性保持、表示・比較・hash の既存契約を維持する。`Id128::default()` は `Id128::new()` と同じく新しい UUID v4 を発行する。Geometry は `qmb-basic` に依存しない。詳細は [Index の契約](design/index.md)に従う。
 
-Geometry が列挙する Site の幾何関係を利用し、関係ごとの trait が対応する Index の組を列挙する。複数の Geometry 実装に同じ関係 trait を実装し、利用側が Geometry の具体型によらず同じ API を使えるようにする。Geometry と配置を別の保持型に分離する必要はない。
+## 4. 幾何関係と公開 API
 
-近接関係では、次の流れとする。
+Chain の境界条件は open / periodic とする。近接 Site ペアは `(min(i,j), max(i,j))` に正規化して辞書順で列挙し、self-loop・重複辺を作らない。長さ `0,1` では辺なし、長さ `2` では open / periodic とも `(0,1)` 一つとする。
 
-1. Geometry が近接 Site の位置番号 `(usize, usize)` を列挙する。位置番号は Site を保持する `Vec` の位置に対応する。
-2. 近接関係を表す `NearestNeighborRelation` trait を設け、`nn_pairs()` で近接 Site 間の全組合せの Index ペアを列挙する。同じ位置同士の列挙は `nn_pairs_by_pos()` で提供する。
-3. Chain などでの trait の実装は、Geometry が返す Site ペアと各 Site が保持する `HilbertSpace` を利用し、葉の Index を参照して Index ペアを構築する。
+Geometry 側には次を公開する。
 
-`NearestNeighborRelation` と、そのメソッド `nn_pairs()`・`nn_pairs_by_pos()` を採用する。公開 API は以下の形とする（コードへの実装は未着手）。
+- `sites(&self) -> &[HilbertSpace<I, L>]`
+- `nn_site_pairs(&self) -> impl Iterator<Item = (usize, usize)> + '_`
+
+返す Site 番号は `sites()` の範囲内とする。任意の番号の参照には `sites().get(site)` を利用できる。
+
+幾何関係ごとに能力 trait を設ける。近接関係は以下とし、異なる Geometry 型にも同じ trait を実装できるようにする。
 
 ```rust
 pub trait NearestNeighborRelation {
     type Index;
 
-    /// 近接 Site 間の Index の全組合せを列挙する。
-    fn nn_pairs(
-        &self,
-    ) -> impl Iterator<Item = (&Self::Index, &Self::Index)> + '_;
+    fn nn_pairs(&self)
+        -> impl Iterator<Item = (&Self::Index, &Self::Index)> + '_;
 
-    /// 同じ位置の Index 同士を、短い方の長さまで列挙する。
-    fn nn_pairs_by_pos(
-        &self,
-    ) -> impl Iterator<Item = (&Self::Index, &Self::Index)> + '_;
+    fn nn_pairs_by_pos(&self)
+        -> impl Iterator<Item = (&Self::Index, &Self::Index)> + '_;
 }
 ```
 
-- 関係ごとに trait を設け、次近接なども対応する関係 trait として追加できるようにする。未対応の関係をすべての Geometry に必須化しない。
-- 一つの Site に複数の自由度がある場合も、Site ペアから Index ペアへの変換側で対応する。trait の出力は Site ごとの Index 列の組ではなく、Index ペアとする。
-- 複数自由度間のペア選択規則として、全組合せを取る方式と、並び順が同じ位置の要素のみを取る方式の二つを提供する。具体的な規則は下記のとおりとする。
-- Index は保持した空間から借用でき、列挙のために複製・再発行しない。
-- 関係の向き、順序、重複の扱いは関係ごとに定める。Chain の近接 Site 関係には既存の辞書順・self-loop と重複辺を作らない規約を適用する。
-- Site 番号は対象の Geometry 内で解釈する。Geometry を跨ぐ Site の同一性や混用の検出は追加しない。
-- 具体的な追加 Geometry・関係の実装は初期版に要求しない。
+`qmb-geometry` は二つの HilbertSpace を借用する共通関数を公開する。葉の Index 順序を用い、返す Index は元の空間から借用する。
 
-複数自由度間のペア選択規則は次の二方式を採用する。Site 内の順序には、保持した `HilbertSpace` の葉を左からたどった Index の順序を用いる。
+| 共通関数 | 関係 trait のメソッド | 規則 | `[a,b]` と `[c,d,e]` の例 |
+| --- | --- | --- | --- |
+| `index_pairs(left, right)` | `nn_pairs()` | 全組合せ。左側を外側、右側を内側として列挙 | `(a,c),(a,d),(a,e),(b,c),(b,d),(b,e)` |
+| `index_pairs_by_pos(left, right)` | `nn_pairs_by_pos()` | 同じ位置同士を先頭から短い方の長さまで列挙 | `(a,c),(b,d)` |
 
-| 方式 | 規則 | 左 Site が `[a,b]`、右 Site が `[c,d,e]` の例 |
+trait の実装は、`nn_site_pairs()` の各ペアに対応する空間を `sites()` から参照し、共通関数の結果を `flat_map` する。いずれの方式も Site ペアの列挙順を維持し、片側が空ならペアを返さない。自由度数の違い自体はエラーにしない。共通関数は Index の Clone・Default を要求せず、ペア全体を Vec に格納しない。追加の変換用 trait・Result は要求しない。
+
+これらは幾何関係の列挙であり、Hamiltonian の項を自動生成するものではない。具体的な追加 Geometry・関係の実装は初期版の対象外とする。
+
+## 5. Heisenberg・Neel の構築 utility
+
+構築ロジックは `qmb-spin-half` に置き、`qmb` は再公開と利用例を担当する。幾何関係は `qmb-geometry` の公開契約を利用する。
+
+- 対象は各 Site がちょうど一つの spin Factor を持つ配置。空 Site・複数自由度の Site はこの utility ではエラーにする。Geometry 自体はこれらの Site を扱える。
+- Heisenberg は実数 `J: T` を受け取り、`J Σ(Sx_i Sx_j + Sy_i Sy_j + Sz_i Sz_j)` を通常の演算子積と和で構築し、全空間に bind して返す。
+- Neel は先頭の Up / Down を指定でき、同じ配置から交互の積状態を構築する。奇数長 periodic でも構築を許可し、端点間は同じ向きになる。
+- Index は再発行しない。0-site では単位状態と、全空間へ束縛した zero Hamiltonian を構築する。
+- 複数自由度から作用対象を選ぶ utility は後続で明示的な選択方法を設計する。
+
+## 6. Norm・正規化・内積
+
+局所式と複合式に以下を追加する。
+
+| 操作 | 契約 | `libm` feature |
 | --- | --- | --- |
-| 全組合せ | 両 Site の Index 列の直積を列挙する。左側を外側、右側を内側のループとして順序を定める | `(a,c), (a,d), (a,e), (b,c), (b,d), (b,e)` |
-| 同じ位置同士 | 同じ位置の Index 同士を先頭から組にする。長さが異なる場合は短い方の長さで打ち切り、余った要素は使用しない | `(a,c), (b,d)` |
+| `norm_squared()` | 自己内積の実部を `T` で返す | 不要 |
+| `norm()` | norm squared の平方根を `T` で返す | 必要 |
+| `normalized()` | norm で除した係数の状態式を返す | 必要 |
+| `normalized_expectation()` | 期待値を複素数の自己内積で除算する | 不要 |
 
-どちらの方式も片側の Site の自由度がゼロなら Index ペアを返さない。自由度数が異なること自体はエラーにしない。これは関係の列挙規則であり、配置時に別途指定された必要自由度数の検証とは区別する。いずれの方式も近接 Site ペアの列挙順を維持する。
+複合式には `normalized_expectation_in()` も設け、既存の明示空間優先の選択に従う。通常の作用・内積を利用し、行列化・基底展開は要求しない。自己内積が実数になる数学的契約に基づき norm の実部を扱い、負値の補正や近似ゼロ判定は導入しない。
 
-近接関係の trait 名、両メソッドの名称・シグネチャ、および `nn_pairs()` が全組合せ、`nn_pairs_by_pos()` が同じ位置同士を返す挙動は確定する。Geometry 側の Site ペア列挙や変換処理の具体的な API は未決とする。
+局所式・複合式で共通の `NormalizationError` を設け、`ZeroNorm` と既存の `ExpressionError` のラップを持たせる。正規化・正規化期待値は計算された自己内積の厳密なゼロを拒否する。明示的な zero に加え、相殺による zero も対象にする。`norm(zero)` は `0` を返す。NaN・infinity などは数値型の挙動に委ねる。
 
-## 4. Heisenberg・Neel 構築補助の配置先と対象範囲（合意済み）
+bra 型・ラッパー・構築メソッドは初期版では導入しない。braket は `inner_product` に、演算子を含む braket は作用と内積に委ねる。左引数の共役線型性・右引数の線型性は内積の契約として扱う。
 
-Heisenberg Hamiltonian と Neel 状態の構築補助は、`qmb-spin-half` の utility として実装する。`qmb` に構築ロジックを置く従来の案から変更し、`qmb` は利用窓口として再公開や縦断例を担当する。
+## 7. Feature・依存関係・再公開
 
-- 最初の便利 API は、各 Site がちょうど一つの spin Factor を持つ配置を対象とする。
-- 空 Site・複数自由度の Site は Geometry の機能として扱うが、このモデル API では明確なエラーにする。
-- 複数自由度から対象を選ぶ API は、明示的な選択方法を設けて追加できるようにする。
-- Heisenberg は実数 `J: T` を受け取り、通常の演算子積と和から構築し、配置の全空間へ bind して返す。
-- Neel は先頭の `Up`／`Down` を指定可能にし、同じ配置から状態を構築する。
-- どちらの構築時にも Index を再発行しない。
-- 奇数長の periodic chain でも Neel 積状態の構築を許可し、端点間が同じ向きになるものとする。
-- 0-site chain は許可し、空の積である単位状態と、全空間へ束縛した zero Hamiltonian を構築する。
-
-## 5. norm・正規化の数値 API と平方根（合意済み）
-
-局所式・複合式に共通して、次の API を設ける。
-
-- `norm_squared`
-- `norm`
-- `normalized`
-- `normalized_expectation`
-
-複合式には、既存の空間選択に合わせて `normalized_expectation_in` も設ける。
-
-`norm_squared` と `norm` は実数型 `T` を返す。自己内積が実数になる数学的契約に基づいて実部を使う方針を明文化する。負値のゼロへの補正や、近似許容誤差によるゼロ判定は導入しない。
-
-正規化期待値は定義どおり自己内積で除算し、平方根を必要としない実装にする。
-
-平方根の依存・feature 方針は以下を採用する。
-
-- `qmb-core` に任意の `libm` feature を設け、`num-traits/libm` を有効にする。core 自体の既定 feature では有効にしない。
-- 利用窓口の `qmb` では既定で core の `libm` feature を有効にし、依存を最小限にしたい利用者は無効にできるようにする。
-- `norm()`・`normalized()` は `libm` feature 有効時に提供し、平方根には `num_traits::Float` を利用する。`Float` 制約はこれらのメソッドに限定する。
-- 平方根を使わない `norm_squared()`・`normalized_expectation()` とその `_in` 版は、`libm` feature 無効時にも提供する。既存の作用・内積やこれらの操作に `Float` 制約を広げない。
-- `no_std + alloc` を維持する。`libm` は Rust 製の数学関数ライブラリであり、OS の数学共有ライブラリの別途インストールは要求しない。
-- feature 有効時に `num-traits` 経由の production 依存として `libm` が追加されることを了承済みとする。
-
-core の feature 設定は次の形とする（manifest への反映は未着手）。
+core は `no_std + alloc` を維持し、以下の任意 feature を追加する。
 
 ```toml
 [features]
@@ -131,63 +112,23 @@ default = []
 libm = ["num-traits/libm"]
 ```
 
-確認した現在の依存設定では `num-traits` の `std`・`libm` は無効である。Cargo の feature は依存グラフ内で加算されるため、別の依存元が `num-traits/std` を有効にした場合はそれも有効になる。確認した `num-traits 0.2.19` では、`std` と `libm` が両方有効なら `Float` は `std` 側の実装を使う。今回の `libm` feature は数学関数を利用可能にするためのもので、常に libm の実装を強制する指定ではない。
+`norm()`・`normalized()` の平方根には `num_traits::Float` を利用し、Float 制約はそのメソッドに限定する。通常の演算、norm squared、正規化期待値へ制約を広げない。`libm` の production 依存の追加は了承済みとする。
 
-追加後のビルド時間・バイナリサイズ・実行速度は未計測であり、採用する依存バージョンでの MSRV と `no_std` 向けビルドも実装時に確認する。
+`qmb` は core の `libm` を既定で有効にし、無効化も可能にする。数値 export は Step 6 で導入する。各 crate に対応する module を設け、crate root の再公開は主要型に絞る。
 
-## 6. zero-norm とエラー型（合意済み）
+Cargo の feature は加算される。確認した `num-traits 0.2.19` は std と libm が両方有効なら std 側の Float 実装を使うため、この feature は libm の実装を強制しない。libm 有効化自体は std を要求しない。
 
-- `normalized` と `normalized_expectation` は、計算された自己内積の厳密なゼロを拒否する。
-- 明示的な zero に加え、`ψ − ψ` のような相殺による zero も検証する。
-- 局所式・複合式で共通の `NormalizationError` を設け、`ZeroNorm` と既存の `ExpressionError` のラップを持たせる。
-- `norm(zero)` 自体は `0` を返す。
-- NaN・infinity などは、既存要件どおり数値型の挙動に委ねる。
+## 8. 受入条件と検証
 
-## 7. bra の延期と braket の計算（合意済み）
+- 両精度・両方の Neel 開始向きで、行列化せず open chain の期待値 `−J(L−1)/4`（`L >= 1`）と norm `1` を得る。実数 J に対する Hermiticity を独立した小規模行列とも照合する。
+- 0-site の状態は単位状態、norm は `1`、Hamiltonian と期待値は `0`。長さ `0,1,2` の open / periodic、辺の辞書順・正規化・self-loop と重複辺の不在を確認する。
+- Factor・入れ子 Tensor・空 Site・複数自由度の配置、既存 Index・因子順序・grouping・共有の保持、範囲外・Index 重複・入力数不一致の拒否を確認する。内部ラベルと Geometry を跨ぐ所属チェックは対象外とする。
+- 個数からの構築で Default の呼び出し回数・発行順序と Id128 の発行・複製契約を確認する。保持・参照・Clone で再発行せず、Default・Clone を持たない Index でも既存空間から構築できることを検証する。
+- Chain と非公開の別 Geometry を同じ関係 trait で扱う。二つのペア方式について、可変長・空・入れ子の葉順・Site ペア順を検証する。
+- 内積の共役線型性・線型性、作用を含む内積、非正規直交な例の norm、zero と相殺による zero-norm の拒否を確認する。既存の非公開の別代数による検証も拡張する。
+- libm 有効・無効、qmb の既定構成での norm 利用、無効時の平方根を使わない操作、core・geometry の no_std と通常依存を確認する。
+- 対象テストの後、workspace の test・format check・Clippy・警告をエラーとするドキュメント生成を行う。許容誤差は精度別に明示する。MSRV・no_std target の確認が環境上できない場合は未確認として報告する。
 
-- bra 型・ラッパー・構築メソッドは初期版では導入しない。Step 4 および初期版の完成条件にも含めない。
-- braket の計算はすべて既存の内積に委ねる。`⟨φ|ψ⟩` は `phi.inner_product(&psi)` で計算する。
-- `⟨φ|A|ψ⟩` は状態への作用と内積を組み合わせて計算する。期待値・正規化期待値も、作用と内積から導出する既存方針に従う。
-- 左引数についての共役線型性、右引数についての線型性、複合状態の空間互換性は内積の契約として扱う。
-- bra を独立した対象として提供する API は後続へ延期し、具体的な型や操作は今回設計しない。
+## 9. 後続の必須課題
 
-## 8. Step 4 の受入テストと公開 API（合意済み）
-
-`qmb-geometry` は `no_std + alloc` で実装し、`qmb` は各 crate と spin crate の構築 utility の再公開、および利用例・縦断的な結合テストを担当する。公開名の衝突を避けるため、各 crate に対応する module を設け、crate root の再公開は主要型に絞る。
-
-完了条件には次を明記する。
-
-- 両精度・両方の Neel 開始向きで、open chain の期待値 `−J(L−1)/4` と norm `1` を確認する。
-- 0-site の状態は単位状態とし、norm `1`、Hamiltonian と期待値は `0` とする。
-- periodic の長さ `0,1,2`、辺の辞書順、重複辺・self-loop の不在を確認する。
-- 複数自由度・空 Site・入れ子空間・ラベル、範囲外の Site 指定、Index の重複や入力数の不一致を検証する。別 Geometry 由来の Site 番号の拒否は検証対象にしない。
-- Chain と非公開の別 Geometry のテスト実装で、同じ関係 trait を通じて Index ペアを列挙できることを検証する。Geometry による近接 Site ペアの列挙と、Site ペアから Index ペアへの変換をそれぞれ確認する。全組合せ・同じ位置同士の二方式について、複数自由度、左右で異なる自由度数、片側が空、入れ子 Tensor の葉の順序、およびペアの列挙順を検証する。
-- braket は内積の左引数に関する共役線型性・右引数に関する線型性と、作用を含む内積の結果で検証する。非正規直交な例の norm、zero-norm の拒否も確認する。
-- `libm` feature の有効・無効の両構成を確認する。無効時にも平方根を使わない操作が利用できること、有効化が `std` を要求しないこと、および `qmb` の既定構成で norm・正規化を利用できることを検証する。
-
-## 決定済みの事項・後続段階との境界
-
-既存の `docs/design/geometry.md` と `docs/requirements.md` にある、Geometry を跨ぐ Site の同一性や別 Geometry の Site の拒否という契約は、第1節の合意に従って見直す。本メモへの記録時点では、これらの既存文書は未更新である。
-
-既存の Geometry 設計で述べている Site ごとの Index 列の組の取得と、今回合意した関係 trait による Index ペアの列挙との関係も、第3.1節の方針および全組合せ・同じ位置同士のペア選択規則に合わせて整理する。
-
-既存の実装計画・アーキテクチャ・Geometry 設計にある、Heisenberg・Neel の構築補助を `qmb` に置く責任分担は、第4節の合意に合わせて見直す。幾何関係の trait を `qmb-spin-half` の utility から利用するための依存関係も合わせて整理する。これらの既存文書・manifest は本メモへの記録時点では未更新である。
-
-既存の実装計画・初期版の提供範囲・関連設計文書にある、bra を Step 4 および初期版で提供するという要求は、第7節の合意に従って後続へ延期する。本メモへの記録時点では、これらの既存文書は未更新である。
-
-Chain の配置順序と periodic の小規模規約は決定済みであり、今回改めて決める対象ではない。
-
-Partial trace・基底処理・数値 backend は Step 5・6 の担当であり、今回の事前決定には含めない。
-
-## 確認した資料と検証範囲
-
-- `docs/implementation-plan.md`（特に Step 4 の実装内容と完了条件）
-- `docs/step-3-design.md`
-- `docs/design/geometry.md`
-- `docs/design/initial-release.md`
-- `docs/design/primitive-expression.md`
-- `docs/requirements.md`
-- 現在の workspace・core の依存設定、局所式・複合式・空間・Index の実装
-- ローカルにある `num-traits 0.2.19` のソースと feature 定義
-
-今回の検討では実装コードを変更しておらず、テストも実行していない。本ファイルは合意済みの方針と未採用の推奨案の記録であり、実装完了を意味しない。
+State・Operator・Structure・Space の管理方法と Geometry との依存関係は将来必ず見直す。core の数値ライブラリ依存解消と四つの設計上の問いは、[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)を正として管理する。今回の Step 4 の完了条件には追加せず、現行の型構成・libm 方針で実装する。
