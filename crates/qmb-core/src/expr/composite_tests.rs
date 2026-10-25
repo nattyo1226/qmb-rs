@@ -3,6 +3,7 @@ use crate::{
     Act, Adjoint, Complex, ExpressionError as E, HilbertSpace, InnerProduct,
     LinearCombination as Lc, LocalOperator, LocalState, LocalStructure, Operator, State,
 };
+use alloc::vec::Vec;
 use core::{cell::Cell, marker::PhantomData, num::NonZeroUsize};
 
 #[derive(PartialEq, Eq)]
@@ -10,6 +11,7 @@ struct Index(u8);
 #[derive(Default)]
 struct Counts {
     acts: Cell<usize>,
+    inner_products: Cell<usize>,
     drops: Cell<usize>,
 }
 struct Primitive<'a>(u8, &'a Counts);
@@ -42,12 +44,179 @@ impl Adjoint<f64> for Op {
 }
 impl InnerProduct<f64> for Primitive<'_> {
     fn inner_product(&self, rhs: &Self) -> Complex<f64> {
+        self.1.inner_products.set(self.1.inner_products.get() + 1);
         Complex::new(if self.0 == rhs.0 { 1.0 } else { 0.0 }, 0.0)
     }
 }
 type H<'a> = HilbertSpace<Index, L<'a>>;
 type S<'a, T = f64> = State<Index, L<'a>, T>;
 type O<'a, T = f64> = Operator<Index, L<'a>, T>;
+
+#[test]
+fn evaluated_contraction_only_requires_primitive_inner_products() {
+    struct InnerOnly;
+    struct Metadata;
+    struct OpaqueIndex;
+    impl LocalStructure for Metadata {
+        type State = InnerOnly;
+        type Operator = ();
+        const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
+    }
+    impl InnerProduct<f64> for InnerOnly {
+        fn inner_product(&self, _: &Self) -> Complex<f64> {
+            Complex::new(1.0, 0.0)
+        }
+    }
+    // Neither Act nor Adjoint is implemented. Contraction of already evaluated
+    // syntax needs no action capabilities, cloning of primitives, or Index Eq.
+    let factor = HilbertSpace::<OpaqueIndex, Metadata>::factor(OpaqueIndex);
+    let local = LocalState::<Metadata, f64>::primitive(InnerOnly);
+    let state = local.at(&factor).unwrap();
+    assert_eq!(
+        local.evaluated_inner_product(&local),
+        Complex::new(1.0, 0.0)
+    );
+    assert_eq!(
+        super::inner_product::contract(&state.expression, &state.expression),
+        Complex::new(1.0, 0.0)
+    );
+}
+
+#[test]
+fn inner_product_contracts_independent_sums_without_global_expansion() {
+    let counts = Counts::default();
+    for n in [8, 32] {
+        let factors: Vec<_> = (0..n).map(|i| H::factor(Index(255 - i))).collect();
+        let before = S::tensor(factors.iter().map(|factor| {
+            (LocalState::primitive(Primitive(0, &counts))
+                + LocalState::primitive(Primitive(1, &counts)))
+            .at(factor)
+            .unwrap()
+        }))
+        .unwrap();
+        let after = S::tensor(factors.iter().map(|factor| {
+            let up = LocalState::primitive(Primitive(0, &counts))
+                .at(factor)
+                .unwrap();
+            let down = LocalState::primitive(Primitive(1, &counts))
+                .at(factor)
+                .unwrap();
+            up.add(&down).unwrap()
+        }))
+        .unwrap();
+        let expected = Complex::new(2_f64.powi(i32::from(n)), 0.0);
+        for (lhs, rhs) in [
+            (&before, &before),
+            (&before, &after),
+            (&after, &before),
+            (&after, &after),
+        ] {
+            counts.inner_products.set(0);
+            assert_eq!(lhs.inner_product(rhs).unwrap(), expected);
+            assert_eq!(counts.inner_products.get(), 4 * usize::from(n));
+        }
+        let op = LocalOperator::primitive(Op).at(&factors[0]).unwrap();
+        counts.inner_products.set(0);
+        assert_eq!(after.expectation(&op).unwrap(), expected);
+        assert_eq!(counts.inner_products.get(), 4 * usize::from(n));
+    }
+}
+
+#[test]
+fn inner_product_aligns_overlapping_subsystems_and_scalar_factors() {
+    let counts = Counts::default();
+    let factors = [5, 1, 9, 3].map(|i| H::factor(Index(i)));
+    let ket = |site: usize, value| {
+        LocalState::primitive(Primitive(value, &counts))
+            .at(&factors[site])
+            .unwrap()
+    };
+    let ab = ket(0, 0)
+        .tensor_product(&ket(1, 0))
+        .unwrap()
+        .add(
+            &ket(0, 1)
+                .tensor_product(&ket(1, 1))
+                .unwrap()
+                .scaled(Complex::new(0.0, 1.0)),
+        )
+        .unwrap();
+    let cd = ket(2, 0)
+        .tensor_product(&ket(3, 0))
+        .unwrap()
+        .add(
+            &ket(2, 1)
+                .tensor_product(&ket(3, 1))
+                .unwrap()
+                .scaled(Complex::new(1.0, 1.0)),
+        )
+        .unwrap();
+    let lhs = ab.tensor_product(&cd).unwrap();
+    let a = ket(0, 0)
+        .add(&ket(0, 1).scaled(Complex::new(2.0, 1.0)))
+        .unwrap();
+    let bc = ket(1, 0)
+        .tensor_product(&ket(2, 0))
+        .unwrap()
+        .add(
+            &ket(1, 1)
+                .tensor_product(&ket(2, 1))
+                .unwrap()
+                .scaled(Complex::new(2.0, -1.0)),
+        )
+        .unwrap();
+    let d = ket(3, 0)
+        .add(&ket(3, 1).scaled(Complex::new(0.0, 1.0)))
+        .unwrap();
+    let rhs = a.tensor_product(&bc.tensor_product(&d).unwrap()).unwrap();
+    // Independent amplitudes: the only shared nonzero coordinates are 0000
+    // and 1111, with amplitudes (1, -1+i) and (1, 5i), respectively.
+    assert_eq!(lhs.inner_product(&rhs).unwrap(), Complex::new(6.0, -5.0));
+    assert_eq!(rhs.inner_product(&lhs).unwrap(), Complex::new(6.0, 5.0));
+    assert_eq!(lhs.inner_product(&lhs).unwrap(), Complex::new(6.0, 0.0));
+    assert_eq!(rhs.inner_product(&rhs).unwrap(), Complex::new(72.0, 0.0));
+
+    let unit = S::unit();
+    let scalar = unit
+        .scaled(Complex::new(2.0, 1.0))
+        .add(&unit.scaled(Complex::new(-1.0, 2.0)))
+        .unwrap();
+    let with_scalar = S::tensor([
+        unit.clone(),
+        ab.clone(),
+        scalar.clone(),
+        cd.clone(),
+        unit.clone(),
+    ])
+    .unwrap();
+    assert_eq!(
+        with_scalar.inner_product(&rhs).unwrap(),
+        Complex::new(-9.0, -23.0)
+    );
+    assert_eq!(
+        rhs.inner_product(&with_scalar).unwrap(),
+        Complex::new(-9.0, 23.0)
+    );
+    assert_eq!(
+        scalar.inner_product(&scalar).unwrap(),
+        Complex::new(10.0, 0.0)
+    );
+    let zero = S::zero(lhs.space());
+    let with_zero = zero.add(&with_scalar).unwrap();
+    assert_eq!(
+        with_zero.inner_product(&rhs).unwrap(),
+        Complex::new(-9.0, -23.0)
+    );
+    let zero_tensor = S::tensor([S::zero(unit.space()), lhs.clone()]).unwrap();
+    assert_eq!(
+        zero_tensor.inner_product(&rhs).unwrap(),
+        Complex::new(0.0, 0.0)
+    );
+    assert_eq!(
+        lhs.inner_product(&zero_tensor).unwrap(),
+        Complex::new(0.0, 0.0)
+    );
+}
 
 #[test]
 fn construction_uses_opaque_scalars_and_shared_nonclone_borrowed_leaves() {
@@ -225,6 +394,83 @@ fn evaluate_does_not_require_coefficient_arithmetic() {
 }
 
 #[test]
+fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
+    struct OpaqueIndex;
+    struct Scalar(u8);
+    let coefficient = || Complex::new(Scalar(2), Scalar(3));
+    let counts = Counts::default();
+    let factor = HilbertSpace::<OpaqueIndex, L<'_>>::factor(OpaqueIndex);
+    let state = LocalState::<L<'_>, Scalar>::primitive(Primitive(0, &counts))
+        .at(&factor)
+        .unwrap();
+    let operator = LocalOperator::<L<'_>, Scalar>::primitive(Op)
+        .at(&factor)
+        .unwrap();
+    for scaled in [
+        state.clone() * coefficient(),
+        &state * coefficient(),
+        coefficient() * state.clone(),
+        coefficient() * &state,
+    ] {
+        let StateNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (2, 3));
+        assert!(s.operand.same_node(&state.expression));
+        assert!(scaled.space().shares_node_with(&factor));
+    }
+    for scaled in [
+        operator.clone() * coefficient(),
+        &operator * coefficient(),
+        coefficient() * operator.clone(),
+        coefficient() * &operator,
+    ] {
+        let OpNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (2, 3));
+        assert!(core::ptr::eq(s.operand.node(), operator.expression.node()));
+        assert!(scaled.space().is_none());
+    }
+
+    // Borrowing the coefficient adds only Clone, with no arithmetic or Index Eq.
+    #[derive(Clone)]
+    struct CloneOnly(u8);
+    let coefficient = Complex::new(CloneOnly(4), CloneOnly(5));
+    let state = LocalState::<L<'_>, CloneOnly>::primitive(Primitive(1, &counts))
+        .at(&factor)
+        .unwrap();
+    let operator = LocalOperator::<L<'_>, CloneOnly>::primitive(Op)
+        .at(&factor)
+        .unwrap();
+    for scaled in [
+        state.clone() * &coefficient,
+        &state * &coefficient,
+        &coefficient * state.clone(),
+        &coefficient * &state,
+    ] {
+        let StateNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (4, 5));
+        assert!(s.operand.same_node(&state.expression));
+    }
+    for scaled in [
+        operator.clone() * &coefficient,
+        &operator * &coefficient,
+        &coefficient * operator.clone(),
+        &coefficient * &operator,
+    ] {
+        let OpNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (4, 5));
+        assert!(core::ptr::eq(s.operand.node(), operator.expression.node()));
+    }
+    assert_eq!(counts.acts.get(), 0);
+}
+
+#[test]
 #[allow(clippy::op_ref)] // Exercise the public borrowed-scalar implementations.
 fn all_binary_ownership_forms_preserve_results_and_shared_operands() {
     let counts = Counts::default();
@@ -347,6 +593,30 @@ fn all_binary_ownership_forms_preserve_results_and_shared_operands() {
                 .unwrap(),
             Complex::new(-1.0, 0.0)
         );
+    }
+
+    let other_factor = H::factor(Index(1));
+    let other_state = LocalState::primitive(Primitive(0, &counts))
+        .at(&other_factor)
+        .unwrap();
+    let other_op = LocalOperator::primitive(Op)
+        .at(&other_factor)
+        .unwrap()
+        .bind(&other_factor)
+        .unwrap();
+    for result in forms!(state, +, other_state)
+        .into_iter()
+        .chain(forms!(state, -, other_state))
+        .chain(forms!(op, *, other_state))
+    {
+        assert!(matches!(result, Err(E::IncompatibleSpaces)));
+    }
+    for result in forms!(op, +, other_op)
+        .into_iter()
+        .chain(forms!(op, -, other_op))
+        .chain(forms!(op, *, other_op))
+    {
+        assert!(matches!(result, Err(E::IncompatibleSpaces)));
     }
     assert!(state.expression.same_node(&original));
 }

@@ -6,28 +6,10 @@ use super::{
     local::{LocalOperator, LocalState, OperatorNode, StateNode},
     parts::SumExpr,
 };
-use crate::{Act, Adjoint, Complex, Identity, InnerProduct, LocalStructure, Product, Trace};
-
-pub(super) fn conjugate<T: Neg<Output = T>>(value: Complex<T>) -> Complex<T> {
-    Complex::new(value.re, -value.im)
-}
-// Keep the coefficient bounds at the arithmetic operation. Complex<T>'s Num
-// implementation would additionally require division/remainder not used here.
-pub(super) fn multiply<T>(a: Complex<T>, b: Complex<T>) -> Complex<T>
-where
-    T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
-{
-    Complex::new(
-        a.re.clone() * b.re.clone() - a.im.clone() * b.im.clone(),
-        a.re * b.im + a.im * b.re,
-    )
-}
-pub(super) fn add<T: Add<Output = T>>(a: Complex<T>, b: Complex<T>) -> Complex<T> {
-    Complex::new(a.re + b.re, a.im + b.im)
-}
-pub(super) fn zero<T: Zero>() -> Complex<T> {
-    Complex::new(T::zero(), T::zero())
-}
+use crate::{
+    Act, Adjoint, Complex, Identity, InnerProduct, LocalStructure, Product, Trace,
+    coefficient::{add, conjugate, multiply, zero},
+};
 
 enum StateTask<L: LocalStructure, T> {
     Evaluate(LocalState<L, T>),
@@ -160,9 +142,19 @@ impl<L: LocalStructure, T> LocalState<L, T> {
     {
         let lhs = self.evaluate();
         let rhs = rhs.evaluate();
+        lhs.evaluated_inner_product(&rhs)
+    }
+
+    // Both operands must be action-free. Separating this reduction avoids
+    // requiring action/adjoint capabilities again in composite contraction.
+    pub(super) fn evaluated_inner_product(&self, rhs: &Self) -> Complex<T>
+    where
+        T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        L::State: InnerProduct<T>,
+    {
         let mut result = zero();
-        for (a, left) in LinearTerms::new(&lhs, state_view) {
-            for (b, right) in LinearTerms::new(&rhs, state_view) {
+        for (a, left) in LinearTerms::new(self, state_view) {
+            for (b, right) in LinearTerms::new(rhs, state_view) {
                 let mut value = left
                     .expect("state primitive")
                     .inner_product(right.expect("state primitive"));

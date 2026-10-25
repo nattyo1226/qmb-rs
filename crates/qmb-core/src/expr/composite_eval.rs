@@ -1,14 +1,12 @@
 use alloc::{vec, vec::Vec};
-use core::ops::{Mul, Neg, Sub};
+use core::ops::{Add, Mul, Neg, Sub};
 use num_traits::{One, Zero};
 
-use super::{
-    composite::{ExpressionError, OpExpr, OpNode, Operator, State, StateExpr, StateNode},
-    evaluate::{add, conjugate, multiply, zero},
-};
+use super::composite::{ExpressionError, OpExpr, OpNode, Operator, State, StateExpr, StateNode};
 use crate::{
-    Act, Adjoint, Complex, HilbertSpace, Identity, InnerProduct, LocalOperator, LocalState,
-    LocalStructure, Product, Trace,
+    Act, Adjoint, Complex, HilbertSpace, Identity, InnerProduct, LocalOperator, LocalStructure,
+    Product, Trace,
+    coefficient::{add, conjugate, multiply, zero},
 };
 
 enum Task<I, L: LocalStructure, T> {
@@ -177,9 +175,12 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
     }
 
     /// Computes the conjugate-linear/linear inner product on compatible spaces.
+    ///
+    /// Contracts matching tensor factors before distributing sums. Tensor
+    /// grouping need not agree, and no global product-of-sums expansion is built.
     pub fn inner_product(&self, rhs: &Self) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
         L::Operator: Adjoint<T, Term = L::Operator>,
     {
@@ -188,29 +189,16 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
         }
         let lhs = self.evaluate()?;
         let rhs = rhs.evaluate()?;
-        let mut result = zero();
-        for (a, left) in StateTerms::new(&lhs.expression) {
-            for (b, right) in StateTerms::new(&rhs.expression) {
-                let mut value = one();
-                for (l, r) in left.iter().zip(&right) {
-                    value = multiply(value, l.inner_product(r));
-                }
-                if let Some(c) = b {
-                    value = multiply(value, c);
-                }
-                if let Some(c) = a.clone() {
-                    value = multiply(conjugate(c), value);
-                }
-                result = add(result, value);
-            }
-        }
-        Ok(result)
+        Ok(super::inner_product::contract(
+            &lhs.expression,
+            &rhs.expression,
+        ))
     }
 
     /// Computes the unnormalized expectation without requiring prior evaluation.
     pub fn expectation(&self, operator: &Operator<I, L, T>) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
         L::Operator: Adjoint<T, Term = L::Operator>,
     {
@@ -224,7 +212,7 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
         ambient: &HilbertSpace<I, L>,
     ) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
         L::Operator: Adjoint<T, Term = L::Operator>,
     {
@@ -234,72 +222,6 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
 
 fn one<T: Zero + One>() -> Complex<T> {
     Complex::new(T::one(), T::zero())
-}
-
-// A streaming product-of-sums traversal: branches retain only pending syntax
-// and the current product term, rather than a full expanded global state.
-struct StateBranch<'a, I, L: LocalStructure, T> {
-    pending: Vec<&'a StateExpr<I, L, T>>,
-    coefficient: Option<Complex<T>>,
-    factors: Vec<&'a LocalState<L, T>>,
-}
-impl<I, L: LocalStructure, T: Clone> Clone for StateBranch<'_, I, L, T> {
-    fn clone(&self) -> Self {
-        Self {
-            pending: self.pending.clone(),
-            coefficient: self.coefficient.clone(),
-            factors: self.factors.clone(),
-        }
-    }
-}
-struct StateTerms<'a, I, L: LocalStructure, T> {
-    branches: Vec<StateBranch<'a, I, L, T>>,
-}
-impl<'a, I, L: LocalStructure, T> StateTerms<'a, I, L, T> {
-    fn new(root: &'a StateExpr<I, L, T>) -> Self {
-        Self {
-            branches: vec![StateBranch {
-                pending: vec![root],
-                coefficient: None,
-                factors: Vec::new(),
-            }],
-        }
-    }
-}
-impl<'a, I, L: LocalStructure, T> Iterator for StateTerms<'a, I, L, T>
-where
-    T: Clone + Zero + Sub<Output = T> + Mul<Output = T>,
-{
-    type Item = (Option<Complex<T>>, Vec<&'a LocalState<L, T>>);
-    fn next(&mut self) -> Option<Self::Item> {
-        'branch: while let Some(mut branch) = self.branches.pop() {
-            while let Some(state) = branch.pending.pop() {
-                match state.node() {
-                    StateNode::Local(_, local) => branch.factors.push(local),
-                    StateNode::Unit => {}
-                    StateNode::Scale(s) => {
-                        branch.coefficient = Some(match branch.coefficient {
-                            None => s.coefficient.clone(),
-                            Some(c) => multiply(c, s.coefficient.clone()),
-                        });
-                        branch.pending.push(&s.operand);
-                    }
-                    StateNode::Tensor(s) => branch.pending.extend(s.iter().rev()),
-                    StateNode::Sum(s) => {
-                        for child in s.iter().rev() {
-                            let mut next = branch.clone();
-                            next.pending.push(child);
-                            self.branches.push(next);
-                        }
-                        continue 'branch;
-                    }
-                    StateNode::Act(_) => unreachable!("evaluated state"),
-                }
-            }
-            return Some((branch.coefficient, branch.factors));
-        }
-        None
-    }
 }
 
 type OperatorFactors<'a, I, L, T> = Vec<(&'a HilbertSpace<I, L>, LocalOperator<L, T>)>;
@@ -333,7 +255,7 @@ impl<'a, I, L: LocalStructure, T> OpTerms<'a, I, L, T> {
 }
 impl<'a, I: Eq, L: LocalStructure, T> Iterator for OpTerms<'a, I, L, T>
 where
-    T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+    T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
 {
     type Item = (Option<Complex<T>>, OperatorFactors<'a, I, L, T>);
     fn next(&mut self) -> Option<Self::Item> {
@@ -399,7 +321,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     /// Computes the ordinary full trace using the existing binding.
     pub fn trace(&self) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -410,7 +332,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     /// Computes full trace on an explicit space, overriding an old binding.
     pub fn trace_in(&self, ambient: &HilbertSpace<I, L>) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -420,7 +342,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
 
     fn trace_on(&self, ambient: &HilbertSpace<I, L>) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -448,7 +370,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     /// Computes the unnormalized Hilbert-Schmidt inner product `Tr(self† rhs)`.
     pub fn hilbert_schmidt_inner_product(&self, rhs: &Self) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -462,7 +384,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
         ambient: &HilbertSpace<I, L>,
     ) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -470,5 +392,52 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
             .adjoint()
             .product(&rhs.bind(ambient)?)?
             .trace()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::num::NonZeroUsize;
+
+    #[derive(Clone)]
+    struct Ring(i64);
+    macro_rules! arithmetic {
+        ($trait:ident, $method:ident, $op:tt) => {
+            impl core::ops::$trait for Ring {
+                type Output = Self;
+                fn $method(self, rhs: Self) -> Self { Self(self.0 $op rhs.0) }
+            }
+        };
+    }
+    arithmetic!(Add, add, +);
+    arithmetic!(Sub, sub, -);
+    arithmetic!(Mul, mul, *);
+    impl Neg for Ring {
+        type Output = Self;
+        fn neg(self) -> Self {
+            Self(-self.0)
+        }
+    }
+    struct Metadata;
+    impl LocalStructure for Metadata {
+        type State = ();
+        type Operator = ();
+        const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
+    }
+
+    #[test]
+    fn operator_term_traversal_needs_no_zero_or_one() {
+        // Term traversal only combines stored coefficients and lazy local
+        // operators. Generating numeric identities belongs to trace reduction.
+        let lhs = Operator::<u8, Metadata, Ring>::scalar(Complex::new(Ring(3), Ring(4)));
+        let rhs = Operator::scalar(Complex::new(Ring(2), Ring(-1)));
+        let operator = lhs.product(&rhs).unwrap().adjoint();
+        let mut terms = OpTerms::new(&operator.expression);
+        let (coefficient, factors) = terms.next().unwrap();
+        let coefficient = coefficient.unwrap();
+        assert_eq!((coefficient.re.0, coefficient.im.0), (10, -5));
+        assert!(factors.is_empty());
+        assert!(terms.next().is_none());
     }
 }

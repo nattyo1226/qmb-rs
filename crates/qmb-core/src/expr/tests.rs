@@ -121,6 +121,47 @@ fn construction_shares_without_numeric_or_clone_bounds() {
 }
 
 #[test]
+fn scalar_syntax_moves_opaque_coefficients_and_shares_expression_nodes() {
+    struct Scalar(u8);
+    let coefficient = || Complex::new(Scalar(2), Scalar(3));
+    let counts = Counts::default();
+    let state = S::<Scalar>::primitive(State(1, &counts));
+    let operator = O::<Scalar>::primitive(Operator(0, &counts));
+    for scaled in [
+        state.clone() * coefficient(),
+        &state * coefficient(),
+        coefficient() * state.clone(),
+        coefficient() * &state,
+    ] {
+        let StateNode::Scale(s) = scaled.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (2, 3));
+        assert!(Arc::ptr_eq(
+            s.operand.root.as_ref().unwrap(),
+            state.root.as_ref().unwrap()
+        ));
+    }
+    for scaled in [
+        operator.clone() * coefficient(),
+        &operator * coefficient(),
+        coefficient() * operator.clone(),
+        coefficient() * &operator,
+    ] {
+        let OperatorNode::Scale(s) = scaled.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (2, 3));
+        assert!(Arc::ptr_eq(
+            s.operand.root.as_ref().unwrap(),
+            operator.root.as_ref().unwrap()
+        ));
+    }
+    assert_eq!(counts.actions.get(), 0);
+    assert_eq!(counts.drops.get(), 0);
+}
+
+#[test]
 fn constructor_cardinality_sharing_and_single_final_drop() {
     let counts = Counts::default();
     let leaf = S::<f64>::primitive(State(1, &counts));

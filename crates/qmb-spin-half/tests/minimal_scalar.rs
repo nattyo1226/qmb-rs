@@ -16,6 +16,20 @@ use State::{Down, Up};
 
 const OPS: [Op; 6] = [I, Sx, Sy, Sz, SPlus, SMinus];
 
+#[test]
+fn basis_metadata_uses_the_same_contract_as_expansion() {
+    fn check<P: PartialEq + core::fmt::Debug, T, B: Basis<P, T>>(basis: B, expected: &[P]) {
+        let elements: Vec<_> = basis.elements().collect();
+        assert_eq!(elements, expected);
+        for (i, element) in elements.iter().enumerate() {
+            assert_eq!(basis.index(element), Some(i));
+        }
+    }
+    check::<_, Natural, _>(SzBasis, &[Up, Down]);
+    check::<_, Signed, _>(CartesianBasis, &[I, Sx, Sy, Sz]);
+    check::<_, Rational, _>(LadderBasis, &[I, SPlus, SMinus, Sz]);
+}
+
 macro_rules! integer_scalar {
     ($name:ident, $integer:ty) => {
         struct $name($integer);

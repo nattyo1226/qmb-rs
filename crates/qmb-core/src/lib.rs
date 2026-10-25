@@ -43,6 +43,8 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+mod coefficient;
+
 pub mod basis;
 pub mod error;
 pub mod expr;
