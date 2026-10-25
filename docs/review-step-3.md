@@ -108,9 +108,11 @@ let scaled = terms.scaled(Complex::new(Ring(2), Ring(0)));
 
 ## 3. 演算子構文の重複
 
+状態: 2026-10-25 に共通化済み。以下の確認結果は修正前の構成を記録する。
+
 ### 確認結果
 
-対象は [operators.rs](../crates/qmb-core/src/expr/operators.rs) の `binary`・`scalar` と、[composite_operators.rs](../crates/qmb-core/src/expr/composite_operators.rs) の同名 macro。
+対象は [operators.rs](../crates/qmb-core/src/expr/operators.rs) の旧 `binary`・`scalar` と、旧 `expr/composite_operators.rs` の同名 macro。
 
 局所式と複合式で、二項演算の所有値・借用値4通り、単項負号、複素係数による左右の乗算をほぼ同じコードで定義している。主な差は型引数 `I` の有無、必要な `Eq` 制約、二項演算の返却型が直接の式か `Result` かという点である。
 
@@ -123,6 +125,18 @@ let scaled = terms.scaled(Complex::new(Ring(2), Ring(0)));
 - 局所式の infallible な API と複合式の fallible な API を維持する。
 - 所有ハンドルは移動し、借用ハンドルだけを複製する。
 - 所有値・借用値の全組み合わせ、左右の係数乗算、最小限の数値制約を既存テストで確認する。
+
+### 共通化の内容
+
+演算子実装を `operators.rs` に集約し、`composite_operators.rs` とその module 宣言を削除した。式同士の所有値による `Add`・`Sub`・`Mul` は通常の Rust の `impl` とし、局所式の直接返却と複合式の `Result` を各実装に明示する。
+
+共通の `borrowed_binary` macro は、借用を含む3通りを生成する。借用した operand だけを `Clone` し、所有値同士の trait メソッドへ完全修飾で委譲する。返却型は所有値の `Output` をそのまま使い、エラーの変換や局所式・複合式を選ぶ分岐は設けない。引数は型引数一覧・演算 trait とメソッド名・左右の型・型成立の制約だけであり、演算内容や返却型は受け取らない。
+
+スカラー演算は4種類の式で共通の `scalar` macro を使う。単項負号と所有値による左右の係数乗算を定義し、借用を含む乗算は同じ `borrowed_binary` を再利用する。公開の式 trait や evaluator の統合は追加していない。
+
+回帰テストで、数値能力も `Clone` もない所有係数による左右の乗算、借用係数に `Clone` だけを要求する乗算、`Eq` のない Index を持つ複合式、入力の節点共有を確認した。既存の所有・借用の全組み合わせのテストに、状態加減算・演算子加減算と積・作用の空間不整合がすべて `Err` として返る検証を追加した。
+
+`cargo test --workspace -j 1` の全79テスト（doc test を含む）、format check、Clippy、警告をエラーとするドキュメント生成が成功した。MSRV と `std` のない target 向けビルドは未検証である。
 
 ## 4. 複合作用の構築処理の重複
 

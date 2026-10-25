@@ -4,7 +4,6 @@ pub mod parts;
 
 pub mod composite;
 mod composite_eval;
-mod composite_operators;
 mod evaluate;
 mod inner_product;
 mod local;

@@ -394,6 +394,83 @@ fn evaluate_does_not_require_coefficient_arithmetic() {
 }
 
 #[test]
+fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
+    struct OpaqueIndex;
+    struct Scalar(u8);
+    let coefficient = || Complex::new(Scalar(2), Scalar(3));
+    let counts = Counts::default();
+    let factor = HilbertSpace::<OpaqueIndex, L<'_>>::factor(OpaqueIndex);
+    let state = LocalState::<L<'_>, Scalar>::primitive(Primitive(0, &counts))
+        .at(&factor)
+        .unwrap();
+    let operator = LocalOperator::<L<'_>, Scalar>::primitive(Op)
+        .at(&factor)
+        .unwrap();
+    for scaled in [
+        state.clone() * coefficient(),
+        &state * coefficient(),
+        coefficient() * state.clone(),
+        coefficient() * &state,
+    ] {
+        let StateNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (2, 3));
+        assert!(s.operand.same_node(&state.expression));
+        assert!(scaled.space().shares_node_with(&factor));
+    }
+    for scaled in [
+        operator.clone() * coefficient(),
+        &operator * coefficient(),
+        coefficient() * operator.clone(),
+        coefficient() * &operator,
+    ] {
+        let OpNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (2, 3));
+        assert!(core::ptr::eq(s.operand.node(), operator.expression.node()));
+        assert!(scaled.space().is_none());
+    }
+
+    // Borrowing the coefficient adds only Clone, with no arithmetic or Index Eq.
+    #[derive(Clone)]
+    struct CloneOnly(u8);
+    let coefficient = Complex::new(CloneOnly(4), CloneOnly(5));
+    let state = LocalState::<L<'_>, CloneOnly>::primitive(Primitive(1, &counts))
+        .at(&factor)
+        .unwrap();
+    let operator = LocalOperator::<L<'_>, CloneOnly>::primitive(Op)
+        .at(&factor)
+        .unwrap();
+    for scaled in [
+        state.clone() * &coefficient,
+        &state * &coefficient,
+        &coefficient * state.clone(),
+        &coefficient * &state,
+    ] {
+        let StateNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (4, 5));
+        assert!(s.operand.same_node(&state.expression));
+    }
+    for scaled in [
+        operator.clone() * &coefficient,
+        &operator * &coefficient,
+        &coefficient * operator.clone(),
+        &coefficient * &operator,
+    ] {
+        let OpNode::Scale(s) = scaled.expression.node() else {
+            panic!("scale")
+        };
+        assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (4, 5));
+        assert!(core::ptr::eq(s.operand.node(), operator.expression.node()));
+    }
+    assert_eq!(counts.acts.get(), 0);
+}
+
+#[test]
 #[allow(clippy::op_ref)] // Exercise the public borrowed-scalar implementations.
 fn all_binary_ownership_forms_preserve_results_and_shared_operands() {
     let counts = Counts::default();
@@ -516,6 +593,30 @@ fn all_binary_ownership_forms_preserve_results_and_shared_operands() {
                 .unwrap(),
             Complex::new(-1.0, 0.0)
         );
+    }
+
+    let other_factor = H::factor(Index(1));
+    let other_state = LocalState::primitive(Primitive(0, &counts))
+        .at(&other_factor)
+        .unwrap();
+    let other_op = LocalOperator::primitive(Op)
+        .at(&other_factor)
+        .unwrap()
+        .bind(&other_factor)
+        .unwrap();
+    for result in forms!(state, +, other_state)
+        .into_iter()
+        .chain(forms!(state, -, other_state))
+        .chain(forms!(op, *, other_state))
+    {
+        assert!(matches!(result, Err(E::IncompatibleSpaces)));
+    }
+    for result in forms!(op, +, other_op)
+        .into_iter()
+        .chain(forms!(op, -, other_op))
+        .chain(forms!(op, *, other_op))
+    {
+        assert!(matches!(result, Err(E::IncompatibleSpaces)));
     }
     assert!(state.expression.same_node(&original));
 }
