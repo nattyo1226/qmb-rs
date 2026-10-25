@@ -703,8 +703,293 @@ fn long_operator_trace_and_destruction_fit_a_small_stack() {
             }
             assert_complex::<f64>(expression.trace(), c(0.0, 0.0));
             drop(expression);
+
+            let factor = GlobalSpace::factor(0);
+            let mut placed = O::primitive(Sz).at(&factor).unwrap();
+            for _ in 0..20_000 {
+                placed = placed
+                    .product(&GlobalOperator::identity())
+                    .unwrap()
+                    .adjoint()
+                    .scaled(c(1.0, 0.0));
+            }
+            assert_complex::<f64>(placed.trace_in(&factor).unwrap(), c(0.0, 0.0));
+            drop(placed);
         })
         .unwrap()
         .join()
         .unwrap();
+}
+
+type GlobalState<T> = qmb_core::State<u8, SpinHalf, T>;
+type GlobalOperator<T> = qmb_core::Operator<u8, SpinHalf, T>;
+type GlobalSpace = qmb_core::HilbertSpace<u8, SpinHalf>;
+type Dense = Vec<Vec<Complex<f64>>>;
+
+fn placed_matrix(operator: Op, site: usize) -> Dense {
+    // Literal Kronecker reference, with the rightmost factor varying fastest.
+    (0..8)
+        .map(|i| {
+            (0..8)
+                .map(|j| {
+                    (0..3).fold(c(1.0, 0.0), |value, k| {
+                        value
+                            * matrix(if site == k { operator } else { I })[(i >> (2 - k)) & 1]
+                                [(j >> (2 - k)) & 1]
+                    })
+                })
+                .collect()
+        })
+        .collect()
+}
+fn dense_add(a: &Dense, b: &Dense) -> Dense {
+    a.iter()
+        .zip(b)
+        .map(|(a, b)| a.iter().zip(b).map(|(a, b)| a + b).collect())
+        .collect()
+}
+fn dense_scale(a: &Dense, c: Complex<f64>) -> Dense {
+    a.iter()
+        .map(|row| row.iter().map(|a| c * a).collect())
+        .collect()
+}
+fn dense_mul(a: &Dense, b: &Dense) -> Dense {
+    (0..a.len())
+        .map(|i| {
+            (0..a.len())
+                .map(|j| (0..a.len()).fold(c(0.0, 0.0), |s, k| s + a[i][k] * b[k][j]))
+                .collect()
+        })
+        .collect()
+}
+fn dense_dagger(a: &Dense) -> Dense {
+    (0..a.len())
+        .map(|i| (0..a.len()).map(|j| a[j][i].conj()).collect())
+        .collect()
+}
+fn dense_apply(a: &Dense, x: &[Complex<f64>]) -> Vec<Complex<f64>> {
+    a.iter()
+        .map(|row| row.iter().zip(x).fold(c(0.0, 0.0), |s, (a, x)| s + a * x))
+        .collect()
+}
+fn dense_trace(a: &Dense) -> Complex<f64> {
+    (0..a.len()).fold(c(0.0, 0.0), |s, i| s + a[i][i])
+}
+fn dense_dot(a: &[Complex<f64>], b: &[Complex<f64>]) -> Complex<f64> {
+    a.iter()
+        .zip(b)
+        .fold(c(0.0, 0.0), |s, (a, b)| s + a.conj() * b)
+}
+
+fn global_basis<T: Real>(factors: &[GlobalSpace; 3], n: usize) -> GlobalState<T> {
+    qmb_core::State::tensor(factors.iter().enumerate().map(|(k, factor)| {
+        qmb_core::LocalState::primitive(if (n >> (2 - k)) & 1 == 0 { Up } else { Down })
+            .at(factor)
+            .unwrap()
+    }))
+    .unwrap()
+}
+fn global_vector<T: Real>(state: &GlobalState<T>, factors: &[GlobalSpace; 3]) -> Vec<Complex<f64>> {
+    let state = state.evaluate().unwrap();
+    (0..8)
+        .map(|n| complex64(global_basis(factors, n).inner_product(&state).unwrap()))
+        .collect()
+}
+fn assert_dense_vector<T: Real>(a: &[Complex<f64>], b: &[Complex<f64>]) {
+    assert_eq!(a.len(), b.len());
+    for (a, b) in a.iter().zip(b) {
+        assert_complex::<T>(*a, *b);
+    }
+}
+
+fn check_composite_expressions<T: Real>() {
+    use qmb_core::{LocalOperator as LO, LocalState as LS};
+    let factors = [
+        GlobalSpace::factor(9),
+        GlobalSpace::factor(2),
+        GlobalSpace::factor(7),
+    ];
+    let h = factors[0]
+        .tensor_product(&factors[1])
+        .unwrap()
+        .tensor_product(&factors[2])
+        .unwrap();
+    let [a, b, d] = &factors;
+    let local = LS::<SpinHalf, T>::primitive(Up).scaled(c(0.7, 0.2))
+        + LS::primitive(Down).scaled(c(-0.3, 0.5));
+    let s0 = local.at(a).unwrap();
+    let s1 = LS::primitive(Down).at(b).unwrap();
+    let s2 = LS::primitive(Up).at(d).unwrap();
+    let left = s0.tensor_product(&s1).unwrap().tensor_product(&s2).unwrap();
+    let right = s0.tensor_product(&s1.tensor_product(&s2).unwrap()).unwrap();
+    assert!(left.space().is_compatible_with(right.space()));
+    assert_dense_vector::<T>(
+        &global_vector(&left, &factors),
+        &global_vector(&right, &factors),
+    );
+    let state = left
+        .add(&global_basis(&factors, 5).scaled(c(-0.4, 0.6)))
+        .unwrap();
+    let mut reference = vec![c(0.0, 0.0); 8];
+    reference[2] = c(0.7, 0.2);
+    reference[6] = c(-0.3, 0.5);
+    reference[5] = c(-0.4, 0.6);
+    assert_dense_vector::<T>(&global_vector(&state, &factors), &reference);
+    assert_complex::<T>(
+        complex64(state.inner_product(&state).unwrap()),
+        dense_dot(&reference, &reference),
+    );
+    for oa in OPS {
+        for ob in OPS {
+            let a = LO::<SpinHalf, T>::primitive(oa)
+                .at(d)
+                .unwrap()
+                .scaled(c(0.4, -0.2))
+                .add(&GlobalOperator::scalar(c(-0.3, 0.1)))
+                .unwrap();
+            let b = LO::primitive(ob)
+                .at(&factors[0])
+                .unwrap()
+                .add(
+                    &LO::primitive(Sy)
+                        .at(&factors[1])
+                        .unwrap()
+                        .scaled(c(0.2, 0.3)),
+                )
+                .unwrap();
+            let am = dense_add(
+                &dense_scale(&placed_matrix(oa, 2), c(0.4, -0.2)),
+                &dense_scale(&placed_matrix(I, 0), c(-0.3, 0.1)),
+            );
+            let bm = dense_add(
+                &placed_matrix(ob, 0),
+                &dense_scale(&placed_matrix(Sy, 1), c(0.2, 0.3)),
+            );
+            // Include repeated action on the same factor as well as separated ones.
+            let same = LO::primitive(SPlus).at(d).unwrap();
+            let expression = a.product(&b).unwrap().product(&same).unwrap();
+            let expected = dense_mul(&dense_mul(&am, &bm), &placed_matrix(SPlus, 2));
+            let result = state.act(&expression).unwrap().evaluate().unwrap();
+            assert_dense_vector::<T>(
+                &global_vector(&result, &factors),
+                &dense_apply(&expected, &reference),
+            );
+            let sequential = state.act(&same).unwrap().act(&b).unwrap().act(&a).unwrap();
+            assert_dense_vector::<T>(
+                &global_vector(&sequential, &factors),
+                &dense_apply(&expected, &reference),
+            );
+            assert_dense_vector::<T>(
+                &global_vector(&state.act(&expression.adjoint()).unwrap(), &factors),
+                &dense_apply(&dense_dagger(&expected), &reference),
+            );
+            assert_complex::<T>(
+                complex64(expression.trace_in(&h).unwrap()),
+                dense_trace(&expected),
+            );
+            assert_complex::<T>(
+                complex64(expression.adjoint().trace_in(&h).unwrap()),
+                dense_trace(&dense_dagger(&expected)),
+            );
+            assert_complex::<T>(
+                complex64(state.expectation(&expression).unwrap()),
+                dense_dot(&reference, &dense_apply(&expected, &reference)),
+            );
+            assert_complex::<T>(
+                complex64(a.hilbert_schmidt_inner_product_in(&b, &h).unwrap()),
+                dense_trace(&dense_mul(&dense_dagger(&am), &bm)),
+            );
+            let ab = dense_mul(&am, &bm);
+            let ba = dense_mul(&bm, &am);
+            for (op, matrix) in [
+                (
+                    a.commutator(&b).unwrap(),
+                    dense_add(&ab, &dense_scale(&ba, c(-1.0, 0.0))),
+                ),
+                (a.anticommutator(&b).unwrap(), dense_add(&ab, &ba)),
+            ] {
+                assert_dense_vector::<T>(
+                    &global_vector(&state.act(&op).unwrap(), &factors),
+                    &dense_apply(&matrix, &reference),
+                );
+            }
+        }
+    }
+    assert_dense_vector::<T>(&global_vector(&state, &factors), &reference);
+}
+
+#[test]
+fn composite_expressions_match_independent_three_factor_matrices() {
+    check_composite_expressions::<f32>();
+    check_composite_expressions::<f64>();
+}
+
+#[test]
+fn composite_empty_zero_spectator_and_overflow_contracts() {
+    use qmb_core::{
+        ExpressionError as E, LocalOperator as LO, LocalState as LS, Operator as O, State as S,
+    };
+    type Op = O<u32, SpinHalf, f64>;
+    type Ket = S<u32, SpinHalf, f64>;
+    let unit = Ket::unit();
+    let identity = Op::identity();
+    assert_eq!(identity.trace_in(unit.space()).unwrap(), c(1.0, 0.0));
+    assert_eq!(unit.inner_product(&unit).unwrap(), c(1.0, 0.0));
+    assert_eq!(
+        unit.act(&identity).unwrap().inner_product(&unit).unwrap(),
+        c(1.0, 0.0)
+    );
+    assert_eq!(
+        unit.act(&Op::zero()).unwrap().inner_product(&unit).unwrap(),
+        c(0.0, 0.0)
+    );
+    assert!(matches!(identity.trace(), Err(E::UnboundOperator)));
+    let factors: Vec<_> = (0..usize::BITS + 1)
+        .map(qmb_core::HilbertSpace::<_, SpinHalf>::factor)
+        .collect();
+    let space = qmb_core::HilbertSpace::tensor(factors.iter().cloned()).unwrap();
+    let state = Ket::tensor(factors.iter().map(|f| LS::primitive(Up).at(f).unwrap())).unwrap();
+    assert!(space.dimension().is_err());
+    assert_eq!(
+        identity.trace_in(&space).unwrap(),
+        c(2f64.powi(factors.len() as i32), 0.0)
+    );
+    assert_eq!(state.inner_product(&state).unwrap(), c(1.0, 0.0));
+    let local = LO::primitive(Sz).at(factors.last().unwrap()).unwrap();
+    assert_eq!(state.expectation(&local).unwrap(), c(0.5, 0.0));
+    let zero = state
+        .act(&LO::primitive(SPlus).at(&factors[0]).unwrap())
+        .unwrap()
+        .evaluate()
+        .unwrap();
+    assert!(zero.space().is_compatible_with(&space));
+    assert_eq!(zero.inner_product(&zero).unwrap(), c(0.0, 0.0));
+    let scalar = Op::scalar(c(0.3, 0.2)).bind(&space).unwrap();
+    assert_eq!(state.expectation(&scalar).unwrap(), c(0.3, 0.2));
+    let nested = Op::identity().bind(&factors[0]).unwrap();
+    assert_eq!(
+        nested.trace_in(&space).unwrap(),
+        identity.trace_in(&space).unwrap()
+    );
+    assert!(nested.space().unwrap().is_compatible_with(&factors[0]));
+
+    let placed_identity = LO::primitive(I)
+        .at(&factors[0])
+        .unwrap()
+        .bind(&factors[0])
+        .unwrap();
+    assert_eq!(placed_identity.trace().unwrap(), c(2.0, 0.0));
+    assert_eq!(
+        placed_identity.trace_in(&space).unwrap(),
+        identity.trace_in(&space).unwrap()
+    );
+    assert_eq!(placed_identity.trace().unwrap(), c(2.0, 0.0));
+    let bound_zero = Op::sum([]).unwrap().bind(&space).unwrap();
+    assert_eq!(bound_zero.trace().unwrap(), c(0.0, 0.0));
+    assert!(bound_zero.domain().unwrap().shares_node_with(&space));
+    assert!(bound_zero.codomain().unwrap().shares_node_with(&space));
+    assert_eq!(
+        Op::product_all([]).unwrap().trace_in(unit.space()).unwrap(),
+        c(1.0, 0.0)
+    );
 }

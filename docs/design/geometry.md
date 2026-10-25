@@ -6,7 +6,7 @@
 
 本書は、[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づき、Geometry の Site・関係と、Site への自由度の配置に関する契約を定める。具体的な Rust の型・公開 API・内部表現は定めない。
 
-Geometry・Site・近接関係と Site への対応付けは `qmb-geometry` が担当する。`qmb-core` が所有する Index・空間・共通式を利用し、局所式への Index 付与・作用空間への束縛・代数的評価は core に委譲する。モデル構築補助は `qmb` に置く。
+Geometry・Site・近接関係と Site への対応付けは `qmb-geometry` が担当する。Index 型をジェネリックに扱う `qmb-core` の空間・共通式を利用し、局所式への Index 付与・作用空間への束縛・代数的評価は core に委譲する。具体的な UUID Index と発行は `qmb-basic`、モデル構築補助は `qmb` に置く。
 
 | 対象 | 責任 |
 | --- | --- |
@@ -54,6 +54,8 @@ Site に対応付ける空間は Factor・Tensor のどちらでもよい。そ�
 | Site 側からの Index 発行 | Geometry と Site ごとの自由度数から順序付き Index 列を発行し、その対応を保持する。発行済み Index に局所構造を対応付け、Hilbert 空間を構成する |
 
 後者は [Index の独立した発行](index.md)を補助する操作である。局所構造を指定せずに Index を先に発行し、自由度の構築ではその Index を明示的に利用する。発行した列の参照・列挙では再発行しない。自由度数は Index の個数であり、Hilbert 空間の次元や Tensor の直下の子の個数ではない。局所構造と積の種類は、空間を構成する側が別途指定する。
+
+発行補助は外部から与えられる Index の発行処理を利用し、UUID や乱数源を必須依存にしない。標準の発行処理として `qmb-basic` の seed 指定不要の UUID Index を利用できる。具体的な発行処理の受け渡し API は実装設計で定める。
 
 入力列の順序と Site への割り当て方は、各 Geometry が既定の規則を定める。ライブラリ全体で一つの配置順序に固定しない。各 Geometry は次を明示する。
 

@@ -516,10 +516,7 @@ fn basis_dimensions_handle_unit_large_and_overflow_cases() {
         Err(DimensionOverflow)
     );
     let error: &dyn core::error::Error = &DimensionOverflow;
-    assert_eq!(
-        error.to_string(),
-        "operator-space dimension overflows usize"
-    );
+    assert_eq!(error.to_string(), "space dimension overflows usize");
     assert!(error.source().is_none());
 }
 
@@ -623,4 +620,184 @@ fn check_three_level_expressions<T: Real>() {
 fn three_level_expressions_and_nonorthogonal_basis_match_matrices() {
     check_three_level_expressions::<f32>();
     check_three_level_expressions::<f64>();
+}
+
+type CompositeState<T> = qmb_core::State<u8, ThreeLevel, T>;
+type CompositeOperator<T> = qmb_core::Operator<u8, ThreeLevel, T>;
+type CompositeSpace = qmb_core::HilbertSpace<u8, ThreeLevel>;
+type PairVector<T> = [Complex<T>; 9];
+type PairMatrix<T> = [[Complex<T>; 9]; 9];
+
+fn kronecker<T: Real>(a: Matrix<T>, b: Matrix<T>) -> PairMatrix<T> {
+    std::array::from_fn(|i| std::array::from_fn(|j| a[i / 3][j / 3] * b[i % 3][j % 3]))
+}
+
+fn tensor_vector<T: Real>(a: Vector<T>, b: Vector<T>) -> PairVector<T> {
+    std::array::from_fn(|i| a[i / 3] * b[i % 3])
+}
+
+fn pair_multiply<T: Real>(a: PairMatrix<T>, b: PairMatrix<T>) -> PairMatrix<T> {
+    std::array::from_fn(|i| {
+        std::array::from_fn(|j| (0..9).fold(c(0.0, 0.0), |sum, k| sum + a[i][k] * b[k][j]))
+    })
+}
+
+fn pair_adjoint<T: Real>(a: PairMatrix<T>) -> PairMatrix<T> {
+    std::array::from_fn(|i| std::array::from_fn(|j| a[j][i].conj()))
+}
+
+fn pair_apply<T: Real>(a: PairMatrix<T>, x: PairVector<T>) -> PairVector<T> {
+    a.map(|row| {
+        row.into_iter()
+            .zip(x)
+            .fold(c(0.0, 0.0), |sum, (a, x)| sum + a * x)
+    })
+}
+
+fn pair_dot<T: Real>(a: PairVector<T>, b: PairVector<T>) -> Complex<T> {
+    a.into_iter()
+        .zip(b)
+        .fold(c(0.0, 0.0), |sum, (a, b)| sum + a.conj() * b)
+}
+
+fn pair_trace<T: Real>(a: PairMatrix<T>) -> Complex<T> {
+    (0..9).fold(c(0.0, 0.0), |sum, i| sum + a[i][i])
+}
+
+fn composite_coordinates<T: Real>(
+    state: &CompositeState<T>,
+    factors: &[CompositeSpace; 2],
+) -> PairVector<T> {
+    use qmb_core::LocalState;
+    let evaluated = state.evaluate().unwrap();
+    std::array::from_fn(|n| {
+        let left = LocalState::primitive(Ket::Unit(AXES[n / 3]))
+            .at(&factors[0])
+            .unwrap();
+        let right = LocalState::primitive(Ket::Unit(AXES[n % 3]))
+            .at(&factors[1])
+            .unwrap();
+        left.tensor_product(&right)
+            .unwrap()
+            .inner_product(&evaluated)
+            .unwrap()
+    })
+}
+
+fn assert_pair_vector<T: Real>(actual: PairVector<T>, expected: PairVector<T>) {
+    for (a, b) in actual.into_iter().zip(expected) {
+        assert_complex(a, b);
+    }
+}
+
+fn check_three_level_composites<T: Real>() {
+    use qmb_core::{LocalOperator as O, LocalState as S};
+    let factors = [CompositeSpace::factor(17), CompositeSpace::factor(3)];
+    let [a, b] = &factors;
+    let h = a.tensor_product(b).unwrap();
+    let grouped = a
+        .tensor_product(&CompositeSpace::tensor([CompositeSpace::unit(), b.clone()]).unwrap())
+        .unwrap();
+    assert!(h.is_compatible_with(&grouped));
+
+    // Import a nonorthogonal expansion, then place the whole local expression.
+    // The reference uses literal ket coordinates, not basis expansion or Act.
+    let local = S::<ThreeLevel, T>::from_linear_combination(
+        <NonOrthogonal as Basis<Ket, T>>::expand(&NonOrthogonal, &Ket::Phase).map(S::primitive),
+    );
+    let left = local.at(a).unwrap();
+    let right = S::primitive(Ket::Sum).at(b).unwrap();
+    let first = left.tensor_product(&right).unwrap();
+    let second = S::primitive(Ket::Unit(Axis::C))
+        .at(a)
+        .unwrap()
+        .tensor_product(&S::primitive(Ket::Phase).at(b).unwrap())
+        .unwrap();
+    let state = first.add(&second.scaled(c(-0.2, 0.3))).unwrap();
+    let x = tensor_vector(Ket::Phase.coordinates::<T>(), Ket::Sum.coordinates());
+    let y = tensor_vector(Ket::Unit(Axis::C).coordinates(), Ket::Phase.coordinates());
+    let reference = std::array::from_fn(|i| x[i] + c::<T>(-0.2, 0.3) * y[i]);
+    assert_pair_vector(composite_coordinates(&state, &factors), reference);
+    assert_complex(
+        state.inner_product(&state).unwrap(),
+        pair_dot(reference, reference),
+    );
+
+    let primitives: Vec<_> = AXES
+        .into_iter()
+        .flat_map(|i| AXES.map(|j| Operator::Unit(i, j)))
+        .chain([Operator::Identity])
+        .collect();
+    let identity = matrix(Operator::Identity);
+    for &oa in &primitives {
+        let alpha = O::<ThreeLevel, T>::primitive(oa)
+            .at(a)
+            .unwrap()
+            .scaled(c(0.3, -0.4))
+            .add(&CompositeOperator::scalar(c(-0.1, 0.2)))
+            .unwrap();
+        let am: PairMatrix<T> = std::array::from_fn(|i| {
+            std::array::from_fn(|j| {
+                c::<T>(0.3, -0.4) * kronecker(matrix(oa), identity)[i][j]
+                    + c::<T>(-0.1, 0.2) * kronecker(identity, identity)[i][j]
+            })
+        });
+        for &ob in &primitives {
+            let beta = O::primitive(ob)
+                .at(b)
+                .unwrap()
+                .add(
+                    &O::primitive(Operator::Unit(Axis::B, Axis::A))
+                        .at(a)
+                        .unwrap()
+                        .scaled(c(0.2, 0.1)),
+                )
+                .unwrap();
+            let bm: PairMatrix<T> = std::array::from_fn(|i| {
+                std::array::from_fn(|j| {
+                    kronecker(identity, matrix(ob))[i][j]
+                        + c::<T>(0.2, 0.1)
+                            * kronecker(matrix(Operator::Unit(Axis::B, Axis::A)), identity)[i][j]
+                })
+            });
+            let product = alpha.product(&beta).unwrap();
+            let pm = pair_multiply(am, bm);
+            let applied = state.act(&product).unwrap();
+            assert_pair_vector(
+                composite_coordinates(&applied, &factors),
+                pair_apply(pm, reference),
+            );
+            assert_pair_vector(
+                composite_coordinates(&state.act(&beta).unwrap().act(&alpha).unwrap(), &factors),
+                pair_apply(pm, reference),
+            );
+            let adjoint = product.adjoint();
+            assert_pair_vector(
+                composite_coordinates(&state.act(&adjoint).unwrap(), &factors),
+                pair_apply(pair_adjoint(pm), reference),
+            );
+            assert_complex(product.trace_in(&grouped).unwrap(), pair_trace(pm));
+            assert_complex(adjoint.trace_in(&h).unwrap(), pair_trace(pair_adjoint(pm)));
+            assert_complex(
+                state.expectation(&product).unwrap(),
+                pair_dot(reference, pair_apply(pm, reference)),
+            );
+            assert_complex(
+                alpha.hilbert_schmidt_inner_product_in(&beta, &h).unwrap(),
+                pair_trace(pair_multiply(pair_adjoint(am), bm)),
+            );
+        }
+    }
+    assert_pair_vector(composite_coordinates(&state, &factors), reference);
+    // Identity is returned as three matrix-unit terms by this algebra.
+    assert_complex(
+        CompositeOperator::<T>::identity().trace_in(&h).unwrap(),
+        c(9.0, 0.0),
+    );
+}
+
+#[test]
+fn three_level_composites_and_nonorthogonal_imports_match_kronecker_matrices() {
+    check_three_level_composites::<f32>();
+    check_three_level_composites::<f64>();
 }

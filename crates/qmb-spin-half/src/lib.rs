@@ -50,6 +50,25 @@
 //! assert_eq!(down.inner_product(&result), Complex::new(0.5, 0.0));
 //! assert_eq!(sx.product(&sx).trace(), Complex::new(0.5, 0.0));
 //! ```
+//!
+//! Place local expressions on independently identified factors to form a system:
+//!
+//! ```
+//! use qmb_core::{Complex, HilbertSpace, LocalOperator, LocalState};
+//! use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket};
+//!
+//! let a = HilbertSpace::<_, SpinHalf>::factor("a");
+//! let b = HilbertSpace::factor("b");
+//! let h = a.tensor_product(&b)?;
+//! let up = LocalState::<SpinHalf, f64>::primitive(Ket::Up).at(&a)?;
+//! let down = LocalState::primitive(Ket::Down).at(&b)?;
+//! let state = up.tensor_product(&down)?;
+//! let sz = LocalOperator::primitive(Op::Sz);
+//! let zz = sz.at(&a)?.product(&sz.at(&b)?)?.bind(&h)?;
+//! assert_eq!(state.expectation(&zz)?, Complex::new(-0.25, 0.0));
+//! assert_eq!(zz.trace()?, Complex::new(0.0, 0.0));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 #![no_std]
 #![forbid(unsafe_code)]

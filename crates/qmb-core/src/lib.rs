@@ -1,9 +1,11 @@
-//! Abstract local-algebra contracts and finite linear combinations.
+//! Abstract algebra contracts, shared expressions and ordinary tensor spaces.
 //!
 //! Coefficients use [`Complex<T>`](Complex). Numeric bounds belong to individual
 //! operations; primitive types need not be tied to a numeric precision.
 //! This crate uses `alloc` but does not require `std` or a math-function backend.
-//! Local expressions share immutable nodes and evaluate using primitive rules.
+//! Local and composite expressions share immutable nodes and evaluate using
+//! primitive rules. [`HilbertSpace`] holds ordered factors with generic indices;
+//! index generation and concrete algebras belong to separate crates.
 //!
 //! ```
 //! use qmb_core::{Complex, LinearCombination};
@@ -47,12 +49,14 @@ pub mod expr;
 pub mod linear_combination;
 pub mod local_structure;
 pub mod ops;
+pub mod space;
 
 pub use basis::{Basis, operator_basis_len, state_basis_len};
 pub use error::DimensionOverflow;
-pub use expr::{LocalOperator, LocalState};
+pub use expr::{ExpressionError, LocalOperator, LocalState, Operator, State};
 pub use linear_combination::{IntoTerms, LinearCombination, Term};
 pub use local_structure::{Identity, LocalStructure};
 pub use num_complex::Complex;
 pub use num_traits;
 pub use ops::{Act, Adjoint, InnerProduct, Product, Trace};
+pub use space::{HilbertSpace, SpaceError};

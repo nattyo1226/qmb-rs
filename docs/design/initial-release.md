@@ -1,6 +1,6 @@
 # 初期版の提供範囲と完成条件
 
-更新日: 2026-10-22
+更新日: 2026-10-23
 
 ## 1. 初期版の目的と文書の位置付け
 
@@ -12,10 +12,10 @@
 
 | 対象 | 初期版で提供するもの |
 | --- | --- |
-| Index・自由度 | Index の独立した発行と再利用、局所構造との組による自由度の構築、局所式への明示的な Index の付与 |
+| Index・自由度 | core では Index 型をジェネリックに扱い同一性を照合する。basic では UUID による具体型と seed 指定不要の独立した発行を提供する。再利用、局所構造との組による自由度の構築、局所式への明示的な Index の付与 |
 | 局所構造 | Spin-1/2。状態 primitive は `up, down`、演算子 primitive は `I, Sx, Sy, Sz, S+, S-`。局所積・作用・内積・随伴・trace・恒等演算子と、その整合性 |
 | 拡張性 | ユーザ定義の有限次元局所構造・primitive・規則・基底を、別の系で単独利用できること |
-| Hilbert 空間 | 同じ局所構造の基本因子による Factor・入れ子 Tensor、ordinary tensor product、次元、構成要素・Index の列挙、互換性判定、部分系判定、空・単因子の契約 |
+| Hilbert 空間 | 基本自由度を表す葉（Factor）と入れ子 Tensor を同じ HilbertSpace 型で扱い、独立した Dof 型は設けない。同じ局所構造の因子、ordinary tensor product、次元、構成要素・Index の列挙、互換性判定、部分系判定、空・単因子の契約 |
 | 状態・演算子式 | 合意済みの加算・scalar multiplication・zero・identity、状態の tensor product、演算子積、配置・束縛、作用・内積・随伴・full/partial trace |
 | 導出する操作 | Norm・正規化・bra、期待値・正規化期待値、commutator / anticommutator、Hilbert–Schmidt 内積 |
 | 基底 | 順序付き状態基底 `{up,down}`、演算子基底 `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}`、それらの tensor product 基底。指定基底への展開・再展開・係数取得 |
@@ -84,7 +84,7 @@ Index の一意性・同一性、不変な実体の共有、および個別ル�
 
 ## 5. 残る実装設計
 
-crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・Index・空間・評価・基底処理は `qmb-core` に集約し、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、利用窓口の `qmb` と合わせて5 crate を構成する。spin・geometry・export は core に依存し、core はそれらに依存しない。
+crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、利用窓口の `qmb` と合わせて6 crate を構成する。basic・spin・geometry・export は core に依存し、core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。
 
 式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, T>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数精度 `T` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装する。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
 
@@ -92,4 +92,8 @@ Step 2 の採用済み方針として、`LocalStructure` を係数型に依存�
 
 評価器は状態評価・演算子の作用・演算子項の走査を分担し、状態の作用評価に Product 能力を要求しない。型制約は必要な操作にだけ付け、演算子構文は所有値・借用値の4通りに対応する。評価と最後の所有者になった式節点の破棄は反復的に行う。長い式の評価・破棄、共有、不要な primitive 複製の抑制、空・単一項のコンテナ無確保を検証条件とし、map 全般の無確保や特定の実行時間は保証しない。
 
-非公開の作業領域・補助関数、後続の空間の内部表現・複合評価、および数値 backend の具体的な選択は各段階で定める。本書の提供範囲と完成条件を、それらの設計・実装の基準とする。Step 2 の局所式・評価と API の移行は実装済みであり、初期版全体の完成を意味しない。
+Step 3 の空間・複合式・共有・束縛・エラー・評価経路は [採用済みの実装方針](../step-3-design.md)に従う。局所構造は型 `L` による固定定義、空間は `Arc` の共有ハンドルとし、総次元の overflow は取得時に検出する。状態は常に所属空間を持ち、演算子の束縛は外側のハンドルへ集約する。検証が必要な複合操作は `Result` を返し、作用・内積・full trace を目的別に評価する。
+
+Norm・正規化・bra・正規化期待値は、局所式と複合式に共通する数値 API を別途設計し、Step 4 の受入確認までに実装する。Partial trace・基底処理は Step 5、数値 backend は Step 6 で具体化する。これらは本書の必須機能として維持する。
+
+非公開の節点・作業領域・補助関数、メソッド名・型引数・シグネチャの詳細、および追加依存の選択は採用済み方針の範囲で各段階に定める。Step 2 の局所式・評価と API の移行、および Step 3 の空間・配置・複合評価と basic の UUID Index は実装済みである。Step 4 以降の機能と初期版全体の完成とは区別する。
