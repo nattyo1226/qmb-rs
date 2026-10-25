@@ -8,12 +8,12 @@ use super::{
 };
 use crate::{Act, Adjoint, Complex, Identity, InnerProduct, LocalStructure, Product, Trace};
 
-fn conjugate<T: Neg<Output = T>>(value: Complex<T>) -> Complex<T> {
+pub(super) fn conjugate<T: Neg<Output = T>>(value: Complex<T>) -> Complex<T> {
     Complex::new(value.re, -value.im)
 }
 // Keep the coefficient bounds at the arithmetic operation. Complex<T>'s Num
 // implementation would additionally require division/remainder not used here.
-fn multiply<T>(a: Complex<T>, b: Complex<T>) -> Complex<T>
+pub(super) fn multiply<T>(a: Complex<T>, b: Complex<T>) -> Complex<T>
 where
     T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
 {
@@ -22,10 +22,10 @@ where
         a.re * b.im + a.im * b.re,
     )
 }
-fn add<T: Add<Output = T>>(a: Complex<T>, b: Complex<T>) -> Complex<T> {
+pub(super) fn add<T: Add<Output = T>>(a: Complex<T>, b: Complex<T>) -> Complex<T> {
     Complex::new(a.re + b.re, a.im + b.im)
 }
-fn zero<T: Zero>() -> Complex<T> {
+pub(super) fn zero<T: Zero>() -> Complex<T> {
     Complex::new(T::zero(), T::zero())
 }
 

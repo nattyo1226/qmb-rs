@@ -9,6 +9,10 @@ use core::num::NonZeroUsize;
 /// request those capabilities where they are used. Concrete rules must preserve
 /// linear relations, associativity, identity, action, inner-product/adjoint
 /// compatibility, and the ordinary unnormalized trace.
+///
+/// One implementation type denotes one fixed definition and parameter set.
+/// Runtime values must not change that definition; composite spaces and
+/// expressions connect only when they use the same structure type.
 pub trait LocalStructure {
     /// State primitive type.
     type State;

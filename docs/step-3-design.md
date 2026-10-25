@@ -1,10 +1,10 @@
 # Step 3: 空間・配置・複合評価の実装方針
 
-更新日: 2026-10-22
+更新日: 2026-10-23
 
 ## 1. 位置付けと実装範囲
 
-本書は [実装計画](implementation-plan.md)の Step 3 に向けて採用した設計判断をまとめる。Step 1・2 は実装済み、ここで扱う Step 3 は未実装である。[要件](requirements.md)、[Index](design/index.md)、[局所構造](design/local-structure.md)、[Hilbert 空間](design/hilbert-space.md)、[複合式](design/composite-expression.md)の数学的契約に従う。
+本書は [実装計画](implementation-plan.md)の Step 3 で採用した設計判断と実装結果をまとめる。Step 1〜3 は実装済みである。[要件](requirements.md)、[Index](design/index.md)、[局所構造](design/local-structure.md)、[Hilbert 空間](design/hilbert-space.md)、[複合式](design/composite-expression.md)の数学的契約に従う。
 
 Step 3 は同じ局所構造の ordinary な複合系を対象とし、Geometry なしで空間・状態・演算子を構築・評価できるところまで実装する。Index の抽象化と Dof の葉への統合、およびその他の推奨案を採用した記録として、以下の方針を確定事項とする。メソッド名・型引数の順序・非公開の補助型などは実装時に整える。
 
@@ -132,10 +132,34 @@ Step 2 の共通パーツ、局所式、局所規則を再利用し、複合系�
 
 対象テストの後、workspace の test・format check・Clippy・警告をエラーとするドキュメント生成を行う。新しい依存を導入する段階で、core の `no_std + alloc` と MSRV への影響を確認する。環境上実行できない確認は未確認として記録する。
 
-## 11. 実装時に詰める詳細と後続事項
+## 11. 実装した API と後続事項
 
 Step 3 の公開型の役割、Index の抽象化、Dof の統合、局所構造の静的な同一性、`Arc` による共有、次元 overflow の検出時点、空間の保持と選択、fallible な複合操作、反復的な評価・破棄は採用済みである。
 
-実装時に詰める詳細は、型引数の順序とメソッド名、Index に専用 trait を設けるか標準 trait を使うか、借用・所有権の具体的なシグネチャ、非公開の節点・作業領域、エラー型・variant、および basic の UUID バージョン・採用ライブラリ・発行 API とする。追加の production 依存は用途・採用理由を示して確認し、文書更新だけで追加済みとは扱わない。
+Step 3 では以下を実装した。型の保持・共有に不要な `Clone`・`Hash`・`Ord`・数値能力は要求しない。Index の照合には専用 trait を追加せず、必要なメソッドで標準の `Eq` を要求する。
+
+| 公開型・対象 | 実装した API |
+| --- | --- |
+| `HilbertSpace<I, L>` | `factor(index)`、`unit()`、`tensor(iter)`、`tensor_product(&rhs)`、`children()`、`indices()`、`factor_index()`、`dimension()`、`is_compatible_with(&rhs)`、`is_subsystem_of(&ambient)`、`contains_index(&index)`。`shares_node_with` は共有実体の確認用 |
+| 局所式の配置 | `LocalState::at(&factor)`・`LocalOperator::at(&factor)`。式全体を共有して葉へ配置する |
+| `State<I, L, T>` | `place`、`zero(&space)`、`unit()`、`sum(&space, iter)`、`add`、`tensor`・`tensor_product`、`scaled`、`space`・`domain`・`codomain`、`act`・`act_in`、`evaluate`、`inner_product`、`expectation`・`expectation_in` |
+| `Operator<I, L, T>` | `place`、`zero()`、`identity()`、`scalar`、`sum`、`add`、`product_all`・`product`、`scaled`、`adjoint`、`bind`、`space`・`domain`・`codomain`、`commutator`・`anticommutator`、`trace`・`trace_in`、`hilbert_schmidt_inner_product` とその `_in` 版 |
+| エラー | `SpaceError::DuplicateIndex`、`ExpressionError::{NotAFactor, IncompatibleSpaces, MissingIndex, UnboundOperator, Space}`、次元取得の `DimensionOverflow` |
+| `qmb_basic::Index` | UUID v4 を包む不透明な具体型。`new()` と `Default` は seed 指定不要の新規発行、`Clone`・`Copy` は同一性を保持する。`Display` と比較・hash にも対応する。`qmb_basic::HilbertSpace<L>` はこの Index を使う別名 |
+
+名前付きの二項メソッドは共有借用を基本とし、式同士の `+`・`-`・演算子積・作用の演算子構文は所有値・借用値の4通りを実装した。検証を伴う演算子構文は `Result` を返す。単項負号と複素係数による左右の乗算も提供する。
+
+UUID の依存指定は `uuid = { version = "1.18.1", features = ["v4"] }` とし、検証環境では `uuid 1.26.1`・`getrandom 0.4.3` が解決された。UUID の発行は OS の乱数源を使い、乱数取得失敗時の挙動は `uuid::Uuid::new_v4` に従う。UUID・乱数源は core の通常依存に含めない。
 
 Norm・正規化・bra・正規化期待値の具体的な数値 API は Step 4 の受入確認までに決める。Partial trace・基底展開・座標取得は Step 5、数値 backend は Step 6 で具体化する。異種局所構造、実行時の定義パラメータ、異なる実装型間の定義照合、graded、保存・復元、キャッシュ、並列化などは既存の延期方針に従う。
+
+## 12. 実装・検証状況
+
+2026-10-23 に Step 3 の実装を確認した。
+
+- Spin-half の三因子系と、core の公開 API だけで定義した三次元代数の二因子系を、単精度・倍精度の独立した Kronecker 行列計算と照合した。積・順次作用・随伴・内積・期待値・full trace・Hilbert–Schmidt 内積、非正規直交基底から取り込んだ局所式を含む。
+- UUID に依存しない `Eq` だけの Index、非 Clone な primitive と借用、数値能力のない型での構築、Product を持たない演算子の作用、Num・Float・除算・剰余・Copy を要求しない係数計算を検証した。空間・精度の混在と非 Send の Index は compile-fail テストで確認した。
+- 所有値・借用値の演算子構文、入力・spectator の共有、束縛の合成と明示空間による上書き、zero・identity の空間と参照の検証を確認した。総次元が `usize` を超える系でも、作用・内積・期待値・trace が行列を作らず利用できる。
+- 2万段の入れ子空間、状態の tensor・和・係数乗算・作用、演算子の積・随伴と trace を128 KiB のスタック上で走査・評価・破棄した。
+- 既存の direnv 環境（Rust 1.98.0）で全70テスト（doc test を含む）、format check、Clippy、警告をエラーとするドキュメント生成を確認した。core の依存に UUID・乱数源・`std`・`libm` が入らないことも確認した。
+- 解決された UUID・getrandom の package metadata は Rust 1.85 を要求する。宣言した MSRV（Rust 1.85）での実行と `std` のない target 向けビルドは、対応 toolchain・target がないため未確認である。

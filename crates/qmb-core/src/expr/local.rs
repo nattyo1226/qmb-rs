@@ -106,6 +106,9 @@ impl<L: LocalStructure, T> Clone for LocalOperator<L, T> {
 }
 
 impl<L: LocalStructure, T> LocalState<L, T> {
+    pub(crate) fn has_pending_action(&self) -> bool {
+        self.has_action
+    }
     pub(super) fn new(node: StateNode<L, T>) -> Self {
         let has_action = match &node {
             StateNode::Primitive(_) => false,
