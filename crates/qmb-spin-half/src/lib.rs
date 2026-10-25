@@ -74,10 +74,13 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+extern crate alloc;
+
 pub mod basis;
 pub mod local_structure;
 pub mod operator;
 pub mod state;
+pub mod utility;
 
 mod coefficient;
 

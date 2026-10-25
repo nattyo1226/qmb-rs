@@ -456,6 +456,7 @@ fn scalar_reductions_need_no_num_division_remainder_one_or_copy() {
         .trace();
     assert_eq!((trace.re.0, trace.im.0), (3, -4));
     let state = LocalState::<RingStructure, Ring>::primitive(Primitive);
+    assert_eq!(state.norm_squared().0, 1);
     let expectation = state.expectation(&op);
     assert_eq!((expectation.re.0, expectation.im.0), (3, 4));
 }

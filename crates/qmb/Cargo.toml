@@ -1,0 +1,16 @@
+[package]
+name = "qmb"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Quantum many-body algebra facade and examples"
+
+[features]
+default = ["libm"]
+libm = ["qmb-core/libm"]
+
+[dependencies]
+qmb-core.workspace = true
+qmb-basic.workspace = true
+qmb-geometry.workspace = true
+qmb-spin-half.workspace = true

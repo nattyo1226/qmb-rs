@@ -55,7 +55,7 @@ pub mod space;
 
 pub use basis::{Basis, operator_basis_len, state_basis_len};
 pub use error::DimensionOverflow;
-pub use expr::{ExpressionError, LocalOperator, LocalState, Operator, State};
+pub use expr::{ExpressionError, LocalOperator, LocalState, NormalizationError, Operator, State};
 pub use linear_combination::{IntoTerms, LinearCombination, Term};
 pub use local_structure::{Identity, LocalStructure};
 pub use num_complex::Complex;

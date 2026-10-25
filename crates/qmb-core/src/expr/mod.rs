@@ -7,10 +7,12 @@ mod composite_eval;
 mod evaluate;
 mod inner_product;
 mod local;
+mod normalization;
 mod operators;
 
 pub use composite::{ExpressionError, Operator, State};
 pub use local::{LocalOperator, LocalState};
+pub use normalization::NormalizationError;
 
 #[cfg(test)]
 mod tests;

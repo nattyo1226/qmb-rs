@@ -96,7 +96,7 @@ crate ごとに完成させるのではなく、抽象契約と具体的代数�
 | 1. 抽象契約と具体例（実装済み） | `qmb-core` と `qmb-spin-half`。能力 trait、有限線型結合、spin の局所規則・基底 | core の公開契約だけで spin の積・作用・随伴・内積・trace・基底展開を記述できる |
 | 2. 局所式と評価・既存 API の整備（実装済み） | 3.1 節の採用済み方針に従い、局所構造と演算能力の分離、共通パーツ・項型の統合、関連型・map・constructor、局所式・共有・反復的な評価と破棄を core・spin-half・テストへ実装する。基底の marker trait を削除し、Basis を直接使う | 両 marker trait の定義・再公開・実装宣言・利用がコード・テスト・doc test から除去される。数値能力のない型での式構築、Product のない演算子の作用評価、所有値・借用値の4通り、長い式の評価・破棄、規則・基底の数学的結果、map の保持特性、入力の不変性・共有、空・単一項のコンテナ無確保を検証する |
 | 3. 空間と複合評価（実装済み） | [採用済み方針](step-3-design.md)に従い、`qmb-core` にジェネリックな Index の照合、HilbertSpace の葉と入れ子 Tensor、互換性・部分系判定、配置・束縛、複合作用・内積・期待値・随伴・full trace・導出操作。`qmb-basic` に UUID の具体型と発行 API | Geometry なしで同種の複数因子を評価でき、zero・identity の空間保持、明示空間の優先、早期のエラー検出、深い空間の反復的な走査・破棄、総次元 overflow と空間構築の分離を検証できる。core は独自 Index 型で動作し、basic は seed 指定なしで発行できる |
-| 4. 最初の縦断例と導出操作の補完 | [合意事項](step-4-decisions.md)に従い、Geometry・Chain・近接関係、basic の Id128 への改名、spin-half の Heisenberg・Neel utility、qmb の再公開・縦断例を実装する。core の局所式・複合式へ norm・正規化・正規化期待値と libm feature を追加する。bra・内部ラベルは初期版に導入しない | 行列化せず open chain の期待値 `−J(L−1)/4` を得る。Neel の norm、zero-norm の拒否、0-site と periodic の小規模規約も確認する |
+| 4. 最初の縦断例と導出操作の補完（実装済み） | [合意事項](step-4-decisions.md)に従い、Geometry・Chain・近接関係、basic の Id128 への改名、spin-half の Heisenberg・Neel utility、qmb の再公開・縦断例を実装する。core の局所式・複合式へ norm・正規化・正規化期待値と libm feature を追加する。bra・内部ラベルは初期版に導入しない | 行列化せず open chain の期待値 `J(L−1)/4` を得る。Neel の norm、zero-norm の拒否、0-site と periodic の小規模規約も確認する |
 | 5. 縮約・座標取得 | `qmb-core` に partial trace、複合基底、式の展開・再展開・係数取得、写像の表現係数 | 残存空間、mixed-radix 順序、非正規直交基底、入力ごとの共役指定を正しく扱える |
 | 6. 数値接続と受入確認 | `qmb-export`。密ベクトル・密行列、続いて疎ベクトル・疎行列を接続し、利用例を完成させる | 代数計算・表現係数・密・疎の各経路が一致し、疎変換が密表現を中間生成せず、初期版の完成条件を満たす |
 
@@ -131,6 +131,19 @@ crate ごとに完成させるのではなく、抽象契約と具体的代数�
 - `HilbertSpace<I, L>`、`State<I, L, T>`・`Operator<I, L, T>` と配置・束縛・複合評価、`qmb-basic` の UUID v4 Index を実装した。Index の照合は標準の `Eq` を使い、core は UUID・乱数源に依存しない。
 - Spin-half の三因子系と、非公開の三次元代数の二因子系を、単精度・倍精度の独立した Kronecker 行列計算と照合した。非正規直交基底からの取り込み、空間・束縛・エラー・所有権、総次元の overflow、2万段の空間・状態・演算子の128 KiB スタック上での処理も検証した。
 - Rust 1.98.0 の direnv 環境で全70テスト（doc test 含む）、format check、Clippy、警告をエラーとするドキュメント生成を確認した。MSRV（Rust 1.85）での実行と `std` のない target 向けビルドは対応環境がないため未確認である。詳細は [Step 3 の検証状況](step-3-design.md#12-実装検証状況)に記録する。
+
+### 4.4. 段階4の実装・検証状況
+
+2026-10-25 に段階4の完了条件を満たすことを確認した。
+
+同日のリファクタリングで、負符号の規約 `−Σ(Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j)` の XYZ utility を追加した。Heisenberg は等方結合として XYZ に委譲する。異方的な XYZ の行列照合と等方極限のテストも追加した。エラーの定義・表示・変換は既存の thiserror に揃え、geometry・spin-half からも直接利用する。
+
+- `qmb-geometry` に不変な Site 配置、Chain、open / periodic 境界、`NearestNeighborRelation` と借用による全組合せ・位置対応の Index ペア列挙を実装した。新規発行は `I::default()` に限定し、既存空間の構造・Index・共有と明示的な全空間の因子順を保持する。具体的な構築 API は [Step 4 の実装 API](step-4-decisions.md#10-実装した構築-api-と利用例)を参照する。
+- basic の具体型を `Id128` に改名し、UUID v4 の発行・Default・Clone / Copy・比較・hash の契約と型別名を移行した。core に Index 発行 trait は追加していない。
+- spin-half の `utility::{xyz, heisenberg, neel}` と qmb の再公開・実行可能な利用例を追加した。空・単一・二 Site と奇数 periodic、両開始向き、単精度・倍精度の解析的期待値と norm を検証した。Heisenberg の作用・Hermiticity は独立した Pauli 行列の Kronecker 積とも照合した。
+- core の局所式・複合式へ norm squared、libm feature 下の norm・正規化、平方根を使わない正規化期待値、共通エラーを追加した。非正規直交な三次元代数、相殺による zero norm、内積の共役線型性・線型性、明示空間の優先と最小限の数値制約も確認した。bra・内部ラベルは導入していない。
+- Rust 1.98.0 で workspace の全 feature 有効・default feature 無効のテスト、format check、Clippy（全 target・全 feature、警告をエラー化）、警告をエラーとするドキュメント生成が成功した。例は既定構成と default feature 無効の両方で期待値 `1.25` を返した。
+- core・geometry の `no_std + alloc` と通常依存を確認した。追加の外部依存は合意済みの libm（検証時 `0.2.16`）のみで、無効時に通常依存の std・libm を有効化しない。MSRV（Rust 1.85）と専用 no_std target は、対応ツールチェーン・target ライブラリが環境にないため未確認である。
 
 ## 5. 検証方針
 

@@ -1,5 +1,5 @@
 use core::num::NonZeroUsize;
-use qmb_basic::{HilbertSpace, Index};
+use qmb_basic::{HilbertSpace, Id128};
 use qmb_core::LocalStructure;
 
 struct Unit;
@@ -11,9 +11,21 @@ impl LocalStructure for Unit {
 
 #[test]
 fn uuid_generation_and_core_connection_preserve_existing_identity() {
-    let a = Index::new();
-    let b = Index::new();
+    let a = Id128::new();
+    let b = Id128::new();
     assert_ne!(a, b);
+    assert_ne!(a, Id128::default());
+    assert_ne!(Id128::default(), Id128::default());
+    assert_eq!(core::mem::size_of::<Id128>(), 16);
+    fn cloned<T: Clone>(value: &T) -> T {
+        value.clone()
+    }
+    assert_eq!(cloned(&a), a);
+    let copied = a;
+    assert_eq!(copied, a);
+    let mut set = std::collections::HashSet::new();
+    set.insert(a);
+    assert!(set.contains(&copied));
     let display = a.to_string();
     assert_eq!(display.len(), 36);
     assert_eq!(&display[14..15], "4");

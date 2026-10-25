@@ -853,7 +853,7 @@ Geometry は生成時に指定した局所構造型 `L: LocalStructure` を用�
 
 Geometry は近接 Site ペアを列挙する。関係ごとの trait を設け、NearestNeighborRelation の `nn_pairs()` は Site 間の Index 全組合せ、`nn_pairs_by_pos()` は同じ位置同士を短い方まで列挙する。片側が空ならペアなしとし、Site ペア順と葉の順序を維持する。これらは幾何関係の列挙であり、相互作用項の演算子・係数の選択はモデル構築側が行う。公開 API と構築規則は [Step 4 の合意事項](step-4-decisions.md)および [Chain の配置契約](design/geometry.md#41-初期版の-1d-chain-の配置規則)に従う。
 
-Heisenberg Hamiltonian は特別な内部表現を持つ演算子型とせず、一般的な局所演算子積の有限和として表現する。nearest-neighbor 関係に演算子項を割り当てるモデル構築用の便利な処理を、その一般表現の上に提供できるものとする。
+XYZ Hamiltonian は `−Σ(Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j)` の負符号の規約とし、Heisenberg Hamiltonian は `Jx = Jy = Jz = J` の等方的な特別例として構築する。いずれも特別な内部表現を持つ演算子型とせず、一般的な局所演算子積の有限和として表現する。nearest-neighbor 関係に演算子項を割り当てるモデル構築用の便利な処理を、その一般表現の上に提供できるものとする。
 
 Neel 状態は専用の状態型とせず、site ごとに局所状態を交互に割り当てた積状態として表現する。Neel 状態を作る便利な構築処理を提供することは妨げない。先頭 site を `|up>` とするか `|down>` とするかは構築時に指定できる。Heisenberg・Neel utility は各 Site に一つの spin Factor を持つ配置を対象とし、空 Site・複数自由度の Site はエラーとする。0-site では単位状態と zero Hamiltonian を構築する。
 
@@ -899,7 +899,7 @@ Hermiticity と解析的なエネルギー期待値の検証には、実数の�
 等方的 Heisenberg Hamiltonian を
 
 ```math
-H = J \sum_{\langle i,j\rangle}
+H = -J \sum_{\langle i,j\rangle}
     \left(S_i^x S_j^x + S_i^y S_j^y + S_i^z S_j^z\right)
 ```
 
@@ -907,10 +907,10 @@ H = J \sum_{\langle i,j\rangle}
 
 ```math
 \langle \mathrm{Neel}|H|\mathrm{Neel}\rangle
-= -\frac{J}{4}(L-1)
+= \frac{J}{4}(L-1)
 ```
 
-となることを基準ケースとする。
+となることを基準ケースとする。負符号の規約では `J > 0` を強磁性的結合とする。
 
 0-site chain は辺を持たず、Hamiltonian とエネルギーは zero となる特例として検証する。
 

@@ -4,14 +4,14 @@
 
 ## 1. 位置付けと実装範囲
 
-本書は、[実装計画](implementation-plan.md)の Step 4 に適用する合意済みの設計と受入条件をまとめる。実装前の仕様であり、実装完了を示すものではない。数学的契約は[要件](requirements.md)、提供範囲は[初期版の設計](design/initial-release.md)に従う。
+本書は、[実装計画](implementation-plan.md)の Step 4 に適用する合意済みの設計と受入条件をまとめる。実装と検証の状況は[実装計画の段階4](implementation-plan.md#44-段階4の実装検証状況)に記録する。数学的契約は[要件](requirements.md)、提供範囲は[初期版の設計](design/initial-release.md)に従う。
 
 | crate | Step 4 の担当 |
 | --- | --- |
 | `qmb-core` | 局所式・複合式の norm、正規化、正規化期待値、共通エラー、任意の `libm` feature |
 | `qmb-basic` | UUID の具体型を `Index` から `Id128` へ改名し、関連する型別名・利用例・テストを移行 |
 | `qmb-geometry` | Chain、空間の保持と構築、Site・Index の近接ペア列挙。`no_std + alloc` を維持 |
-| `qmb-spin-half` | Heisenberg Hamiltonian・Neel 状態の構築 utility |
+| `qmb-spin-half` | XYZ・Heisenberg Hamiltonian・Neel 状態の構築 utility |
 | `qmb` | 各 crate の再公開、利用例、縦断的な結合テスト。既定で core の `libm` を有効化 |
 
 Partial trace・複合基底・座標取得は Step 5、数値 backend・export は Step 6 とする。bra 型・内部ラベルは初期版では導入しない。
@@ -75,12 +75,12 @@ trait の実装は、`nn_site_pairs()` の各ペアに対応する空間を `sit
 
 これらは幾何関係の列挙であり、Hamiltonian の項を自動生成するものではない。具体的な追加 Geometry・関係の実装は初期版の対象外とする。
 
-## 5. Heisenberg・Neel の構築 utility
+## 5. XYZ・Heisenberg・Neel の構築 utility
 
 構築ロジックは `qmb-spin-half` に置き、`qmb` は再公開と利用例を担当する。幾何関係は `qmb-geometry` の公開契約を利用する。
 
 - 対象は各 Site がちょうど一つの spin Factor を持つ配置。空 Site・複数自由度の Site はこの utility ではエラーにする。Geometry 自体はこれらの Site を扱える。
-- Heisenberg は実数 `J: T` を受け取り、`J Σ(Sx_i Sx_j + Sy_i Sy_j + Sz_i Sz_j)` を通常の演算子積と和で構築し、全空間に bind して返す。
+- XYZ は実数の結合 `Jx, Jy, Jz: T` を受け取り、`−Σ(Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j)` を通常の演算子積と和で構築し、全空間に bind して返す。Heisenberg は `Jx = Jy = Jz = J` として XYZ に委譲し、同じ負符号の規約を用いる。`J > 0` は強磁性的結合とする。
 - Neel は先頭の Up / Down を指定でき、同じ配置から交互の積状態を構築する。奇数長 periodic でも構築を許可し、端点間は同じ向きになる。
 - Index は再発行しない。0-site では単位状態と、全空間へ束縛した zero Hamiltonian を構築する。
 - 複数自由度から作用対象を選ぶ utility は後続で明示的な選択方法を設計する。
@@ -120,7 +120,7 @@ Cargo の feature は加算される。確認した `num-traits 0.2.19` は std 
 
 ## 8. 受入条件と検証
 
-- 両精度・両方の Neel 開始向きで、行列化せず open chain の期待値 `−J(L−1)/4`（`L >= 1`）と norm `1` を得る。実数 J に対する Hermiticity を独立した小規模行列とも照合する。
+- 両精度・両方の Neel 開始向きで、行列化せず open chain の期待値 `J(L−1)/4`（`L >= 1`）と norm `1` を得る。実数 J に対する Hermiticity を独立した小規模行列とも照合する。
 - 0-site の状態は単位状態、norm は `1`、Hamiltonian と期待値は `0`。長さ `0,1,2` の open / periodic、辺の辞書順・正規化・self-loop と重複辺の不在を確認する。
 - Factor・入れ子 Tensor・空 Site・複数自由度の配置、既存 Index・因子順序・grouping・共有の保持、範囲外・Index 重複・入力数不一致の拒否を確認する。内部ラベルと Geometry を跨ぐ所属チェックは対象外とする。
 - 個数からの構築で Default の呼び出し回数・発行順序と Id128 の発行・複製契約を確認する。保持・参照・Clone で再発行せず、Default・Clone を持たない Index でも既存空間から構築できることを検証する。
@@ -132,3 +132,16 @@ Cargo の feature は加算される。確認した `num-traits 0.2.19` は std 
 ## 9. 後続の必須課題
 
 State・Operator・Structure・Space の管理方法と Geometry との依存関係は将来必ず見直す。core の数値ライブラリ依存解消と四つの設計上の問いは、[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)を正として管理する。今回の Step 4 の完了条件には追加せず、現行の型構成・libm 方針で実装する。
+
+## 10. 実装した構築 API と利用例
+
+- `Geometry::<I, L>::new(site_count, degrees_per_site)`：`I: Default + Eq` で個数から生成する。1自由度の Site は Factor、0自由度と複数自由度の Site は Tensor とする。
+- `Geometry::from_sites(sites)`：既存空間を Site 順に保持し、その順序で全空間を構成する。
+- `Geometry::with_space(sites, &space)`：指定した全空間を共有し、各 Site が内部の葉順を保って全 Index を重複なく分割することを確認する。Site 順と全空間の因子順は一致しなくてもよい。
+- `Chain::new(site_count, degrees_per_site, boundary)`、`Chain::from_sites(sites, boundary)`、`Chain::from_geometry(geometry, boundary)`：`Boundary::{Open, Periodic}` を指定して Chain を作る。`Chain::with_sites(site_count, sites, boundary)` は指定した Site 数との一致も確認する。
+- `Geometry::space()`・`Chain::space()` は保持済み全空間を借用する。`Geometry::site(site)` は範囲外をエラーとし、`sites().get(site)` も利用できる。
+- spin-half の構築補助は `qmb_spin_half::utility::{xyz, heisenberg, neel}`、エラーは `utility::UtilityError` とする。`xyz(&chain, jx, jy, jz)` に対して `heisenberg(&chain, j)` は `xyz(&chain, j, j, j)` に相当する。
+- エラーの定義・表示・標準の変換は原則として `thiserror::Error` と属性で記述する。Geometry と utility の既存メッセージ・変換元の `source()` は保持する。
+- 複合式の `norm_squared()`・`norm()` は既存の fallible な内積と同じく `Result<T, ExpressionError>`、局所式は `T` を返す。正規化と正規化期待値は共通の `NormalizationError` を返す。
+
+再公開は `qmb::{core, basic, geometry, spin_half}` にまとめ、主要型を root にも公開した。[実行可能な例](../crates/qmb/examples/heisenberg.rs)は `cargo run -p qmb --example heisenberg` で実行できる。6-site open chain、`J = 1` の Neel 期待値は `1.25`、norm は `1` となる。`--no-default-features` でも、平方根を使わない正規化期待値を計算できる。

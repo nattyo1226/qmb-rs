@@ -7,3 +7,5 @@ description = "Spin-1/2 primitives, local rules, and bases for qmb"
 
 [dependencies]
 qmb-core.workspace = true
+qmb-geometry.workspace = true
+thiserror.workspace = true

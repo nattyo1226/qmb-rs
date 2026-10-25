@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 description = "Abstract contracts and finite linear combinations for quantum many-body algebras"
 
+[features]
+default = []
+libm = ["num-traits/libm"]
+
 [dependencies]
 num-complex.workspace = true
 num-traits.workspace = true
