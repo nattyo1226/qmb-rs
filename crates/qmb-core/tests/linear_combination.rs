@@ -2,7 +2,7 @@ use std::{cell::Cell, iter::FusedIterator, ops, rc::Rc};
 
 use qmb_core::{
     Complex, LinearCombination, Term,
-    num_traits::{Num, One, Zero},
+    num_traits::{One, Zero},
 };
 
 fn term(primitive: u8, re: f64, im: f64) -> Term<u8, f64> {
@@ -125,6 +125,8 @@ fn borrowed_and_owned_iterators_support_mixed_ends_and_exhaustion() {
 fn concatenation_and_owned_operations_require_no_scalar_or_primitive_traits() {
     struct Primitive(u8);
     struct Scalar;
+    let empty = qmb_core::expr::parts::SumExpr::<Primitive>::default();
+    assert!(empty.is_empty());
     fn combination(start: u8, len: u8) -> LinearCombination<Primitive, Scalar> {
         LinearCombination::from_terms((start..start + len).map(|p| Term {
             coefficient: Complex::new(Scalar, Scalar),
@@ -200,7 +202,7 @@ fn coefficient_one_only_needs_zero_and_one_without_clone_or_num() {
     assert_eq!(term.coefficient.im.0, 0);
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 struct HeapReal(Box<f64>);
 
 impl HeapReal {
@@ -220,31 +222,9 @@ macro_rules! arithmetic {
 arithmetic!(Add, add, +);
 arithmetic!(Sub, sub, -);
 arithmetic!(Mul, mul, *);
-arithmetic!(Div, div, /);
-arithmetic!(Rem, rem, %);
-
-impl Zero for HeapReal {
-    fn zero() -> Self {
-        Self::new(0.0)
-    }
-    fn is_zero(&self) -> bool {
-        *self.0 == 0.0
-    }
-}
-impl One for HeapReal {
-    fn one() -> Self {
-        Self::new(1.0)
-    }
-}
-impl Num for HeapReal {
-    type FromStrRadixErr = <f64 as Num>::FromStrRadixErr;
-    fn from_str_radix(s: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        f64::from_str_radix(s, radix).map(Self::new)
-    }
-}
 
 #[test]
-fn scaling_needs_neither_copy_scalars_nor_clone_primitives() {
+fn scaling_only_needs_clone_add_sub_mul_without_numeric_identities_or_comparison() {
     struct Primitive(u8);
     for n in 0..=3 {
         let sum = LinearCombination::from_terms((0..n).map(|p| Term {
@@ -259,14 +239,17 @@ fn scaling_needs_neither_copy_scalars_nor_clone_primitives() {
             assert_eq!(*t.coefficient.im.0, 6.0 - f64::from(t.operand.0));
         }
     }
-    let primitive = LinearCombination::<_, HeapReal>::primitive(Primitive(8));
-    assert_eq!(*primitive.terms().next().unwrap().coefficient.re.0, 1.0);
-    let scaled = primitive.scaled(Complex::new(HeapReal::zero(), HeapReal::zero()));
-    assert_eq!(scaled.len(), 1);
-    assert_eq!(
-        scaled.terms().next().unwrap().coefficient,
-        Complex::new(HeapReal::zero(), HeapReal::zero())
+    let primitive = LinearCombination::term(
+        Complex::new(HeapReal::new(1.0), HeapReal::new(0.0)),
+        Primitive(8),
     );
+    assert_eq!(*primitive.terms().next().unwrap().coefficient.re.0, 1.0);
+    let scaled = primitive.scaled(Complex::new(HeapReal::new(0.0), HeapReal::new(0.0)));
+    assert_eq!(scaled.len(), 1);
+    let term = scaled.into_iter().next().unwrap();
+    assert_eq!(*term.coefficient.re.0, 0.0);
+    assert_eq!(*term.coefficient.im.0, 0.0);
+    assert_eq!(term.operand.0, 8);
 }
 
 #[test]

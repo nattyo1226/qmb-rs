@@ -2,10 +2,14 @@
 
 use crate::{
     Complex,
+    coefficient::multiply,
     expr::parts::{IntoOperands, ScaleExpr, SumExpr},
 };
-use core::{ops::Add, slice};
-use num_traits::{Num, One, Zero};
+use core::{
+    ops::{Add, Mul, Sub},
+    slice,
+};
+use num_traits::{One, Zero};
 
 /// A coefficient and an operand; distinct from an operation's associated `Term`.
 pub type Term<P, T> = ScaleExpr<P, T>;
@@ -73,21 +77,23 @@ impl<P, T> LinearCombination<P, T> {
             }),
         }
     }
-}
 
-impl<P, T: Zero + One> LinearCombination<P, T> {
     /// Constructs one operand with coefficient one.
-    pub fn primitive(operand: P) -> Self {
+    pub fn primitive(operand: P) -> Self
+    where
+        T: Zero + One,
+    {
         Self::term(Complex::new(T::one(), T::zero()), operand)
     }
-}
 
-impl<P, T: Clone + Num> LinearCombination<P, T> {
     /// Multiplies coefficients, without cloning operands or removing zero terms.
-    pub fn scaled(self, coefficient: Complex<T>) -> Self {
+    pub fn scaled(self, coefficient: Complex<T>) -> Self
+    where
+        T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    {
         Self {
             terms: self.terms.map(|term| ScaleExpr {
-                coefficient: term.coefficient * coefficient.clone(),
+                coefficient: multiply(term.coefficient, coefficient.clone()),
                 operand: term.operand,
             }),
         }

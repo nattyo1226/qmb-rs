@@ -2,12 +2,15 @@
 
 use crate::{DimensionOverflow, LinearCombination, LocalStructure};
 
-/// A complete, ordered basis represented using the target primitive type.
+/// Expansion, indexing and enumeration of a complete, ordered basis.
 ///
-/// Implementations must preserve mathematical values on expansion. The basis
-/// need not be orthonormal, and target primitives need not be independent.
-/// Every valid target primitive must be expandable. Configurable basis types
-/// must reject invalid configurations at construction.
+/// The basis need not be orthonormal, and target primitives need not be
+/// independent. Configurable bases must reject invalid configurations at
+/// construction. Implementations must expand every valid target primitive into
+/// elements of this basis while preserving its mathematical value.
+///
+/// Numeric bounds belong to each concrete implementation, rather than this
+/// trait. All three methods use that implementation's coefficient precision.
 pub trait Basis<P, T> {
     /// Expands a primitive into a combination of elements of this basis.
     fn expand(&self, primitive: &P) -> LinearCombination<P, T>;

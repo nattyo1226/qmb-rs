@@ -53,6 +53,36 @@ type S<'a, T = f64> = State<Index, L<'a>, T>;
 type O<'a, T = f64> = Operator<Index, L<'a>, T>;
 
 #[test]
+fn evaluated_contraction_only_requires_primitive_inner_products() {
+    struct InnerOnly;
+    struct Metadata;
+    struct OpaqueIndex;
+    impl LocalStructure for Metadata {
+        type State = InnerOnly;
+        type Operator = ();
+        const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
+    }
+    impl InnerProduct<f64> for InnerOnly {
+        fn inner_product(&self, _: &Self) -> Complex<f64> {
+            Complex::new(1.0, 0.0)
+        }
+    }
+    // Neither Act nor Adjoint is implemented. Contraction of already evaluated
+    // syntax needs no action capabilities, cloning of primitives, or Index Eq.
+    let factor = HilbertSpace::<OpaqueIndex, Metadata>::factor(OpaqueIndex);
+    let local = LocalState::<Metadata, f64>::primitive(InnerOnly);
+    let state = local.at(&factor).unwrap();
+    assert_eq!(
+        local.evaluated_inner_product(&local),
+        Complex::new(1.0, 0.0)
+    );
+    assert_eq!(
+        super::inner_product::contract(&state.expression, &state.expression),
+        Complex::new(1.0, 0.0)
+    );
+}
+
+#[test]
 fn inner_product_contracts_independent_sums_without_global_expansion() {
     let counts = Counts::default();
     for n in [8, 32] {

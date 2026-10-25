@@ -56,6 +56,8 @@ let after = a.at(&h)?.add(&b.at(&h)?)?;
 
 ## 2. 線型結合の係数制約
 
+状態: 2026-10-25 に workspace 全体の制約を見直して修正済み。以下の指摘は修正前の記録である。
+
 ### 指摘と確認結果
 
 優先度は P2。対象は [linear_combination.rs](../crates/qmb-core/src/linear_combination.rs) の `LinearCombination::scaled`（記録時85行付近）。
@@ -80,6 +82,29 @@ let scaled = terms.scaled(Complex::new(Ring(2), Ring(0)));
 - 所有値の係数・operand の移動と、空・単一項のコンテナ割り当て特性を維持する。
 
 このメモのコンパイル失敗は指摘を再現するための結果であり、既存の workspace テストの失敗ではない。
+
+### 制約の見直し結果
+
+`qmb-core`・`qmb-spin-half`・`qmb-basic` の公開型・メソッド・trait 実装と評価の補助処理を確認した。構造を定義するための `LocalStructure` と、値を照合するための `Eq` は数値演算の制約と区別する。メソッド固有の数値制約はその `where` 節に置き、trait 実装の成立条件は対応する能力の実装に限定する。
+
+| 対象 | 修正内容 |
+| --- | --- |
+| `LinearCombination::scaled` | `Num` を外し、メソッドに `Clone + Add + Sub + Mul` だけを要求する。`primitive` の `Zero + One` もメソッドごとの制約とする |
+| 複素係数の演算 | [coefficient.rs](../crates/qmb-core/src/coefficient.rs) に必要な能力だけを要求する共通処理を置き、線型結合・局所評価・複合評価から使う |
+| 基底 | 展開・順序番号・列挙を単一の `Basis<P, T>` へ統合する。共通 trait に数値制約を置かず、各具体基底の実装に必要な制約を限定する |
+| 評価後の内積 | 局所状態の評価後の内積処理を分離し、複合縮約には `L::State: InnerProduct<T>` だけを要求する。不要な `Act`・`Adjoint` を外す |
+| 演算子の項走査 | `OpTerms` は零を生成しないため、`Zero` を外し、実際に使用する `Add` を要求する |
+| 複合内積・期待値・trace・Hilbert–Schmidt 内積 | `One` の supertrait に含まれる `Mul<Output = T>` の重複指定を削除する。乗算能力自体は引き続き必要である |
+
+未評価の式を受け付ける公開の内積・期待値は、作用・随伴の節点を処理するため `Act`・`Adjoint` を引き続き要求する。演算子の trace も積・随伴・恒等演算子を処理するための能力を維持する。特定の入力値にその節点がないことだけを理由に、必要な制約を外さない。
+
+空間の照合・重複検出の `Eq`、借用した係数を所有して保持する際の `Clone`、spin の具体的な規則で定数・分数・符号を作るための制約は必要であることを確認し、維持した。保持・構築・`map` には追加の数値制約を設けていない。
+
+基底は `expand`・`index`・`elements` を一つの `Basis<P, T>` 実装で提供する。各具体基底の実装に課した制約は、列挙・順序取得にも適用される。実装を簡潔にするため、独立した展開用 trait は設けない。spin-half・独立した三次元代数・テスト・doc test と、関連する設計文書をこの契約に統一した。
+
+回帰検証では、`scaled` 用の係数型から除算・剰余・比較・零・単位元を除去して計算結果を確認した。さらに、数値 trait のない係数型を使う独自基底の展開・情報取得、最小限の係数能力を使う spin 基底の列挙、作用・随伴能力のない primitive の評価後の内積、`Zero`・`One` のない係数型での項走査を確認した。
+
+`cargo test --workspace` の全77テスト（doc test を含む）、format check、Clippy、警告をエラーとするドキュメント生成が成功した。MSRV と `std` のない target 向けビルドは未検証である。
 
 ## 3. 演算子構文の重複
 

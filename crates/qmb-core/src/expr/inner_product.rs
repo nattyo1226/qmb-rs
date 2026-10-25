@@ -2,16 +2,16 @@
 
 use alloc::{collections::BTreeMap, vec, vec::Vec};
 use core::{
-    ops::{Mul, Neg, Sub},
+    ops::{Neg, Sub},
     ptr,
 };
 use num_traits::{One, Zero};
 
-use super::{
-    composite::{StateExpr, StateNode},
-    evaluate::{add, conjugate, multiply, zero},
+use super::composite::{StateExpr, StateNode};
+use crate::{
+    Complex, InnerProduct, LocalStructure,
+    coefficient::{add, conjugate, multiply, zero},
 };
-use crate::{Act, Adjoint, Complex, InnerProduct, LocalStructure};
 
 type Factors<'a, I, L, T> = Vec<&'a StateExpr<I, L, T>>;
 type Pair<'a, I, L, T> = (Factors<'a, I, L, T>, Factors<'a, I, L, T>);
@@ -150,9 +150,8 @@ pub(super) fn contract<I, L: LocalStructure, T>(
     rhs: &StateExpr<I, L, T>,
 ) -> Complex<T>
 where
-    T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
-    L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
-    L::Operator: Adjoint<T, Term = L::Operator>,
+    T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
+    L::State: InnerProduct<T>,
 {
     let counts = FactorCounts::new(lhs, rhs);
     let mut tasks = vec![Task::Contract((vec![lhs], vec![rhs]))];
@@ -175,7 +174,7 @@ where
                             if let (StateNode::Local(_, a), StateNode::Local(_, b)) =
                                 (a.node(), b.node())
                             {
-                                values.push(a.inner_product(b));
+                                values.push(a.evaluated_inner_product(b));
                                 continue;
                             }
                         }

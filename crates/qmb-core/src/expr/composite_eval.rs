@@ -1,14 +1,12 @@
 use alloc::{vec, vec::Vec};
-use core::ops::{Mul, Neg, Sub};
+use core::ops::{Add, Mul, Neg, Sub};
 use num_traits::{One, Zero};
 
-use super::{
-    composite::{ExpressionError, OpExpr, OpNode, Operator, State, StateExpr, StateNode},
-    evaluate::{add, conjugate, multiply, zero},
-};
+use super::composite::{ExpressionError, OpExpr, OpNode, Operator, State, StateExpr, StateNode};
 use crate::{
     Act, Adjoint, Complex, HilbertSpace, Identity, InnerProduct, LocalOperator, LocalStructure,
     Product, Trace,
+    coefficient::{add, conjugate, multiply, zero},
 };
 
 enum Task<I, L: LocalStructure, T> {
@@ -182,7 +180,7 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
     /// grouping need not agree, and no global product-of-sums expansion is built.
     pub fn inner_product(&self, rhs: &Self) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
         L::Operator: Adjoint<T, Term = L::Operator>,
     {
@@ -200,7 +198,7 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
     /// Computes the unnormalized expectation without requiring prior evaluation.
     pub fn expectation(&self, operator: &Operator<I, L, T>) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
         L::Operator: Adjoint<T, Term = L::Operator>,
     {
@@ -214,7 +212,7 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
         ambient: &HilbertSpace<I, L>,
     ) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
         L::Operator: Adjoint<T, Term = L::Operator>,
     {
@@ -257,7 +255,7 @@ impl<'a, I, L: LocalStructure, T> OpTerms<'a, I, L, T> {
 }
 impl<'a, I: Eq, L: LocalStructure, T> Iterator for OpTerms<'a, I, L, T>
 where
-    T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+    T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
 {
     type Item = (Option<Complex<T>>, OperatorFactors<'a, I, L, T>);
     fn next(&mut self) -> Option<Self::Item> {
@@ -323,7 +321,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     /// Computes the ordinary full trace using the existing binding.
     pub fn trace(&self) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -334,7 +332,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     /// Computes full trace on an explicit space, overriding an old binding.
     pub fn trace_in(&self, ambient: &HilbertSpace<I, L>) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -344,7 +342,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
 
     fn trace_on(&self, ambient: &HilbertSpace<I, L>) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -372,7 +370,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     /// Computes the unnormalized Hilbert-Schmidt inner product `Tr(self† rhs)`.
     pub fn hilbert_schmidt_inner_product(&self, rhs: &Self) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -386,7 +384,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
         ambient: &HilbertSpace<I, L>,
     ) -> Result<Complex<T>, ExpressionError>
     where
-        T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
+        T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
         L: Identity<T>,
         L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
     {
@@ -394,5 +392,52 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
             .adjoint()
             .product(&rhs.bind(ambient)?)?
             .trace()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::num::NonZeroUsize;
+
+    #[derive(Clone)]
+    struct Ring(i64);
+    macro_rules! arithmetic {
+        ($trait:ident, $method:ident, $op:tt) => {
+            impl core::ops::$trait for Ring {
+                type Output = Self;
+                fn $method(self, rhs: Self) -> Self { Self(self.0 $op rhs.0) }
+            }
+        };
+    }
+    arithmetic!(Add, add, +);
+    arithmetic!(Sub, sub, -);
+    arithmetic!(Mul, mul, *);
+    impl Neg for Ring {
+        type Output = Self;
+        fn neg(self) -> Self {
+            Self(-self.0)
+        }
+    }
+    struct Metadata;
+    impl LocalStructure for Metadata {
+        type State = ();
+        type Operator = ();
+        const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
+    }
+
+    #[test]
+    fn operator_term_traversal_needs_no_zero_or_one() {
+        // Term traversal only combines stored coefficients and lazy local
+        // operators. Generating numeric identities belongs to trace reduction.
+        let lhs = Operator::<u8, Metadata, Ring>::scalar(Complex::new(Ring(3), Ring(4)));
+        let rhs = Operator::scalar(Complex::new(Ring(2), Ring(-1)));
+        let operator = lhs.product(&rhs).unwrap().adjoint();
+        let mut terms = OpTerms::new(&operator.expression);
+        let (coefficient, factors) = terms.next().unwrap();
+        let coefficient = coefficient.unwrap();
+        assert_eq!((coefficient.re.0, coefficient.im.0), (10, -5));
+        assert!(factors.is_empty());
+        assert!(terms.next().is_none());
     }
 }
