@@ -6,6 +6,8 @@
 
 本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜4は実装済み、段階5以降は未実装である。係数型のリファクタリングと qmb-normalize への分離は実装済みである。
 
+2026-10-26 に LocalStructure の廃止と追加の定義ラベルを設けない方針を採用した。第2〜6節にある L を使う API は移行前の実装・設計記録であり、次の移行方針は第8節に記録する。実装移行は未着手である。
+
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
 Step 2 の局所構造と演算能力の分離、共通パーツと項型、基底 trait、評価経路、所有権、反復的な評価・破棄の方針は採用済みであり、本書の実装内容と完了条件に含める。Step 3 の採用済みの型・共有・空間保持・エラー・評価方針は [Step 3 の実装方針](step-3-design.md)にまとめる。Step 4 の採用済み方針と受入条件は [Step 4 の合意事項](step-4-decisions.md)にまとめる。それ以降の API の詳細・数値 backend・追加依存は、各段階で設計する。数学的契約と初期版の提供範囲は既存文書に従う。
@@ -186,3 +188,13 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 2026-10-25 に、薄い線型結合・共通パーツ・演算 trait・局所／複合式・共通評価・spin 規則・基底・モデル utility・利用例を係数全体 C へ移行した。保持・共有・構築に数値 bound はなく、必要な操作で標準演算、num-traits の Zero／One、独立した Conjugate・RealPart・ImaginaryUnit・Divide を要求する。実係数は From<R> で埋め込む。標準 Complex は core 内で直接接続し、正規化期待値では純実分母を不要に二乗しない。
 
 norm・normalized・正規化期待値と NormalizationError は qmb-normalize に移した。core/expr の正規化 module は削除し、norm_squared は内積の実装側へ移した。Float は関連する実数型だけに課し、core には残さない。API・feature の移行と検証結果は [係数型の採用方針](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)に記録する。
+
+## 8. LocalStructure の廃止方針（実装未着手）
+
+2026-10-26 に、式へ S・O を直接指定し、追加の定義ラベルを設けない方針を採用した。次元は primitive 型全体が張る空間の次元として S が d、O が d² を提供し、恒等元は係数型に依存せず O の値として生成する。意味・規則は S・O の型と各能力の実装で定める。正式な契約は[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)、依存調査は[調査・採用方針](refactoring-local-structure.md)を参照する。
+
+移行対象は LocalStructure・Identity と次元取得、局所／複合式・節点・評価器・演算子構文・反復的な破棄、spin-half の primitive・基底、qmb-normalize、空間・Geometry／Chain・モデル utility・facade・例・関連テストとする。演算子式は O・C、状態式は S・O・C を指定し、複合式はさらに I を持つ。空間・幾何から L を外す具体的な移行は、State／Operator・空間・Chain の後続設計と合わせて行う。
+
+同じ S・O を異なる L で区別する旧契約のテストは変更し、異なる S・O・C の不適切な式の合成を型で拒否する検証に置き換える。構築・共有に不要な数値能力や Clone を要求しないこと、作用に Product を要求しないこと、恒等元と trace、span の次元と基底要素数、overflow、既存 Index・因子順序・grouping、不変な共有、深い式の評価・破棄、両精度と独自代数を検証する。対象テストから workspace test・format・Clippy・ドキュメント生成・core 単独の依存と no_std + alloc の確認へ進む。
+
+設計判断の記録を完了した段階であり、製品コードの移行と新 API の検証は未実施である。trait 名・返却型、作用先の次元取得 API、記号的な Identity 節点の扱いは後続で決める。

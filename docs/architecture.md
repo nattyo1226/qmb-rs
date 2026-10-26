@@ -134,13 +134,15 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 このリファクタリングと併せて、以下を必須課題として扱う。
 
 1. **core の係数型・数値能力の整理**：`qmb-core` に `num-complex`・`num-traits` を含め、係数型には必要な操作で必要な trait bound を課す。零・単位元には `num_traits::Zero`・`One` をそのまま使い、付随する能力も受け入れる。不足する能力 trait は core で定義し、`Complex<f32>`・`Complex<f64>` に直接実装できる構成にする。保持・構築へ不要な数値能力を要求せず、係数表現・演算・norm・正規化の責任を整理する。
-2. **LocalStructure の必要性**：`LocalStructure` は本当に必要かを議論し、解決する。現在担っている関連型や次元の責任も含めて見直し、維持・変更・廃止の結論と根拠を記録する。
+2. **LocalStructure の必要性（廃止方針を採用、実装未移行）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
 3. **Operator と State の整理**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。
 4. **HilbertSpace の最小構成**：HilbertSpace を Index と Grading だけで議論・表現できるかを検討し、解決する。局所構造などの追加情報を空間自体に保持する必要性と、その情報の責任の置き場所を明らかにする。
 5. **Chain の内部表現**：前項で検討する Index と Grading による HilbertSpace の構成から Grading を除いた構造で、Chain の内部表現を作れるかを議論し、解決する。現行の HilbertSpace を保持する構成との関係も含め、結論と根拠を記録する。
 
-初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。残る四つの問いは議論だけで終わらせず、採否を含む設計上の結論を得る。LocalStructure の廃止、Operator と State の統合、HilbertSpace や Chain の表現変更は、現時点で採用した結論ではない。
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。LocalStructure は同日に廃止方針を採用した。残る三つの問いも採否を含む設計上の結論を得る。Operator と State の統合、HilbertSpace や Chain の内部表現の詳細は未決である。
 
 係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
 
-この見直しは将来の必須課題とし、Step 4 の完了条件には追加しない。当面は、Geometry の生成時に局所構造型を指定し、既存の HilbertSpace の共有構造を利用する方針で実装を進める。
+LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を直接指定する。次元は primitive 型全体の span の次元（S は d、O は d²）、恒等元は係数型に依存せず生成する O の値とする。空間・Geometry／Chain から L を外し、因子構造と局所規則を分離する。採用した契約と移行前の仕様の扱いは[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。本文の L を使う API の説明は移行前の実装を表し、新方針の実装移行は未実施である。
+
+この見直しは Step 4 の完了条件には追加しない。具体的な移行範囲と検証は[実装計画第8節](implementation-plan.md#8-localstructure-の廃止方針実装未着手)に記録する。
