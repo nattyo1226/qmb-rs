@@ -2,6 +2,9 @@
 
 use crate::{DimensionOverflow, LinearCombination, SpanDimension};
 
+mod coordinates;
+pub use coordinates::{BasisError, Coordinates};
+
 /// Expansion, indexing and enumeration of a complete, ordered basis.
 ///
 /// The basis need not be orthonormal, and target primitives need not be

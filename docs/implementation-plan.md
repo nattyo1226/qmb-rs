@@ -4,7 +4,7 @@
 
 ## 1. 目的と位置付け
 
-本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜4は実装済み、段階5以降は未実装である。係数型のリファクタリングと qmb-normalize への分離は実装済みである。
+本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜5は実装済み、段階6は未実装である。係数型のリファクタリングと qmb-normalize への分離は実装済みである。
 
 2026-10-26 に LocalStructure の廃止と追加の定義ラベルを設けない方針を採用した。第2〜6節にある L を使う API は移行前の実装・設計記録であり、次の移行方針は第8節に記録する。全 crate の実装移行と検証を完了した。
 
@@ -115,7 +115,7 @@ crate ごとに完成させるのではなく、抽象契約と具体的代数�
 | 2. 局所式と評価・既存 API の整備（実装済み） | 3.1 節の採用済み方針に従い、局所構造と演算能力の分離、共通パーツ・項型の統合、関連型・map・constructor、局所式・共有・反復的な評価と破棄を core・spin-half・テストへ実装する。基底の marker trait を削除し、Basis を直接使う | 両 marker trait の定義・再公開・実装宣言・利用がコード・テスト・doc test から除去される。数値能力のない型での式構築、Product のない演算子の作用評価、所有値・借用値の4通り、長い式の評価・破棄、規則・基底の数学的結果、map の保持特性、入力の不変性・共有、空・単一項のコンテナ無確保を検証する |
 | 3. 空間と複合評価（実装済み） | [採用済み方針](step-3-design.md)に従い、`qmb-core` にジェネリックな Index の照合、HilbertSpace の葉と入れ子 Tensor、互換性・部分系判定、配置・束縛、複合作用・内積・期待値・随伴・full trace・導出操作。`qmb-basic` に UUID の具体型と発行 API | Geometry なしで同種の複数因子を評価でき、zero・identity の空間保持、明示空間の優先、早期のエラー検出、深い空間の反復的な走査・破棄、総次元 overflow と空間構築の分離を検証できる。core は独自 Index 型で動作し、basic は seed 指定なしで発行できる |
 | 4. 最初の縦断例と導出操作の補完（実装済み） | Chain・近接関係、basic の Id128、spin-half の XYZ・Heisenberg・Neel utility、qmb の再公開・縦断例を提供する。局所式・複合式の norm・正規化・正規化期待値は、現在は qmb-normalize で提供する（第7〜9節）。bra・内部ラベルは初期版に導入しない | 行列化せず open chain の期待値 `J(L−1)/4` を得る。Neel の norm、zero-norm の拒否、0-site と periodic の小規模規約も確認する |
-| 5. 基底展開・座標取得 | `qmb-core` に複合基底、式全体の展開・再展開・係数取得 | mixed-radix 順序、非正規直交基底、再展開と直接の展開の一致を正しく扱える |
+| 5. 基底展開・座標取得（実装済み） | `qmb-core` に複合基底、式全体の展開・再展開・係数取得 | mixed-radix 順序、非正規直交基底、再展開と直接の展開の一致を正しく扱える |
 | 6. 数値接続と受入確認 | `qmb-export`。密ベクトル・密行列、続いて疎ベクトル・疎行列を接続し、利用例を完成させる | 代数計算・基底座標・密・疎の各経路が一致し、疎変換が密表現を中間生成せず、初期版の完成条件を満たす |
 
 段階1で非公開テスト用の別の有限次元局所代数も用意し、契約が spin 固有になっていないことを確認する。段階2以降、その代数だけで構成する独立した系に対し、共通式・複合評価・基底展開・export の検証を順次追加する。spin と同じ系に混在させる検証は初期版に含めない。抽象化の問題を最終段階まで持ち越さない。
@@ -162,6 +162,36 @@ crate ごとに完成させるのではなく、抽象契約と具体的代数�
 - core の局所式・複合式へ norm squared、libm feature 下の norm・正規化、平方根を使わない正規化期待値、共通エラーを追加した。非正規直交な三次元代数、相殺による zero norm、内積の共役線型性・線型性、明示空間の優先と最小限の数値制約も確認した。bra・内部ラベルは導入していない。
 - Rust 1.98.0 で workspace の全 feature 有効・default feature 無効のテスト、format check、Clippy（全 target・全 feature、警告をエラー化）、警告をエラーとするドキュメント生成が成功した。例は既定構成と default feature 無効の両方で期待値 `1.25` を返した。
 - core・geometry の `no_std + alloc` と通常依存を確認した。追加の外部依存は合意済みの libm（検証時 `0.2.16`）のみで、無効時に通常依存の std・libm を有効化しない。MSRV（Rust 1.85）と専用 no_std target は、対応ツールチェーン・target ライブラリが環境にないため未確認である。
+
+### 4.5. 段階5の実装・検証状況
+
+2026-10-27に、採用した Step 5 の範囲を実装した。Partial trace と写像の表現行列・表現係数は引き続き future work とする。
+
+- LocalState・LocalOperator・State・Operator に `expand_in` と独立した `coordinates_in` を実装した。Operator には明示空間を優先する `expand_in_space`・`coordinates_in_space` も提供する。展開は通常の式を返し、zero を含め Index・空間・因子順序を保持する。
+- 共通の集約処理を使い、式への再構成では必要な局所式ハンドルを、座標取得では数値係数を処理する。座標取得のための展開済み式の再構成は必須にしない。BTreeMap に基底番号列をキーとして集約し、厳密な零のみを除去する。既存の LinearCombination と通常評価の保持・評価契約は変更しない。
+- Coordinates は基底を借用し、係数と複合式の選択空間を保持する。因子順の番号列、検査付きの平坦番号、総要素数、基底・空間情報を取得できる。総次元と平坦番号の overflow を分離し、展開・疎な座標の保持に総次元の整数化を要求しない。
+- HilbertSpace の `basis_states`・`basis_operators` で共通局所基底から複合基底を遅延列挙する。別の複合基底オブジェクトや全基底の一括生成を利用者に要求しない。BasisError は空間・基底・次元の不正を区別する。API と意味は[基底の設計第8節](design/basis.md#8-実装した公開-api2026-10-27)に記録する。
+- qmb-core と qmb から新しい型を再公開し、`crates/qmb/examples/basis_expansion.rs` に展開・再展開・集約済み座標の利用例を追加した。新しい依存・feature は追加していない。
+
+Rust 1.98.0 で以下の検証が成功した。
+
+- `cargo test --workspace --all-features -j 2 --quiet`（doc test を含む127テスト）。
+- `cargo test --workspace --no-default-features -j 2 --quiet`（doc test を含む126テスト）。
+- `cargo fmt --all -- --check`。
+- `cargo clippy --workspace --all-targets --all-features -j 2 -- -D warnings`。
+- `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps -j 2`。
+- `cargo check -p qmb-core --no-default-features -j 2`。
+- `cargo run -p qmb --example basis_expansion -j 2` と `--no-default-features` 構成。状態の平坦番号1・2に係数5・−1を得て、Cartesian から Ladder への再展開も確認した。
+
+新規テストは spin の単精度・倍精度での独立な2×2・4×4行列比較、三次元代数と非正規直交基底の座標・再構成、直接展開と再展開の一致、通常の作用・内積・trace との一致、恒等元が基底要素でない場合の spectator、空・単因子・入れ子・zero・明示空間の上書き、不正な基底・未束縛・不正な参照を確認する。Clone・Hash・Ord を持たない Index、Clone・Eq を持たない primitive、Product のない演算子の状態作用、One・Float・除算を持たない局所係数でも動作する。基底の全列挙なしでの座標取得、総次元・平坦番号の overflow、および2万段の式・空間の128 KiBスタック上での処理も検証した。
+
+同日のレビュー後、基底番号による集約と複合状態のスカラー倍で厳密な零を途中で除き、零成分を後続の tensor 積に持ち越さないようにした。基底展開の検証を零係数によって打ち切らない。`basis_states`・`basis_operators` から、列挙時に不要な Index の Eq 制約を外した。両変更とも新しい依存はなく、通常の評価と LinearCombination の契約は変更しない。
+
+追加テストは相殺・アンダーフロー後の疎な展開と係数乗算回数、零スカラー倍、微小値・NaN の保持、零因子の先にある不正な基底、Eq のない Index での単位・単因子基底の列挙を確認する。Rust 1.98.0 で workspace の全 feature・default feature 無効のテスト、format check、Clippy、警告をエラーとするドキュメント生成、および core の default feature 無効のチェックが成功した。
+
+演算子式の積に含まれる和は既存の走査で分配されるため、結果が疎でも項数が増大する場合がある。式の構造を利用して先に局所的な和をまとめる最適化は、今回の修正には含めない。
+
+MSRV 1.85、専用 no_std target、性能ベンチマークは未検証である。no_std + alloc はソースと通常依存の feature、およびホスト上の core 単独ビルドで確認した。これらの制限は Step 3〜4 の検証時から引き続き残る。
 
 ## 5. 検証方針
 

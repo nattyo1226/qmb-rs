@@ -103,4 +103,4 @@ Norm・正規化・正規化期待値と NormalizationError は qmb-normalize �
 
 XYZ・Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。[Chain の配置契約](geometry.md)に従い、利用側が保持する空間へ接続する。基底処理は Step 5、数値 backend は Step 6 で具体化し、初期版の必須範囲を維持する。Partial trace は future work とし、初期版の必須範囲に含めない。bra 型・構築 API は初期版では導入しない。
 
-Step 5 は [一時設計メモ](../step-5-design.md)の推奨案を採用済みとし、追加依存なしで実装する。非公開の節点・作業領域・補助関数、メソッド名・型引数・シグネチャなどの詳細は採用済み方針に従って実装時に定める。Step 6 の数値 backend とその追加依存は同段階で選定する。Step 2 の局所式・評価と API の移行、および Step 3 の空間・配置・複合評価と basic の UUID Index は実装済みである。Step 4 以降の機能と初期版全体の完成とは区別する。
+Step 5 は [一時設計メモ](../step-5-design.md)の方針に従い、追加依存なしで実装済みである。`expand_in` は通常の式を返し、`coordinates_in` は独立した集約済みの疎な座標を返す。現在の公開 API と契約は[基底の設計第8節](basis.md#8-実装した公開-api2026-10-27)、検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。Step 6 の数値 backend とその追加依存は同段階で選定する。段階1〜5の実装と初期版全体の完成とは区別し、数値 export とその受入確認は引き続き未実装とする。

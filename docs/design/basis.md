@@ -12,7 +12,7 @@
 
 展開・順序番号・列挙は単一の `Basis<P, C>` 実装で提供する。共通 trait 自体には数値制約を置かず、各具体基底の実装に、その展開規則で必要な能力だけを要求する。この実装の制約は `index`・`elements` にも適用される。係数精度を推論できない情報取得では、`<B as Basis<P, C>>::elements` のように明示する。
 
-既存の `LinearCombination` を返す契約と `Basis<P, C>` を維持し、[実装計画](../implementation-plan.md)の Step 2 で core・spin-half・テスト実装と局所式の接続を整備する。`StateBasis`・`OperatorBasis` は削除し、利用側で次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得の実装は Step 5 に置く。
+既存の `LinearCombination` を返す契約と `Basis<P, C>` を維持し、[実装計画](../implementation-plan.md)の Step 2 で core・spin-half・テスト実装と局所式の接続を整備した。`StateBasis`・`OperatorBasis` は削除し、利用側で次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得は Step 5 で実装済みであり、現在の公開 API は第8節に記録する。
 
 | 基底を使う処理 | 型制約 |
 | --- | --- |
@@ -82,7 +82,7 @@ Basis は primitive 一つに対する展開を提供し、core の共通機構�
 
 `qmb-core` は、局所規則による `evaluate` とは別に、指定基底への展開と係数取得を提供する。基底に対する座標は数学的に一意であり、一般的な簡約の到達形や最適性を別途要求しない。入力の式は変更しない。
 
-`expand_in` は基底展開の結果を既存の通常の式型で返す。数値表現への export に向けた集約済み座標は、対象式と基底を入力とする別の公開 API で取得する。座標取得に事前の `expand_in` 呼び出しや展開済み専用型を要求せず、展開結果へ座標コンテナ・基底情報・展開済みマーカーを付随させない。単一成分取得と未集約の寄与の列挙は今回の独立した公開 API の必須項目にしない。座標番号と返却形式の詳細は [Step 5 の一時設計メモ](../step-5-design.md)で具体化する。
+`expand_in` は基底展開の結果を既存の通常の式型で返す。数値表現への export に向けた集約済み座標は、対象式と基底を入力とする別の公開 API で取得する。座標取得に事前の `expand_in` 呼び出しや展開済み専用型を要求せず、展開結果へ座標コンテナ・基底情報・展開済みマーカーを付随させない。単一成分取得と未集約の寄与の列挙は今回の独立した公開 API の必須項目にしない。座標番号と返却形式は第8節に記録する。
 
 内積、Gram 行列、および双対基底は、展開手続きを実装するために利用できるが、Basis が提供する必須の独立能力とはしない。直接の展開規則を提供できれば座標を取得できる。演算子内積を使う場合は、既存要件の非正規化 Hilbert–Schmidt 内積 `Tr(A†B)` に従う。
 
@@ -130,6 +130,49 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 
 2026-10-27に、Step 5 の残る推奨案を採用した。`expand_in` と集約済み座標の取得 API で内部の係数処理を共有し、基底番号をキーに疎に集約して基底順で返す。座標には対象空間・共通局所基底・因子順序を対応付け、通常の式木へそれらを付随させない。空間不整合・不正な基底番号や展開先・次元 overflow を区別し、Index と数値能力の制約は必要な操作にだけ要求する。実装は局所式から複合式へ進める。
 
-具体的なメソッドのシグネチャ、座標番号・返却コンテナ・エラーの型、基底情報の受け渡し、および内部の走査・保持・共有は、この採用方針に従って実装時に定める。詳細は [Step 5 の一時設計メモ](../step-5-design.md)に記録する。
+具体的な API・座標番号・返却コンテナ・エラーの型は第8節のとおり実装した。採用判断の記録は [Step 5 の一時設計メモ](../step-5-design.md)に残し、現在の契約は本書と実装計画を参照する。
 
 局所基底規則が薄い `LinearCombination` を返すこと、`Basis` の直接利用と `StateBasis`・`OperatorBasis` の削除、および Step 2 での `map` による式木との接続は確定事項とする。後続の設計でも、基底を定義する struct と三つの能力、およびprimitive の span の次元からの要素数の導出を維持する。marker trait の削除後も、基底の線型独立性・完全性、要素数が状態では `d`、全演算子空間では `d²` となる数学的契約と検証条件は維持する。
+
+## 8. 実装した公開 API（2026-10-27）
+
+### 8.1. 基底展開と集約済み座標
+
+| 対象 | API | 結果 |
+| --- | --- | --- |
+| `LocalState`・`LocalOperator` | `expand_in(&basis)` | 指定基底で係数を集約した同じ局所式型 |
+| `State` | `expand_in(&basis)` | 元の所属空間を共有する通常の状態式 |
+| `Operator` | `expand_in(&basis)` | 既存の束縛先における通常の演算子式。未束縛はエラー |
+| `Operator` | `expand_in_space(&basis, &ambient)` | 明示空間を優先し、その空間に束縛された通常の演算子式 |
+| 局所式・`State`・`Operator` | `coordinates_in(&basis)` | 式とは独立した集約済みの疎な `Coordinates` |
+| `Operator` | `coordinates_in_space(&basis, &ambient)` | 明示空間を優先した集約済みの疎な `Coordinates` |
+
+いずれも `Result<_, BasisError>` を返す。全因子に同じ局所基底を適用し、局所規則の評価後に基底番号で係数を集約する。Primitive の比較・Clone や、Index の Clone・Hash・Ord は要求しない。演算子の spectator は恒等演算子として指定基底へ展開するため、恒等元自体が基底要素である必要はない。Zero は空の和として選択空間を保持し、0因子の状態・演算子はそれぞれ単位状態・scalar identity を使う。
+
+状態への作用評価は既存の経路を再利用し、演算子 primitive の `Product` を要求しない。演算子の展開では `Identity`・`Product`・`Adjoint` を要求する。係数には必要な Clone・Zero・乗算・共役を要求し、複合処理では数値的な単位係数に One を使う。Float・除算は要求しない。通常の作用・内積・trace の経路に基底処理は追加していない。
+
+### 8.2. Coordinates の解釈と番号
+
+`Coordinates<'b, B, C, H = ()>` は基底を借用し、係数を所有する。局所式では `H = ()`、複合式では `H = HilbertSpace<I>` として選択空間を共有する。入力式は借用しないため、入力を破棄しても基底が有効な間は座標を利用できる。
+
+- `basis()`・`space()`・`factor_count()`・`local_dimension()` で基底と空間・順序の解釈に必要な情報を取得する。
+- `entries()` は `(&[usize], &C)` を基底順で返す。番号列は空間の因子順で局所基底番号を並べたもので、重複しない。局所式の番号列は一桁、0因子では空列となる。
+- `flat_entries()` は `Result<(usize, &C), DimensionOverflow>` を要素とする iterator を返す。右端が最速の mixed-radix で平坦化し、成分ごとに overflow を検出する。空列の番号は0。
+- `dimension()` は全座標空間の要素数を検査付きで計算する。`entries()` の保持・列挙や式の展開は、総要素数の整数化を必要としない。総次元が overflow しても、小さい平坦番号の成分は取得できる。
+- `len()`・`is_empty()` は格納した座標の数を返し、`into_entries()` は番号列と係数を基底順で所有値として取り出す。
+
+内部では BTreeMap を使い、基底番号列に対して疎に集約する。集約時と複合状態のスカラー倍後に厳密な零係数を除き、その後の tensor 積へ零成分を持ち越さない。近似誤差による成分の切り捨ては行わず、零係数を理由に後続の基底展開を打ち切らない。`LinearCombination` の重複・零・入力順を保持する契約は変更しない。全基底要素や密ベクトル・行列の一括生成は行わないが、集約済みの疎な係数自体は保持する。
+
+演算子の座標は演算子基底に対する展開係数であり、状態に作用する数値行列の成分とは区別する。写像の表現行列は future work のままとし、外部数値コンテナへの格納は Step 6 に置く。
+
+### 8.3. 複合基底の遅延列挙
+
+`HilbertSpace::basis_states::<S, O, C, B>(&basis)` と `basis_operators::<O, C, B>(&basis)` は、同じ局所基底から導出した通常の状態式・束縛済み演算子式を順序付きで遅延列挙する。戻り値は `Result<impl Iterator<Item = Result<式, BasisError>>, BasisError>` とする。利用者が別の複合基底オブジェクトを構築する必要はない。
+
+要素の生成には SpanDimension と Basis を使い、Index の Eq・Clone、primitive の Clone、作用・積・随伴・恒等元の局所規則、係数の算術を必須にしない。生成した式に対し、Index を照合する操作には引き続き Eq を要求する。全要素数を整数化せず、番号列を進めるため、大きな空間でも必要な先頭要素だけを取得できる。Grouping は列挙順序を変えず、空の空間は一要素の単位基底を返す。
+
+### 8.4. エラー・再公開・利用例
+
+`BasisError` は基底展開が返した非基底 primitive（`NonBasisElement`）、局所番号の範囲外（`IndexOutOfBounds`）、列挙と番号・要素数の不一致（`InvalidEnumeration`）、次元 overflow（`Dimension`）、空間不整合・未束縛など（`Expression`）を区別する。得られた情報で検出し、全基底の線型独立性・完全性を実行時に自動証明することは要求しない。零係数であっても不正な参照や不正な展開先を見逃さない。
+
+`qmb-core` の root から Basis・BasisError・Coordinates を公開し、`qmb` でも再公開する。Basis は qmb の prelude にも含める。利用例は `crates/qmb/examples/basis_expansion.rs` に置く。検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。

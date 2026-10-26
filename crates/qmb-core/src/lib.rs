@@ -62,7 +62,7 @@ pub mod ops;
 pub mod primitive;
 pub mod space;
 
-pub use basis::{Basis, operator_basis_len, state_basis_len};
+pub use basis::{Basis, BasisError, Coordinates, operator_basis_len, state_basis_len};
 pub use coefficient::{Conjugate, Divide, ImaginaryUnit, RealPart};
 pub use error::DimensionOverflow;
 pub use expr::{ExpressionError, LocalOperator, LocalState, Operator, State};
