@@ -11,9 +11,9 @@ use crate::{DimensionOverflow, LinearCombination, LocalStructure};
 ///
 /// Numeric bounds belong to each concrete implementation, rather than this
 /// trait. All three methods use that implementation's coefficient precision.
-pub trait Basis<P, T> {
+pub trait Basis<P, C> {
     /// Expands a primitive into a combination of elements of this basis.
-    fn expand(&self, primitive: &P) -> LinearCombination<P, T>;
+    fn expand(&self, primitive: &P) -> LinearCombination<P, C>;
 
     /// Returns the zero-based index, or `None` for a non-basis primitive.
     fn index(&self, primitive: &P) -> Option<usize>;
@@ -21,7 +21,7 @@ pub trait Basis<P, T> {
     /// Yields each basis element exactly once in index order.
     ///
     /// Elements are owned; allocation and an exact-size iterator are not required.
-    /// Use a qualified call when `T` cannot be inferred from context.
+    /// Use a qualified call when `C` cannot be inferred from context.
     fn elements(&self) -> impl Iterator<Item = P> + '_;
 }
 

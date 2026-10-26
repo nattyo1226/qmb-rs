@@ -6,11 +6,18 @@ rust-version.workspace = true
 description = "Quantum many-body algebra facade and examples"
 
 [features]
-default = ["libm"]
-libm = ["qmb-core/libm"]
+default = ["normalize"]
+normalize = ["dep:qmb-normalize"]
+# Compatibility alias: normalization now uses std in qmb-normalize.
+libm = ["normalize"]
 
 [dependencies]
 qmb-core.workspace = true
 qmb-basic.workspace = true
 qmb-geometry.workspace = true
 qmb-spin-half.workspace = true
+qmb-normalize = { workspace = true, optional = true }
+
+[dev-dependencies]
+num-complex.workspace = true
+num-traits.workspace = true

@@ -3,10 +3,7 @@
 use crate::{SpinHalf, SpinHalfOperator, SpinHalfState};
 use alloc::vec::Vec;
 use core::ops::Neg;
-use qmb_core::{
-    Complex, ExpressionError, HilbertSpace, LocalOperator, LocalState, Operator, State,
-    num_traits::Zero,
-};
+use qmb_core::{ExpressionError, HilbertSpace, LocalOperator, LocalState, Operator, State};
 use qmb_geometry::{Chain, NearestNeighborRelation};
 
 /// Failure to build a spin model on a site assignment.
@@ -47,17 +44,17 @@ fn factors<I>(chain: &Chain<I, SpinHalf>) -> Result<Vec<&HilbertSpace<I, SpinHal
 ///
 /// Couplings are real. Each site must contain exactly one factor. The result is
 /// bound to the chain's full space, and no indices are issued.
-pub fn xyz<I: Eq, T: Clone + Zero + Neg<Output = T>>(
+pub fn xyz<I: Eq, R, C: Clone + From<R> + Neg<Output = C>>(
     chain: &Chain<I, SpinHalf>,
-    jx: T,
-    jy: T,
-    jz: T,
-) -> Result<Operator<I, SpinHalf, T>, UtilityError> {
+    jx: R,
+    jy: R,
+    jz: R,
+) -> Result<Operator<I, SpinHalf, C>, UtilityError> {
     let factors = factors(chain)?;
     let axes = [
-        (SpinHalfOperator::Sx, -jx),
-        (SpinHalfOperator::Sy, -jy),
-        (SpinHalfOperator::Sz, -jz),
+        (SpinHalfOperator::Sx, -C::from(jx)),
+        (SpinHalfOperator::Sy, -C::from(jy)),
+        (SpinHalfOperator::Sz, -C::from(jz)),
     ];
     let mut terms = Vec::new();
     for (left, right) in chain.nn_pairs() {
@@ -75,7 +72,7 @@ pub fn xyz<I: Eq, T: Clone + Zero + Neg<Output = T>>(
                 local
                     .at(left)?
                     .product(&local.at(right)?)?
-                    .scaled(Complex::new(coupling.clone(), T::zero())),
+                    .scaled(coupling.clone()),
             );
         }
     }
@@ -86,10 +83,10 @@ pub fn xyz<I: Eq, T: Clone + Zero + Neg<Output = T>>(
 ///
 /// Delegates to [`xyz`] with `Jx = Jy = Jz = coupling`; positive coupling is
 /// ferromagnetic. The same site validation and full-space binding apply.
-pub fn heisenberg<I: Eq, T: Clone + Zero + Neg<Output = T>>(
+pub fn heisenberg<I: Eq, R: Clone, C: Clone + From<R> + Neg<Output = C>>(
     chain: &Chain<I, SpinHalf>,
-    coupling: T,
-) -> Result<Operator<I, SpinHalf, T>, UtilityError> {
+    coupling: R,
+) -> Result<Operator<I, SpinHalf, C>, UtilityError> {
     xyz(chain, coupling.clone(), coupling.clone(), coupling)
 }
 
@@ -97,10 +94,10 @@ pub fn heisenberg<I: Eq, T: Clone + Zero + Neg<Output = T>>(
 ///
 /// Odd periodic chains are allowed. An empty chain yields the unit state.
 /// The full-space factor order is preserved even if it differs from site order.
-pub fn neel<I: Eq, T>(
+pub fn neel<I: Eq, C>(
     chain: &Chain<I, SpinHalf>,
     first: SpinHalfState,
-) -> Result<State<I, SpinHalf, T>, UtilityError> {
+) -> Result<State<I, SpinHalf, C>, UtilityError> {
     let factors = factors(chain)?;
     let states = chain
         .space()

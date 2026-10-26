@@ -1,9 +1,14 @@
-use qmb::core::num_traits::{FromPrimitive, Num, ToPrimitive};
+use num_complex::Complex;
+#[cfg(feature = "normalize")]
+use num_traits::Float;
+use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb::spin_half::utility::{UtilityError, heisenberg, neel, xyz};
 use qmb::{
-    Boundary, Chain, Complex, Geometry, HilbertSpace, Id128, LocalState, Operator, SpinHalf,
+    Boundary, Chain, Divide, Geometry, HilbertSpace, Id128, LocalState, Operator, SpinHalf,
     SpinHalfState, State,
 };
+#[cfg(feature = "normalize")]
+use qmb::{Norm, Normalize, NormalizedExpectation};
 use std::{fmt::Debug, ops::Neg};
 
 trait Real: Num + Copy + Neg<Output = Self> + FromPrimitive + ToPrimitive + Debug {
@@ -33,7 +38,10 @@ fn close<T: Real>(actual: Complex<T>, expected: Complex<T>) {
         );
     }
 }
-fn basis<T: Real>(chain: &Chain<Id128, SpinHalf>, bits: usize) -> State<Id128, SpinHalf, T> {
+fn basis<T: Real>(
+    chain: &Chain<Id128, SpinHalf>,
+    bits: usize,
+) -> State<Id128, SpinHalf, Complex<T>> {
     State::tensor(chain.sites().iter().enumerate().map(|(i, site)| {
         // from_sites below supplies factors directly.
         LocalState::primitive(if (bits >> (chain.sites().len() - 1 - i)) & 1 == 0 {
@@ -105,7 +113,7 @@ fn check<T: Real>() {
             assert!(h.space().unwrap().shares_node_with(chain.space()));
             let before: Vec<_> = chain.space().indices().copied().collect();
             for first in [SpinHalfState::Up, SpinHalfState::Down] {
-                let psi = neel::<_, T>(&chain, first).unwrap();
+                let psi = neel::<_, Complex<T>>(&chain, first).unwrap();
                 close(
                     Complex::new(psi.norm_squared().unwrap(), T::zero()),
                     c(1.0, 0.0),
@@ -124,14 +132,30 @@ fn check<T: Real>() {
                     Complex::new(expected, T::zero()),
                 );
                 close(
-                    psi.normalized_expectation(&h).unwrap(),
+                    psi.expectation(&h)
+                        .unwrap()
+                        .divide(psi.inner_product(&psi).unwrap()),
                     Complex::new(expected, T::zero()),
                 );
                 let scaled = psi.scaled(c(2.0, 1.0));
                 close(
-                    scaled.normalized_expectation(&h).unwrap(),
+                    scaled
+                        .expectation(&h)
+                        .unwrap()
+                        .divide(scaled.inner_product(&scaled).unwrap()),
                     Complex::new(expected, T::zero()),
                 );
+                #[cfg(feature = "normalize")]
+                {
+                    close(
+                        psi.normalized_expectation(&h).unwrap(),
+                        Complex::new(expected, T::zero()),
+                    );
+                    close(
+                        scaled.normalized_expectation(&h).unwrap(),
+                        Complex::new(expected, T::zero()),
+                    );
+                }
                 if n == 0 {
                     close(psi.inner_product(&State::unit()).unwrap(), c(1.0, 0.0));
                     close(h.trace().unwrap(), c(0.0, 0.0));
@@ -170,12 +194,12 @@ fn models_match_analytic_energies_and_independent_matrices_both_precisions() {
     check::<f64>();
 }
 
-#[cfg(feature = "libm")]
-fn check_norms<T: Real + qmb::core::num_traits::Float>() {
+#[cfg(feature = "normalize")]
+fn check_norms<T: Real + Float>() {
     for n in 0..=6 {
         for first in [SpinHalfState::Up, SpinHalfState::Down] {
             let chain = Chain::<Id128, SpinHalf>::new(n, 1, Boundary::Open).unwrap();
-            let psi = neel::<_, T>(&chain, first).unwrap();
+            let psi = neel::<_, Complex<T>>(&chain, first).unwrap();
             close(Complex::new(psi.norm().unwrap(), T::zero()), c(1.0, 0.0));
             let normalized = psi.scaled(c(2.0, -3.0)).normalized().unwrap();
             close(
@@ -185,7 +209,7 @@ fn check_norms<T: Real + qmb::core::num_traits::Float>() {
         }
     }
 }
-#[cfg(feature = "libm")]
+#[cfg(feature = "normalize")]
 #[test]
 fn default_facade_enables_norms_at_both_precisions() {
     check_norms::<f32>();
@@ -197,15 +221,15 @@ fn utilities_reject_empty_and_multiple_factors_but_accept_nested_single_factors(
     for k in [0, 2] {
         let chain = Chain::<Id128, SpinHalf>::new(2, k, Boundary::Open).unwrap();
         assert_eq!(
-            neel::<_, f64>(&chain, SpinHalfState::Up).err(),
+            neel::<_, Complex<f64>>(&chain, SpinHalfState::Up).err(),
             Some(UtilityError::InvalidSite(0))
         );
         assert_eq!(
-            heisenberg(&chain, 1.0_f64).err(),
+            heisenberg::<_, _, Complex<f64>>(&chain, 1.0_f64).err(),
             Some(UtilityError::InvalidSite(0))
         );
         assert_eq!(
-            xyz(&chain, 1.0_f64, 2.0, -3.0).err(),
+            xyz::<_, _, Complex<f64>>(&chain, 1.0_f64, 2.0, -3.0).err(),
             Some(UtilityError::InvalidSite(0))
         );
     }
@@ -219,7 +243,7 @@ fn utilities_reject_empty_and_multiple_factors_but_accept_nested_single_factors(
     let full = HilbertSpace::tensor([b.clone(), a]).unwrap();
     let geometry = Geometry::with_space([nested, b], &full).unwrap();
     let chain = Chain::from_geometry(geometry, Boundary::Open);
-    let psi = neel::<_, f64>(&chain, SpinHalfState::Up).unwrap();
+    let psi = neel::<_, Complex<f64>>(&chain, SpinHalfState::Up).unwrap();
     assert!(psi.space().is_compatible_with(&full));
     close(
         psi.expectation(&heisenberg(&chain, 1.0).unwrap()).unwrap(),
@@ -233,7 +257,9 @@ fn utilities_reject_empty_and_multiple_factors_but_accept_nested_single_factors(
     )
     .unwrap();
     close(psi.inner_product(&expected).unwrap(), c(1.0, 0.0));
-    let zero = Operator::<_, SpinHalf, f64>::zero().bind(&full).unwrap();
+    let zero = Operator::<_, SpinHalf, Complex<f64>>::zero()
+        .bind(&full)
+        .unwrap();
     close(psi.expectation(&zero).unwrap(), c(0.0, 0.0));
 }
 

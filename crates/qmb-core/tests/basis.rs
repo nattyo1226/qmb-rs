@@ -1,6 +1,6 @@
 //! The unified basis trait does not prescribe numeric capabilities.
 
-use qmb_core::{Basis, Complex, LinearCombination};
+use qmb_core::{Basis, LinearCombination};
 
 enum Primitive {
     First,
@@ -12,7 +12,7 @@ struct CustomBasis;
 
 impl Basis<Primitive, Scalar> for CustomBasis {
     fn expand(&self, primitive: &Primitive) -> LinearCombination<Primitive, Scalar> {
-        let term = |operand| LinearCombination::term(Complex::new(Scalar(1), Scalar(0)), operand);
+        let term = |operand| LinearCombination::term(Scalar(1), operand);
         match primitive {
             Primitive::First => term(Primitive::First),
             Primitive::Second => term(Primitive::Second),
@@ -45,6 +45,6 @@ fn one_basis_implementation_supports_all_methods_without_scalar_traits() {
     assert_eq!(expansion.len(), 2);
     for (i, term) in expansion.into_iter().enumerate() {
         assert_eq!(basis.index(&term.operand), Some(i));
-        assert_eq!((term.coefficient.re.0, term.coefficient.im.0), (1, 0));
+        assert_eq!(term.coefficient.0, 1);
     }
 }

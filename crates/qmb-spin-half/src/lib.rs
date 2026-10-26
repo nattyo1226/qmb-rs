@@ -6,28 +6,30 @@
 //! from the result or specified through a qualified trait call.
 //!
 //! ```
-//! use qmb_core::{Act, Complex, LinearCombination, Product};
+//! use num_complex::Complex;
+//! use qmb_core::{Act, LinearCombination, Product};
 //! use qmb_spin_half::{SpinHalfOperator as Op, SpinHalfState as State};
 //!
-//! let raised: LinearCombination<State, f64> = State::Down.act(&Op::SPlus);
+//! let raised: LinearCombination<State, Complex<f64>> = State::Down.act(&Op::SPlus);
 //! assert_eq!(raised, LinearCombination::primitive(State::Up));
 //!
-//! let squared = <Op as Product<f32>>::product(&Op::Sx, &Op::Sx);
+//! let squared = <Op as Product<Complex<f32>>>::product(&Op::Sx, &Op::Sx);
 //! assert_eq!(squared, LinearCombination::term(Complex::new(0.25, 0.0), Op::I));
 //! ```
 //!
 //! Local products retain natural primitives; basis expansion is a separate step:
 //!
 //! ```
-//! use qmb_core::{Basis, Complex, LinearCombination, Product};
+//! use num_complex::Complex;
+//! use qmb_core::{Basis, LinearCombination, Product};
 //! use qmb_spin_half::{CartesianBasis, SpinHalfOperator as Op};
 //!
-//! let product: LinearCombination<Op, f64> = Op::I.product(&Op::SPlus);
+//! let product: LinearCombination<Op, Complex<f64>> = Op::I.product(&Op::SPlus);
 //! assert_eq!(product, LinearCombination::primitive(Op::SPlus));
-//! let expanded = <CartesianBasis as Basis<Op, f64>>::expand(&CartesianBasis, &Op::SPlus);
+//! let expanded = <CartesianBasis as Basis<Op, Complex<f64>>>::expand(&CartesianBasis, &Op::SPlus);
 //! assert_eq!(expanded, LinearCombination::primitive(Op::Sx)
 //!     + LinearCombination::term(Complex::new(0.0, 1.0), Op::Sy));
-//! let elements: Vec<_> = <CartesianBasis as Basis<Op, f64>>::elements(&CartesianBasis).collect();
+//! let elements: Vec<_> = <CartesianBasis as Basis<Op, Complex<f64>>>::elements(&CartesianBasis).collect();
 //! assert_eq!(elements, [Op::I, Op::Sx, Op::Sy, Op::Sz]);
 //! ```
 //!
@@ -41,9 +43,10 @@
 //! Shared local expressions construct actions lazily and evaluate without a basis:
 //!
 //! ```
-//! use qmb_core::{Complex, LocalState, LocalOperator};
+//! use num_complex::Complex;
+//! use qmb_core::{LocalState, LocalOperator};
 //! use qmb_spin_half::{SpinHalf, SpinHalfState as State, SpinHalfOperator as Op};
-//! let up = LocalState::<SpinHalf, f64>::primitive(State::Up);
+//! let up = LocalState::<SpinHalf, Complex<f64>>::primitive(State::Up);
 //! let sx = LocalOperator::primitive(Op::Sx);
 //! let down = LocalState::primitive(State::Down);
 //! let result = up.act(&sx).evaluate();
@@ -54,13 +57,14 @@
 //! Place local expressions on independently identified factors to form a system:
 //!
 //! ```
-//! use qmb_core::{Complex, HilbertSpace, LocalOperator, LocalState};
+//! use num_complex::Complex;
+//! use qmb_core::{HilbertSpace, LocalOperator, LocalState};
 //! use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket};
 //!
 //! let a = HilbertSpace::<_, SpinHalf>::factor("a");
 //! let b = HilbertSpace::factor("b");
 //! let h = a.tensor_product(&b)?;
-//! let up = LocalState::<SpinHalf, f64>::primitive(Ket::Up).at(&a)?;
+//! let up = LocalState::<SpinHalf, Complex<f64>>::primitive(Ket::Up).at(&a)?;
 //! let down = LocalState::primitive(Ket::Down).at(&b)?;
 //! let state = up.tensor_product(&down)?;
 //! let sz = LocalOperator::primitive(Op::Sz);

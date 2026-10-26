@@ -1,10 +1,11 @@
 use super::composite::{OpNode, StateNode};
 use crate::{
-    Act, Adjoint, Complex, ExpressionError as E, HilbertSpace, InnerProduct,
-    LinearCombination as Lc, LocalOperator, LocalState, LocalStructure, Operator, State,
+    Act, Adjoint, ExpressionError as E, HilbertSpace, InnerProduct, LinearCombination as Lc,
+    LocalOperator, LocalState, LocalStructure, Operator, State,
 };
 use alloc::vec::Vec;
 use core::{cell::Cell, marker::PhantomData, num::NonZeroUsize};
+use num_complex::Complex;
 
 #[derive(PartialEq, Eq)]
 struct Index(u8);
@@ -28,29 +29,29 @@ impl<'a> LocalStructure for L<'a> {
     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
 }
 // No Product or Identity capability. Metadata, indices and primitives are not Clone.
-impl<'a> Act<f64> for Primitive<'a> {
+impl<'a> Act<Complex<f64>> for Primitive<'a> {
     type Operator = Op;
     type Term = Self;
-    fn act(&self, _: &Op) -> Lc<Self, f64> {
+    fn act(&self, _: &Op) -> Lc<Self, Complex<f64>> {
         self.1.acts.set(self.1.acts.get() + 1);
         Lc::primitive(Primitive(1 - self.0, self.1))
     }
 }
-impl Adjoint<f64> for Op {
+impl Adjoint<Complex<f64>> for Op {
     type Term = Self;
-    fn adjoint(&self) -> Lc<Self, f64> {
+    fn adjoint(&self) -> Lc<Self, Complex<f64>> {
         Lc::primitive(Op)
     }
 }
-impl InnerProduct<f64> for Primitive<'_> {
+impl InnerProduct<Complex<f64>> for Primitive<'_> {
     fn inner_product(&self, rhs: &Self) -> Complex<f64> {
         self.1.inner_products.set(self.1.inner_products.get() + 1);
         Complex::new(if self.0 == rhs.0 { 1.0 } else { 0.0 }, 0.0)
     }
 }
 type H<'a> = HilbertSpace<Index, L<'a>>;
-type S<'a, T = f64> = State<Index, L<'a>, T>;
-type O<'a, T = f64> = Operator<Index, L<'a>, T>;
+type S<'a, T = f64> = State<Index, L<'a>, Complex<T>>;
+type O<'a, T = f64> = Operator<Index, L<'a>, Complex<T>>;
 
 #[test]
 fn evaluated_contraction_only_requires_primitive_inner_products() {
@@ -62,7 +63,7 @@ fn evaluated_contraction_only_requires_primitive_inner_products() {
         type Operator = ();
         const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
     }
-    impl InnerProduct<f64> for InnerOnly {
+    impl InnerProduct<Complex<f64>> for InnerOnly {
         fn inner_product(&self, _: &Self) -> Complex<f64> {
             Complex::new(1.0, 0.0)
         }
@@ -70,7 +71,7 @@ fn evaluated_contraction_only_requires_primitive_inner_products() {
     // Neither Act nor Adjoint is implemented. Contraction of already evaluated
     // syntax needs no action capabilities, cloning of primitives, or Index Eq.
     let factor = HilbertSpace::<OpaqueIndex, Metadata>::factor(OpaqueIndex);
-    let local = LocalState::<Metadata, f64>::primitive(InnerOnly);
+    let local = LocalState::<Metadata, Complex<f64>>::primitive(InnerOnly);
     let state = local.at(&factor).unwrap();
     assert_eq!(
         local.evaluated_inner_product(&local),
@@ -223,7 +224,7 @@ fn construction_uses_opaque_scalars_and_shared_nonclone_borrowed_leaves() {
     struct Scalar;
     let counts = Counts::default();
     let h = H::factor(Index(0));
-    let local = LocalState::<L<'_>, Scalar>::primitive(Primitive(0, &counts));
+    let local = LocalState::<L<'_>, Complex<Scalar>>::primitive(Primitive(0, &counts));
     let state = local.at(&h).unwrap();
     let op = LocalOperator::primitive(Op).at(&h).unwrap();
     let a = state
@@ -304,7 +305,9 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
     let a = H::factor(Index(1));
     let b = H::factor(Index(2));
     let ab = a.tensor_product(&b).unwrap();
-    let op = LocalOperator::<L<'_>, f64>::primitive(Op).at(&a).unwrap();
+    let op = LocalOperator::<L<'_>, Complex<f64>>::primitive(Op)
+        .at(&a)
+        .unwrap();
     let small = op.bind(&a).unwrap();
     let large = op.bind(&ab).unwrap();
     assert!(matches!(small.add(&large), Err(E::IncompatibleSpaces)));
@@ -336,18 +339,21 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
         Err(E::MissingIndex)
     ));
     assert!(matches!(
-        LocalOperator::<L<'_>, f64>::zero().at(&a).unwrap().bind(&b),
-        Err(E::MissingIndex)
-    ));
-    assert!(matches!(
-        LocalOperator::<L<'_>, f64>::identity()
+        LocalOperator::<L<'_>, Complex<f64>>::zero()
             .at(&a)
             .unwrap()
             .bind(&b),
         Err(E::MissingIndex)
     ));
     assert!(matches!(
-        LocalState::<L<'_>, f64>::zero().at(&ab),
+        LocalOperator::<L<'_>, Complex<f64>>::identity()
+            .at(&a)
+            .unwrap()
+            .bind(&b),
+        Err(E::MissingIndex)
+    ));
+    assert!(matches!(
+        LocalState::<L<'_>, Complex<f64>>::zero().at(&ab),
         Err(E::NotAFactor)
     ));
     assert!(matches!(
@@ -365,23 +371,23 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
 fn evaluate_does_not_require_coefficient_arithmetic() {
     #[derive(Clone)]
     struct Scalar;
-    impl core::ops::Neg for Scalar {
+    impl crate::Conjugate for Scalar {
         type Output = Self;
-        fn neg(self) -> Self {
-            self
+        fn conjugate(&self) -> Self {
+            Self
         }
     }
     impl<'a> Act<Scalar> for Primitive<'a> {
         type Operator = Op;
         type Term = Self;
         fn act(&self, _: &Op) -> Lc<Self, Scalar> {
-            Lc::term(Complex::new(Scalar, Scalar), Primitive(self.0, self.1))
+            Lc::term(Scalar, Primitive(self.0, self.1))
         }
     }
     impl Adjoint<Scalar> for Op {
         type Term = Self;
         fn adjoint(&self) -> Lc<Self, Scalar> {
-            Lc::term(Complex::new(Scalar, Scalar), Op)
+            Lc::term(Scalar, Op)
         }
     }
     let counts = Counts::default();
@@ -400,17 +406,17 @@ fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
     let coefficient = || Complex::new(Scalar(2), Scalar(3));
     let counts = Counts::default();
     let factor = HilbertSpace::<OpaqueIndex, L<'_>>::factor(OpaqueIndex);
-    let state = LocalState::<L<'_>, Scalar>::primitive(Primitive(0, &counts))
+    let state = LocalState::<L<'_>, Complex<Scalar>>::primitive(Primitive(0, &counts))
         .at(&factor)
         .unwrap();
-    let operator = LocalOperator::<L<'_>, Scalar>::primitive(Op)
+    let operator = LocalOperator::<L<'_>, Complex<Scalar>>::primitive(Op)
         .at(&factor)
         .unwrap();
     for scaled in [
         state.clone() * coefficient(),
         &state * coefficient(),
-        coefficient() * state.clone(),
-        coefficient() * &state,
+        state.scaled(coefficient()),
+        state.scaled(coefficient()),
     ] {
         let StateNode::Scale(s) = scaled.expression.node() else {
             panic!("scale")
@@ -422,8 +428,8 @@ fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
     for scaled in [
         operator.clone() * coefficient(),
         &operator * coefficient(),
-        coefficient() * operator.clone(),
-        coefficient() * &operator,
+        operator.scaled(coefficient()),
+        operator.scaled(coefficient()),
     ] {
         let OpNode::Scale(s) = scaled.expression.node() else {
             panic!("scale")
@@ -437,17 +443,17 @@ fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
     #[derive(Clone)]
     struct CloneOnly(u8);
     let coefficient = Complex::new(CloneOnly(4), CloneOnly(5));
-    let state = LocalState::<L<'_>, CloneOnly>::primitive(Primitive(1, &counts))
+    let state = LocalState::<L<'_>, Complex<CloneOnly>>::primitive(Primitive(1, &counts))
         .at(&factor)
         .unwrap();
-    let operator = LocalOperator::<L<'_>, CloneOnly>::primitive(Op)
+    let operator = LocalOperator::<L<'_>, Complex<CloneOnly>>::primitive(Op)
         .at(&factor)
         .unwrap();
     for scaled in [
         state.clone() * &coefficient,
         &state * &coefficient,
-        &coefficient * state.clone(),
-        &coefficient * &state,
+        state.scaled(coefficient.clone()),
+        state.scaled(coefficient.clone()),
     ] {
         let StateNode::Scale(s) = scaled.expression.node() else {
             panic!("scale")
@@ -458,8 +464,8 @@ fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
     for scaled in [
         operator.clone() * &coefficient,
         &operator * &coefficient,
-        &coefficient * operator.clone(),
-        &coefficient * &operator,
+        operator.scaled(coefficient.clone()),
+        operator.scaled(coefficient.clone()),
     ] {
         let OpNode::Scale(s) = scaled.expression.node() else {
             panic!("scale")
@@ -677,8 +683,8 @@ fn shared_composite_types_follow_stored_data_without_metadata_bounds() {
     }
     fn send_sync<T: Send + Sync>() {}
     send_sync::<HilbertSpace<u8, Metadata>>();
-    send_sync::<State<u8, Metadata, f64>>();
-    send_sync::<Operator<u8, Metadata, f64>>();
+    send_sync::<State<u8, Metadata, Complex<f64>>>();
+    send_sync::<Operator<u8, Metadata, Complex<f64>>>();
     // The metadata value is not stored by any of these types.
     let metadata = Metadata(std::rc::Rc::new(()));
     assert_eq!(std::rc::Rc::strong_count(&metadata.0), 1);
@@ -686,11 +692,10 @@ fn shared_composite_types_follow_stored_data_without_metadata_bounds() {
 
 #[test]
 fn composite_scalar_reductions_require_neither_num_float_copy_nor_division() {
-    use crate::{
-        Identity, Product, Trace,
-        num_traits::{One, Zero},
-    };
+    use crate::test_coefficient::MinimalComplex;
+    use crate::{Identity, Product, Trace};
     use core::ops::{Add, Mul, Neg, Sub};
+    use num_traits::{One, Zero};
 
     #[derive(Clone, Debug, PartialEq)]
     struct Ring(i64);
@@ -738,67 +743,67 @@ fn composite_scalar_reductions_require_neither_num_float_copy_nor_division() {
         type Operator = Primitive;
         const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
     }
-    impl Identity<Ring> for Point {
-        fn identity() -> Lc<Primitive, Ring> {
+    impl Identity<MinimalComplex<Ring>> for Point {
+        fn identity() -> Lc<Primitive, MinimalComplex<Ring>> {
             Lc::primitive(Primitive)
         }
     }
-    impl Act<Ring> for Primitive {
+    impl Act<MinimalComplex<Ring>> for Primitive {
         type Operator = Self;
         type Term = Self;
-        fn act(&self, _: &Self) -> Lc<Self, Ring> {
+        fn act(&self, _: &Self) -> Lc<Self, MinimalComplex<Ring>> {
             Lc::primitive(Primitive)
         }
     }
-    impl Product<Ring> for Primitive {
+    impl Product<MinimalComplex<Ring>> for Primitive {
         type Term = Self;
-        fn product(&self, _: &Self) -> Lc<Self, Ring> {
+        fn product(&self, _: &Self) -> Lc<Self, MinimalComplex<Ring>> {
             Lc::primitive(Primitive)
         }
     }
-    impl Adjoint<Ring> for Primitive {
+    impl Adjoint<MinimalComplex<Ring>> for Primitive {
         type Term = Self;
-        fn adjoint(&self) -> Lc<Self, Ring> {
+        fn adjoint(&self) -> Lc<Self, MinimalComplex<Ring>> {
             Lc::primitive(Primitive)
         }
     }
-    impl InnerProduct<Ring> for Primitive {
-        fn inner_product(&self, _: &Self) -> Complex<Ring> {
-            Complex::new(Ring(1), Ring(0))
+    impl InnerProduct<MinimalComplex<Ring>> for Primitive {
+        fn inner_product(&self, _: &Self) -> MinimalComplex<Ring> {
+            MinimalComplex::new(Ring(1), Ring(0))
         }
     }
-    impl Trace<Ring> for Primitive {
-        fn trace(&self) -> Complex<Ring> {
-            Complex::new(Ring(1), Ring(0))
+    impl Trace<MinimalComplex<Ring>> for Primitive {
+        fn trace(&self) -> MinimalComplex<Ring> {
+            MinimalComplex::new(Ring(1), Ring(0))
         }
     }
     let a = HilbertSpace::<_, Point>::factor(0u8);
     let b = HilbertSpace::factor(1);
-    let state = LocalState::<Point, Ring>::primitive(Primitive)
+    let state = LocalState::<Point, MinimalComplex<Ring>>::primitive(Primitive)
         .at(&a)
         .unwrap()
         .tensor_product(&LocalState::primitive(Primitive).at(&b).unwrap())
         .unwrap()
-        .scaled(Complex::new(Ring(3), Ring(4)));
+        .scaled(MinimalComplex::new(Ring(3), Ring(4)));
     let operator = LocalOperator::primitive(Primitive)
         .at(&a)
         .unwrap()
-        .scaled(Complex::new(Ring(2), Ring(3)));
+        .scaled(MinimalComplex::new(Ring(2), Ring(3)));
     let norm_squared = state.inner_product(&state).unwrap();
-    assert_eq!(norm_squared, Complex::new(Ring(25), Ring(0)));
+    assert_eq!(norm_squared, MinimalComplex::new(Ring(25), Ring(0)));
     assert_eq!(
         state.expectation(&operator).unwrap(),
-        Complex::new(Ring(50), Ring(75))
+        MinimalComplex::new(Ring(50), Ring(75))
     );
     assert_eq!(
         operator.adjoint().trace_in(state.space()).unwrap(),
-        Complex::new(Ring(2), Ring(-3))
+        MinimalComplex::new(Ring(2), Ring(-3))
     );
     assert_eq!(
         operator
             .hilbert_schmidt_inner_product_in(&operator, state.space())
             .unwrap(),
-        Complex::new(Ring(13), Ring(0))
+        MinimalComplex::new(Ring(13), Ring(0))
     );
 }
 

@@ -41,7 +41,7 @@ qmb-rs は、量子系の Hilbert 空間、状態、および演算子を代数�
 
 局所構造は空間の情報を保持し、状態・演算子 primitive が持つ数学的能力を関連付け、その整合性を要求する。状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供し、core の共通の式木が線型結合などへ拡張する。詳細は [局所構造の設計](design/local-structure.md)と[局所 primitive・式木の数学的能力](design/primitive-expression.md)に定める。
 
-Step 2 の Rust API では、係数型に依存しない `LocalStructure` に状態・演算子の関連型と次元だけを置き、恒等演算子の規則を `Identity<T>: LocalStructure` に分離する。各演算能力と入出力の対応は必要なメソッドで要求し、式の単なる保持・構築に全演算の数値制約を波及させない。
+Step 2 の Rust API では、係数型に依存しない `LocalStructure` に状態・演算子の関連型と次元だけを置き、恒等演算子の規則を `Identity<C>: LocalStructure` に分離する。各演算能力と入出力の対応は必要なメソッドで要求し、式の単なる保持・構築に全演算の数値制約を波及させない。
 
 局所構造は、同じ定義・定義パラメータを持つ場合に一致とする。別々に構築・復元した場合も一致し、選択基底・表示名・メモリ上の object identity は一致条件に含めない。次元や trait の種類の一致だけでは一致とみなさず、数学的同型の判定や primitive の自動対応付けは導入しない。詳細は[局所構造の一致条件](design/local-structure.md#4-局所構造の一致条件)に定める。数値精度の互換性は 4.1 節の規約に従って別途検証する。
 
@@ -246,9 +246,9 @@ Hilbert 空間は、Tensor の直下の子空間を構築順序で列挙する�
 
 一つの局所構造の上の式にもこの共通の式木を利用し、primitive の積・作用・随伴の結果は同じ局所構造の primitive の有限線型結合として表す。共通機構は、必要な評価時に線型性・半双線型性・共役線型性に従って primitive の規則へ委譲する。数学的能力の担当と導出する操作は、[局所 primitive・式木の数学的能力](design/primitive-expression.md)に定める。
 
-式の内容を保持する共通パーツは `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` とし、局所式と複合式で再利用する。`LinearCombination<P, T>` は共通パーツで保持する薄い有限線型結合型として維持する。Product・Act・随伴の trait は係数精度 `T` を型引数、返却要素を関連型 `Term` とし、出力を `LinearCombination<Self::Term, T>` に限定する。Act の演算子型も関連型で指定し、数値制約は各実装に置く。局所規則・恒等演算子・局所基底展開の結果は、式木側が係数を保持したまま `map` で要素を変換し、共通 constructor で和・スカラー倍として取り込む。`map` 自体に要素・係数の `Clone` は要求しない。core・spin-half・テスト実装の関連型への移行と式木への接続は、実装計画の Step 2 で行う。
+式の内容を保持する共通パーツは `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` とし、局所式と複合式で再利用する。`LinearCombination<P, C>` は共通パーツで保持する薄い有限線型結合型として維持する。Product・Act・随伴の trait は係数全体 `C` を型引数、返却要素を関連型 `Term` とし、出力を `LinearCombination<Self::Term, C>` に限定する。Act の演算子型も関連型で指定し、数値制約は各実装に置く。局所規則・恒等演算子・局所基底展開の結果は、式木側が係数を保持したまま `map` で要素を変換し、共通 constructor で和・スカラー倍として取り込む。`map` 自体に要素・係数の `Clone` は要求しない。core・spin-half・テスト実装の関連型への移行と式木への接続は、実装計画の Step 2 で行う。
 
-共通パーツは `expr::parts` で保持内容も公開し、式ハンドルを crate root から再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, T>` は `ScaleExpr<P, T>` の別名に統合し、要素フィールド名を `operand` に揃える。関連型 `Term` は係数を含まない要素型として区別する。既存の線型結合の構築・走査 API を維持し、走査は `SumExpr` 側へ集約する。
+共通パーツは `expr::parts` で保持内容も公開し、式ハンドルを crate root から再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, C>` は `ScaleExpr<P, C>` の別名に統合し、要素フィールド名を `operand` に揃える。関連型 `Term` は係数を含まない要素型として区別する。既存の線型結合の構築・走査 API を維持し、走査は `SumExpr` 側へ集約する。
 
 式の保持・係数計算を伴わない遅延構築・map に数値制約を付けず、演算に必要な制約はメソッドごとに付ける。primitive の既存の最小限の数値制約を維持し、全能力をまとめた係数 trait は導入しない。式同士の二項演算子は所有値・借用値の4通りを提供し、所有ハンドルは移動、借用ハンドルは共有参照の複製で処理する。名前付きメソッドは共有借用を基本とする。
 
@@ -646,9 +646,9 @@ operand および構築時に与えられた情報だけで判定できるエラ
 
 状態基底と演算子基底は、それぞれ指定した状態空間と演算子空間の順序付き座標系として扱う。局所基底要素は対応する primitive の部分集合とし、対象空間全体に線型独立かつ完全であることを要求する。primitive の一覧全体が独立な基底であるとは限らない。
 
-基底の定義を表す struct が対象の要素型を指定した `Basis<P, T>` を実装する。primitive の基底展開、基底要素である primitive の順序番号の取得、および基底順序での遅延列挙を提供する。状態 primitive の展開は `LinearCombination<L::State, T>`、演算子 primitive の展開は `LinearCombination<L::Operator, T>` を返し、要素は選択した基底の primitive に限る。式木側は `map` と共通 constructor で通常の式へ取り込む。基底要素でない primitive は展開できるが、それ自体を指す順序番号は持たない。局所基底と式木の接続は Step 2 に含める。数学的な契約は [基底の数学的能力](design/basis.md)に定める。
+基底の定義を表す struct が対象の要素型を指定した `Basis<P, C>` を実装する。primitive の基底展開、基底要素である primitive の順序番号の取得、および基底順序での遅延列挙を提供する。状態 primitive の展開は `LinearCombination<L::State, T>`、演算子 primitive の展開は `LinearCombination<L::Operator, T>` を返し、要素は選択した基底の primitive に限る。式木側は `map` と共通 constructor で通常の式へ取り込む。基底要素でない primitive は展開できるが、それ自体を指す順序番号は持たない。局所基底と式木の接続は Step 2 に含める。数学的な契約は [基底の数学的能力](design/basis.md)に定める。
 
-Step 2 では `Basis<P, T>` を維持し、`StateBasis`・`OperatorBasis` は削除する。利用側は `L: LocalStructure` と、状態基底には `Basis<L::State, T>`、演算子基底には `Basis<L::Operator, T>` を直接要求する。`index() -> Option<usize>` と所有要素の遅延列挙を維持する。次元取得 API からは不要な型引数 `T` を外し、完全性・線型独立性・状態で `d`、全演算子空間で `d²` という要素数の契約と検証条件を維持する。
+Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` は削除する。利用側は `L: LocalStructure` と、状態基底には `Basis<L::State, C>`、演算子基底には `Basis<L::Operator, C>` を直接要求する。`index() -> Option<usize>` と所有要素の遅延列挙を維持する。次元取得 API からは不要な型引数 `T` を外し、完全性・線型独立性・状態で `d`、全演算子空間で `d²` という要素数の契約と検証条件を維持する。
 
 考えている演算子空間の基底を構成・列挙できることを必要とし、次の機能を設計に含める。
 

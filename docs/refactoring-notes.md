@@ -10,13 +10,13 @@
 
 結論を得た項目には、採否、理由、公開 API と実装への影響、移行方法、検証結果を追記する。確定した内容は対応する要件・設計文書・実装計画へ反映し、反映後に本書を整理または削除する。
 
-## 2. 現在の実装
+## 2. 棚卸し時点の実装（係数移行前）
 
 Step 4 までの機能を実装済みである。Partial trace、式全体の基底展開・複合基底・座標取得・写像の表現係数、数値 export は後続段階にある。今回の見直しだけを理由に、それらの機能実装を追加しない。
 
 | 対象 | 現在の構成 | 主な実装 |
 | --- | --- | --- |
-| 数値 | 係数は `num_complex::Complex<T>`。`Zero`・`One` と、平方根を使う操作の `Float` は num-traits を利用する。両ライブラリを core から再公開する | [core の公開 API](../crates/qmb-core/src/lib.rs)、[係数演算](../crates/qmb-core/src/coefficient.rs)、[正規化](../crates/qmb-core/src/expr/normalization.rs) |
+| 数値 | 係数は `num_complex::Complex<T>`。`Zero`・`One` と、平方根を使う操作の `Float` は num-traits を利用する。両ライブラリを core から再公開していた | [core の公開 API](../crates/qmb-core/src/lib.rs)、[係数演算](../crates/qmb-core/src/coefficient.rs)、[正規化の移行先](../crates/qmb-normalize/src/lib.rs) |
 | 局所構造 | `LocalStructure` が状態・演算子 primitive の関連型と固定次元を定義する。恒等元は `Identity<T>`、他の演算能力は primitive 側の trait に分離する | [局所構造](../crates/qmb-core/src/local_structure.rs)、[演算能力](../crates/qmb-core/src/ops.rs) |
 | 局所式 | `LocalState<L, T>`・`LocalOperator<L, T>` が別々の節点を `Arc` で共有する。和・スカラー倍などの内容を共通パーツで保持する | [局所式](../crates/qmb-core/src/expr/local.rs)、[共通パーツ](../crates/qmb-core/src/expr/parts.rs) |
 | 複合式 | `State<I, L, T>` は常に所属空間を持つ。`Operator<I, L, T>` は外側のハンドルに任意の束縛先を持ち、子節点に旧束縛を残さない | [複合式](../crates/qmb-core/src/expr/composite.rs) |
@@ -31,7 +31,7 @@ Step 4 までの機能を実装済みである。Partial trace、式全体の基
 
 **目的**：core に num-complex を含めたまま、係数型の能力契約を最小限に整理する。2026-10-25 の利用者の指示により、両数値ライブラリへの依存解消を目標とした旧方針から変更した。
 
-**現状**：複素数型は公開 API、線型結合、式節点、局所規則の返却値まで使われている。spin-half も core の再公開を利用する。複素数の基本演算には独自の補助関数があり、num-complex の乗算が要求する Num より狭い制約で処理している。core の任意の `libm` feature は `num-traits/libm` を有効にする。
+**移行前**：複素数型は公開 API、線型結合、式節点、局所規則の返却値まで使われている。spin-half も core の再公開を利用する。複素数の基本演算には独自の補助関数があり、num-complex の乗算が要求する Num より狭い制約で処理している。core の任意の `libm` feature は `num-traits/libm` を有効にする。
 
 **合意した基本方針**：係数型には「必要な時に必要な trait bound を課す」。保持・構築のために全数値能力を要求せず、各操作で実際に使う能力だけを要求する。全能力をまとめた係数 trait を共通の必須条件にしない。
 
@@ -47,11 +47,11 @@ Step 4 までの機能を実装済みである。Partial trace、式全体の基
 
 - 成分型 T から係数全体 C を保持する API へ移行する。
 - 共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う。
-- norm・normalized は std を利用できる qmb-normalize の拡張 trait で提供する。実数型 R に Float を要求し、provider・独自 Sqrt trait は導入しない。
+- norm・normalized・正規化期待値は std を利用できる qmb-normalize の拡張 trait で提供し、NormalizationError も同 crate に置く。実数型 R に Float を要求し、provider・独自 Sqrt trait は導入しない。
 - 標準 Complex の左スカラー倍は個別実装し、任意の C は scaled(c) を基本経路とする。
 - 正規化期待値では純実分母を不要に二乗しない既存の数値的な処理を維持する。
 
-core に内積・norm squared・平方根を使わない正規化期待値を残す。qmb から新 crate と拡張 trait を再公開する。具体的な trait 名、既存 API・libm feature の移行と除算経路の接続は、採用方針に沿う実装事項として整理する。
+core に内積・期待値・norm squared・スカラー除算を残し、正規化期待値と零ノルムの検査・NormalizationError は qmb-normalize に移す。core/expr の正規化 module は削除した。qmb から新 crate と拡張 trait を再公開する。実装は Conjugate・RealPart・ImaginaryUnit・Divide、From<R>、Norm／Normalize に具体化した。数値ライブラリの再公開は削除し、必要な箇所では num-complex・num-traits を直接 import する。API と feature の移行は [実装記録](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)を参照する。
 
 この新 crate は std の利用を許容し、no_std 対応を要件にしない。core 自体の no_std + alloc は維持する。
 
@@ -166,7 +166,7 @@ core に内積・norm squared・平方根を使わない正規化期待値を残
 
 | 項目 | 現在の状態 |
 | --- | --- |
-| 1. 係数型・数値能力 | 係数全体 C・個別能力・標準 Complex への直接実装・num-traits の Zero／One・qmb-normalize・左スカラー倍・除算の方針を採用済み。製品コードは未着手 |
+| 1. 係数型・数値能力 | 係数全体 C・個別能力・標準 Complex への直接実装・num-traits の Zero／One・qmb-normalize・左スカラー倍・除算の方針を採用済み。製品コードを移行済み。検証結果は係数型の採用方針に記録 |
 | 2. LocalStructure | 現状と論点を整理済み。維持・変更・廃止は未決 |
 | 3. Operator／State | 現状と論点を整理済み。数学的対象・共通化範囲は未決 |
 | 4. HilbertSpace | 現状と論点を整理済み。最小構成と責任分担は未決 |

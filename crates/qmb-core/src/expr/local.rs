@@ -1,7 +1,7 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::{Complex, LinearCombination, LocalStructure};
+use crate::{LinearCombination, LocalStructure};
 
 /// An immutable local state expression with shared subexpressions.
 ///
@@ -12,6 +12,7 @@ use crate::{Complex, LinearCombination, LocalStructure};
 ///
 /// ```compile_fail
 /// use core::num::NonZeroUsize;
+/// use num_complex::Complex;
 /// use qmb_core::{LocalState, LocalStructure};
 /// struct L;
 /// impl LocalStructure for L {
@@ -19,8 +20,8 @@ use crate::{Complex, LinearCombination, LocalStructure};
 ///     type Operator = u8;
 ///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
 /// }
-/// let a = LocalState::<L, f32>::primitive(0);
-/// let b = LocalState::<L, f64>::primitive(0);
+/// let a = LocalState::<L, Complex<f32>>::primitive(0);
+/// let b = LocalState::<L, Complex<f64>>::primitive(0);
 /// let _ = a + b;
 /// ```
 ///
@@ -29,6 +30,7 @@ use crate::{Complex, LinearCombination, LocalStructure};
 /// ```compile_fail
 /// use core::num::NonZeroUsize;
 /// use std::rc::Rc;
+/// use num_complex::Complex;
 /// use qmb_core::{LocalState, LocalStructure};
 /// struct L;
 /// impl LocalStructure for L {
@@ -36,11 +38,11 @@ use crate::{Complex, LinearCombination, LocalStructure};
 ///     type Operator = ();
 ///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
 /// }
-/// fn needs_send<T: Send>() {}
-/// needs_send::<LocalState<L, f64>>();
+/// fn needs_send<C: Send>() {}
+/// needs_send::<LocalState<L, Complex<f64>>>();
 /// ```
-pub struct LocalState<L: LocalStructure, T> {
-    pub(super) root: Option<Arc<StateNode<L, T>>>,
+pub struct LocalState<L: LocalStructure, C> {
+    pub(super) root: Option<Arc<StateNode<L, C>>>,
     // A structural property, not an evaluation cache. It permits O(1) reuse of
     // already evaluated subtrees without rescanning long expression chains.
     pub(super) has_action: bool,
@@ -52,6 +54,7 @@ pub struct LocalState<L: LocalStructure, T> {
 ///
 /// ```compile_fail
 /// use core::num::NonZeroUsize;
+/// use num_complex::Complex;
 /// use qmb_core::{LocalState, LocalOperator, LocalStructure};
 /// struct A;
 /// struct B;
@@ -65,31 +68,31 @@ pub struct LocalState<L: LocalStructure, T> {
 ///     type Operator = u8;
 ///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
 /// }
-/// let state = LocalState::<A, f64>::primitive(0);
-/// let op = LocalOperator::<B, f64>::primitive(0);
+/// let state = LocalState::<A, Complex<f64>>::primitive(0);
+/// let op = LocalOperator::<B, Complex<f64>>::primitive(0);
 /// let _ = state.act(&op);
 /// ```
-pub struct LocalOperator<L: LocalStructure, T> {
-    pub(super) root: Option<Arc<OperatorNode<L, T>>>,
+pub struct LocalOperator<L: LocalStructure, C> {
+    pub(super) root: Option<Arc<OperatorNode<L, C>>>,
 }
 
-pub(super) enum StateNode<L: LocalStructure, T> {
+pub(super) enum StateNode<L: LocalStructure, C> {
     Primitive(L::State),
-    Scale(ScaleExpr<LocalState<L, T>, T>),
-    Sum(SumExpr<LocalState<L, T>>),
-    Act(ActExpr<LocalState<L, T>, LocalOperator<L, T>>),
+    Scale(ScaleExpr<LocalState<L, C>, C>),
+    Sum(SumExpr<LocalState<L, C>>),
+    Act(ActExpr<LocalState<L, C>, LocalOperator<L, C>>),
 }
 
-pub(super) enum OperatorNode<L: LocalStructure, T> {
+pub(super) enum OperatorNode<L: LocalStructure, C> {
     Primitive(L::Operator),
     Identity,
-    Scale(ScaleExpr<LocalOperator<L, T>, T>),
-    Sum(SumExpr<LocalOperator<L, T>>),
-    Product(ProductExpr<LocalOperator<L, T>>),
-    Adjoint(AdjointExpr<LocalOperator<L, T>>),
+    Scale(ScaleExpr<LocalOperator<L, C>, C>),
+    Sum(SumExpr<LocalOperator<L, C>>),
+    Product(ProductExpr<LocalOperator<L, C>>),
+    Adjoint(AdjointExpr<LocalOperator<L, C>>),
 }
 
-impl<L: LocalStructure, T> Clone for LocalState<L, T> {
+impl<L: LocalStructure, C> Clone for LocalState<L, C> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
@@ -97,7 +100,7 @@ impl<L: LocalStructure, T> Clone for LocalState<L, T> {
         }
     }
 }
-impl<L: LocalStructure, T> Clone for LocalOperator<L, T> {
+impl<L: LocalStructure, C> Clone for LocalOperator<L, C> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
@@ -105,11 +108,11 @@ impl<L: LocalStructure, T> Clone for LocalOperator<L, T> {
     }
 }
 
-impl<L: LocalStructure, T> LocalState<L, T> {
+impl<L: LocalStructure, C> LocalState<L, C> {
     pub(crate) fn has_pending_action(&self) -> bool {
         self.has_action
     }
-    pub(super) fn new(node: StateNode<L, T>) -> Self {
+    pub(super) fn new(node: StateNode<L, C>) -> Self {
         let has_action = match &node {
             StateNode::Primitive(_) => false,
             StateNode::Scale(s) => s.operand.has_action,
@@ -121,7 +124,7 @@ impl<L: LocalStructure, T> LocalState<L, T> {
             has_action,
         }
     }
-    pub(super) fn node(&self) -> &StateNode<L, T> {
+    pub(super) fn node(&self) -> &StateNode<L, C> {
         self.root.as_deref().expect("live state handle")
     }
 
@@ -141,42 +144,42 @@ impl<L: LocalStructure, T> LocalState<L, T> {
         }
     }
     /// Incorporates mapped terms as ordinary scale and sum nodes.
-    pub fn from_linear_combination(terms: LinearCombination<Self, T>) -> Self {
+    pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
         Self::sum(
             terms
                 .into_iter()
                 .map(|term| term.operand.into_scaled(term.coefficient)),
         )
     }
-    pub(super) fn into_scaled(self, coefficient: Complex<T>) -> Self {
+    pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self::new(StateNode::Scale(ScaleExpr {
             coefficient,
             operand: self,
         }))
     }
     /// Constructs a scale node sharing this expression, even for zero or one.
-    pub fn scaled(&self, coefficient: Complex<T>) -> Self {
+    pub fn scaled(&self, coefficient: C) -> Self {
         self.clone().into_scaled(coefficient)
     }
-    pub(super) fn into_act(self, operator: LocalOperator<L, T>) -> Self {
+    pub(super) fn into_act(self, operator: LocalOperator<L, C>) -> Self {
         Self::new(StateNode::Act(ActExpr {
             state: self,
             operator,
         }))
     }
     /// Constructs a delayed left action. `psi.act(b).act(a)` means `A(B psi)`.
-    pub fn act(&self, operator: &LocalOperator<L, T>) -> Self {
+    pub fn act(&self, operator: &LocalOperator<L, C>) -> Self {
         self.clone().into_act(operator.clone())
     }
 }
 
-impl<L: LocalStructure, T> LocalOperator<L, T> {
-    pub(super) fn new(node: OperatorNode<L, T>) -> Self {
+impl<L: LocalStructure, C> LocalOperator<L, C> {
+    pub(super) fn new(node: OperatorNode<L, C>) -> Self {
         Self {
             root: Some(Arc::new(node)),
         }
     }
-    pub(super) fn node(&self) -> &OperatorNode<L, T> {
+    pub(super) fn node(&self) -> &OperatorNode<L, C> {
         self.root.as_deref().expect("live operator handle")
     }
     /// Stores a primitive without generating a coefficient or running a rule.
@@ -195,21 +198,21 @@ impl<L: LocalStructure, T> LocalOperator<L, T> {
         }
     }
     /// Incorporates mapped terms as ordinary scale and sum nodes.
-    pub fn from_linear_combination(terms: LinearCombination<Self, T>) -> Self {
+    pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
         Self::sum(
             terms
                 .into_iter()
                 .map(|term| term.operand.into_scaled(term.coefficient)),
         )
     }
-    pub(super) fn into_scaled(self, coefficient: Complex<T>) -> Self {
+    pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self::new(OperatorNode::Scale(ScaleExpr {
             coefficient,
             operand: self,
         }))
     }
     /// Constructs a scale node sharing this expression, even for zero or one.
-    pub fn scaled(&self, coefficient: Complex<T>) -> Self {
+    pub fn scaled(&self, coefficient: C) -> Self {
         self.clone().into_scaled(coefficient)
     }
     /// Constructs a symbolic identity, without invoking the identity rule.
@@ -244,30 +247,30 @@ impl<L: LocalStructure, T> LocalOperator<L, T> {
     }
 }
 
-impl<L: LocalStructure, T> Default for LocalState<L, T> {
+impl<L: LocalStructure, C> Default for LocalState<L, C> {
     fn default() -> Self {
         Self::zero()
     }
 }
-impl<L: LocalStructure, T> Default for LocalOperator<L, T> {
+impl<L: LocalStructure, C> Default for LocalOperator<L, C> {
     fn default() -> Self {
         Self::zero()
     }
 }
 
-enum Pending<L: LocalStructure, T> {
-    State(Arc<StateNode<L, T>>),
-    Operator(Arc<OperatorNode<L, T>>),
+enum Pending<L: LocalStructure, C> {
+    State(Arc<StateNode<L, C>>),
+    Operator(Arc<OperatorNode<L, C>>),
 }
 
-fn state_child<L: LocalStructure, T>(mut child: LocalState<L, T>, stack: &mut Vec<Pending<L, T>>) {
+fn state_child<L: LocalStructure, C>(mut child: LocalState<L, C>, stack: &mut Vec<Pending<L, C>>) {
     if let Some(root) = child.root.take() {
         stack.push(Pending::State(root));
     }
 }
-fn operator_child<L: LocalStructure, T>(
-    mut child: LocalOperator<L, T>,
-    stack: &mut Vec<Pending<L, T>>,
+fn operator_child<L: LocalStructure, C>(
+    mut child: LocalOperator<L, C>,
+    stack: &mut Vec<Pending<L, C>>,
 ) {
     if let Some(root) = child.root.take() {
         stack.push(Pending::Operator(root));
@@ -277,7 +280,7 @@ fn operator_child<L: LocalStructure, T>(
 // Arc::into_inner also avoids recursive final-release races between threads.
 // Taking children out before their handles drop keeps the whole mixed DAG on
 // this work stack. Empty/shared/primitive roots need no work-stack allocation.
-fn release<L: LocalStructure, T>(root: Pending<L, T>) {
+fn release<L: LocalStructure, C>(root: Pending<L, C>) {
     let mut stack = Vec::new();
     let mut first = Some(root);
     while let Some(root) = first.take().or_else(|| stack.pop()) {
@@ -321,14 +324,14 @@ fn release<L: LocalStructure, T>(root: Pending<L, T>) {
     }
 }
 
-impl<L: LocalStructure, T> Drop for LocalState<L, T> {
+impl<L: LocalStructure, C> Drop for LocalState<L, C> {
     fn drop(&mut self) {
         if let Some(root) = self.root.take() {
             release(Pending::State(root))
         }
     }
 }
-impl<L: LocalStructure, T> Drop for LocalOperator<L, T> {
+impl<L: LocalStructure, C> Drop for LocalOperator<L, C> {
     fn drop(&mut self) {
         if let Some(root) = self.root.take() {
             release(Pending::Operator(root))

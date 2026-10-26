@@ -1,7 +1,26 @@
 //! Quantum many-body algebras, spaces and site geometries.
 //!
-//! The default `libm` feature enables square-root-based norms. Disable default
-//! features to keep only algebraic operations and normalized expectations.
+//! The default `normalize` feature enables norms and normalization extensions. Disable default
+//! features to keep algebraic operations, including scalar division.
+//! The legacy `libm` feature is an alias for `normalize`, which uses std.
+//!
+//! ```
+//! use num_complex::Complex;
+//! use qmb::prelude::*;
+//! use qmb::{Divide, SpinHalf, SpinHalfState};
+//! let state = LocalState::<SpinHalf, Complex<f64>>::primitive(SpinHalfState::Up);
+//! let identity = LocalOperator::identity();
+//! assert_eq!(state.norm_squared(), 1.0);
+//! // This state has nonzero norm, so its scalar quotient is well-defined.
+//! assert_eq!(state.expectation(&identity).divide(state.inner_product(&state)),
+//!     Complex::new(1.0, 0.0));
+//! # #[cfg(feature = "normalize")] {
+//! assert_eq!(state.norm(), 1.0);
+//! assert_eq!(state.normalized()?.norm(), 1.0);
+//! assert_eq!(state.normalized_expectation(&identity)?, Complex::new(1.0, 0.0));
+//! # }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -17,8 +36,23 @@ pub use qmb_spin_half as spin_half;
 
 pub use qmb_basic::Id128;
 pub use qmb_core::{
-    Complex, ExpressionError, HilbertSpace, LocalOperator, LocalState, LocalStructure,
-    NormalizationError, Operator, State,
+    Conjugate, Divide, ExpressionError, HilbertSpace, ImaginaryUnit, LocalOperator, LocalState,
+    LocalStructure, Operator, RealPart, State,
 };
 pub use qmb_geometry::{Boundary, Chain, Geometry, GeometryError, NearestNeighborRelation};
 pub use qmb_spin_half::{SpinHalf, SpinHalfOperator, SpinHalfState};
+
+/// Norm, normalization and normalized expectation extensions (uses std).
+#[cfg(feature = "normalize")]
+pub use qmb_normalize as normalize;
+#[cfg(feature = "normalize")]
+pub use qmb_normalize::{
+    Norm, NormalizationError, Normalize, NormalizedExpectation, NormalizedExpectationIn,
+};
+
+/// Common expression types and optional normalization extension traits.
+pub mod prelude {
+    pub use crate::{HilbertSpace, LocalOperator, LocalState, Operator, State};
+    #[cfg(feature = "normalize")]
+    pub use qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn};
+}

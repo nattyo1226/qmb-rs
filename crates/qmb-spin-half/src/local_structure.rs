@@ -2,10 +2,8 @@
 
 use core::num::NonZeroUsize;
 
-use qmb_core::{
-    Identity, LinearCombination, LocalStructure,
-    num_traits::{One, Zero},
-};
+use num_traits::One;
+use qmb_core::{Identity, LinearCombination, LocalStructure};
 
 use crate::{SpinHalfOperator, SpinHalfState};
 
@@ -24,8 +22,8 @@ impl LocalStructure for SpinHalf {
     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
 }
 
-impl<T: Zero + One> Identity<T> for SpinHalf {
-    fn identity() -> LinearCombination<Self::Operator, T> {
+impl<C: One> Identity<C> for SpinHalf {
+    fn identity() -> LinearCombination<Self::Operator, C> {
         LinearCombination::primitive(SpinHalfOperator::I)
     }
 }

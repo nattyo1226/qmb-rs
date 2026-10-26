@@ -22,8 +22,8 @@ pub trait LocalStructure {
     const DIMENSION: NonZeroUsize;
 }
 
-/// A local structure providing its identity at coefficient precision `T`.
-pub trait Identity<T>: LocalStructure {
+/// A local structure providing its identity at coefficient precision `C`.
+pub trait Identity<C>: LocalStructure {
     /// Returns the identity as a finite combination of operator primitives.
-    fn identity() -> LinearCombination<Self::Operator, T>;
+    fn identity() -> LinearCombination<Self::Operator, C>;
 }

@@ -7,7 +7,8 @@ use super::{
     local::{OperatorNode, StateNode},
     parts::*,
 };
-use crate::{Act, Adjoint, Complex, LinearCombination, LocalStructure};
+use crate::{Act, Adjoint, LinearCombination, LocalStructure};
+use num_complex::Complex;
 
 #[derive(Default)]
 struct Counts {
@@ -31,10 +32,10 @@ impl<'a> LocalStructure for Structure<'a> {
 }
 // This fixture tests traversal, not algebraic laws. There is deliberately no
 // Product or Identity implementation. Matrix-oracle integration tests check laws.
-impl<'a> Act<f64> for State<'a> {
+impl<'a> Act<Complex<f64>> for State<'a> {
     type Operator = Operator<'a>;
     type Term = Self;
-    fn act(&self, op: &Operator<'a>) -> LinearCombination<Self, f64> {
+    fn act(&self, op: &Operator<'a>) -> LinearCombination<Self, Complex<f64>> {
         self.1.actions.set(self.1.actions.get() + 1);
         let label = match op.0 {
             0 => self.0,
@@ -44,15 +45,15 @@ impl<'a> Act<f64> for State<'a> {
         LinearCombination::primitive(State(label, self.1))
     }
 }
-impl<'a> Adjoint<f64> for Operator<'a> {
+impl<'a> Adjoint<Complex<f64>> for Operator<'a> {
     type Term = Self;
-    fn adjoint(&self) -> LinearCombination<Self, f64> {
+    fn adjoint(&self) -> LinearCombination<Self, Complex<f64>> {
         self.1.adjoints.set(self.1.adjoints.get() + 1);
         LinearCombination::primitive(Operator(self.0, self.1))
     }
 }
-type S<'a, T = f64> = LocalState<Structure<'a>, T>;
-type O<'a, T = f64> = LocalOperator<Structure<'a>, T>;
+type S<'a, T = f64> = LocalState<Structure<'a>, Complex<T>>;
+type O<'a, T = f64> = LocalOperator<Structure<'a>, Complex<T>>;
 fn coefficients(state: &S<'_>) -> Vec<(u8, Complex<f64>)> {
     let mut stack = vec![(state, Complex::new(1.0, 0.0))];
     let mut result = Vec::new();
@@ -130,8 +131,8 @@ fn scalar_syntax_moves_opaque_coefficients_and_shares_expression_nodes() {
     for scaled in [
         state.clone() * coefficient(),
         &state * coefficient(),
-        coefficient() * state.clone(),
-        coefficient() * &state,
+        state.scaled(coefficient()),
+        state.scaled(coefficient()),
     ] {
         let StateNode::Scale(s) = scaled.node() else {
             panic!("scale")
@@ -145,8 +146,8 @@ fn scalar_syntax_moves_opaque_coefficients_and_shares_expression_nodes() {
     for scaled in [
         operator.clone() * coefficient(),
         &operator * coefficient(),
-        coefficient() * operator.clone(),
-        coefficient() * &operator,
+        operator.scaled(coefficient()),
+        operator.scaled(coefficient()),
     ] {
         let OperatorNode::Scale(s) = scaled.node() else {
             panic!("scale")
@@ -326,47 +327,48 @@ fn send_and_sync_follow_stored_types_without_metadata_bounds() {
         const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
     }
     fn send_sync<T: Send + Sync>() {}
-    send_sync::<LocalState<Metadata, f64>>();
-    send_sync::<LocalOperator<Metadata, f64>>();
+    send_sync::<LocalState<Metadata, Complex<f64>>>();
+    send_sync::<LocalOperator<Metadata, Complex<f64>>>();
 }
 
 #[test]
 fn delayed_evaluation_needs_no_coefficient_arithmetic() {
     #[derive(Clone)]
     struct Scalar(i32);
-    impl core::ops::Neg for Scalar {
+    impl crate::Conjugate for Scalar {
         type Output = Self;
-        fn neg(self) -> Self {
-            Self(-self.0)
+        fn conjugate(&self) -> Self {
+            Self(self.0)
         }
     }
     impl<'a> Act<Scalar> for State<'a> {
         type Operator = Operator<'a>;
         type Term = Self;
         fn act(&self, _: &Self::Operator) -> LinearCombination<Self, Scalar> {
-            LinearCombination::term(Complex::new(Scalar(2), Scalar(0)), State(self.0, self.1))
+            LinearCombination::term(Scalar(2), State(self.0, self.1))
         }
     }
     impl Adjoint<Scalar> for Operator<'_> {
         type Term = Self;
         fn adjoint(&self) -> LinearCombination<Self, Scalar> {
-            LinearCombination::term(Complex::new(Scalar(1), Scalar(0)), Operator(self.0, self.1))
+            LinearCombination::term(Scalar(1), Operator(self.0, self.1))
         }
     }
     let counts = Counts::default();
-    let state = S::<Scalar>::primitive(State(1, &counts));
-    let op = O::<Scalar>::primitive(Operator(0, &counts));
+    let state = LocalState::<Structure<'_>, Scalar>::primitive(State(1, &counts));
+    let op = LocalOperator::<Structure<'_>, Scalar>::primitive(Operator(0, &counts));
     let result = state.act(&op).evaluate();
     let StateNode::Scale(s) = result.node() else {
         panic!("rule scale")
     };
-    assert_eq!(s.coefficient.re.0, 2);
+    assert_eq!(s.coefficient.0, 2);
     assert!(matches!(s.operand.node(), StateNode::Primitive(_)));
     assert!(!result.has_action);
 }
 
 #[test]
 fn scalar_reductions_need_no_num_division_remainder_one_or_copy() {
+    use crate::test_coefficient::MinimalComplex;
     use crate::{Identity, InnerProduct, Product, Trace};
     use core::ops::{Add, Mul, Neg, Sub};
     use num_traits::Zero;
@@ -411,51 +413,51 @@ fn scalar_reductions_need_no_num_division_remainder_one_or_copy() {
         type Operator = Primitive;
         const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
     }
-    fn one() -> LinearCombination<Primitive, Ring> {
-        LinearCombination::term(Complex::new(Ring(1), Ring(0)), Primitive)
+    fn one() -> LinearCombination<Primitive, MinimalComplex<Ring>> {
+        LinearCombination::term(MinimalComplex::new(Ring(1), Ring(0)), Primitive)
     }
-    impl Identity<Ring> for RingStructure {
-        fn identity() -> LinearCombination<Primitive, Ring> {
+    impl Identity<MinimalComplex<Ring>> for RingStructure {
+        fn identity() -> LinearCombination<Primitive, MinimalComplex<Ring>> {
             one()
         }
     }
-    impl Adjoint<Ring> for Primitive {
+    impl Adjoint<MinimalComplex<Ring>> for Primitive {
         type Term = Self;
-        fn adjoint(&self) -> LinearCombination<Self, Ring> {
+        fn adjoint(&self) -> LinearCombination<Self, MinimalComplex<Ring>> {
             one()
         }
     }
-    impl Product<Ring> for Primitive {
+    impl Product<MinimalComplex<Ring>> for Primitive {
         type Term = Self;
-        fn product(&self, _: &Self) -> LinearCombination<Self, Ring> {
+        fn product(&self, _: &Self) -> LinearCombination<Self, MinimalComplex<Ring>> {
             one()
         }
     }
-    impl Act<Ring> for Primitive {
+    impl Act<MinimalComplex<Ring>> for Primitive {
         type Operator = Self;
         type Term = Self;
-        fn act(&self, _: &Self) -> LinearCombination<Self, Ring> {
+        fn act(&self, _: &Self) -> LinearCombination<Self, MinimalComplex<Ring>> {
             one()
         }
     }
-    impl Trace<Ring> for Primitive {
-        fn trace(&self) -> Complex<Ring> {
-            Complex::new(Ring(1), Ring(0))
+    impl Trace<MinimalComplex<Ring>> for Primitive {
+        fn trace(&self) -> MinimalComplex<Ring> {
+            MinimalComplex::new(Ring(1), Ring(0))
         }
     }
-    impl InnerProduct<Ring> for Primitive {
-        fn inner_product(&self, _: &Self) -> Complex<Ring> {
-            Complex::new(Ring(1), Ring(0))
+    impl InnerProduct<MinimalComplex<Ring>> for Primitive {
+        fn inner_product(&self, _: &Self) -> MinimalComplex<Ring> {
+            MinimalComplex::new(Ring(1), Ring(0))
         }
     }
-    let op =
-        LocalOperator::<RingStructure, Ring>::identity().scaled(Complex::new(Ring(3), Ring(4)));
+    let op = LocalOperator::<RingStructure, MinimalComplex<Ring>>::identity()
+        .scaled(MinimalComplex::new(Ring(3), Ring(4)));
     let trace = op
         .adjoint()
         .product(&LocalOperator::primitive(Primitive))
         .trace();
     assert_eq!((trace.re.0, trace.im.0), (3, -4));
-    let state = LocalState::<RingStructure, Ring>::primitive(Primitive);
+    let state = LocalState::<RingStructure, MinimalComplex<Ring>>::primitive(Primitive);
     assert_eq!(state.norm_squared().0, 1);
     let expectation = state.expectation(&op);
     assert_eq!((expectation.re.0, expectation.im.0), (3, 4));

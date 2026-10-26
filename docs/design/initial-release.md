@@ -88,9 +88,9 @@ Index の一意性・同一性、不変な実体の共有、および個別ル�
 
 crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、norm・状態の正規化の `qmb-normalize`、利用窓口の `qmb` と合わせて計画上は7 crate を構成する。basic・spin・geometry・export・normalize は core に依存し、spin の構築 utility は geometry の公開契約を利用する。core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。normalize は std を利用できる。
 
-式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, T>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数精度 `T` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装する。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
+式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, C>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数全体 `C` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装する。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
 
-Step 2 の採用済み方針として、`LocalStructure` を係数型に依存しない関連型・次元の定義とし、恒等演算子の規則は `Identity<T>` に分離する。共通パーツは `expr::parts` で保持内容も公開し、式ハンドルを再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, T>` は `ScaleExpr<P, T>` の別名に統合し、要素名を `operand` に揃える。既存の線型結合の構築・走査 API は維持する。`StateBasis`・`OperatorBasis` は削除し、状態には `Basis<L::State, T>`、演算子には `Basis<L::Operator, T>` を直接使う。次元からの基底要素数の取得と基底の数学的契約は維持する。
+Step 2 の採用済み方針として、`LocalStructure` を係数型に依存しない関連型・次元の定義とし、恒等演算子の規則は `Identity<C>` に分離する。共通パーツは `expr::parts` で保持内容も公開し、式ハンドルを再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, C>` は `ScaleExpr<P, C>` の別名に統合し、要素名を `operand` に揃える。既存の線型結合の構築・走査 API は維持する。`StateBasis`・`OperatorBasis` は削除し、状態には `Basis<L::State, C>`、演算子には `Basis<L::Operator, C>` を直接使う。次元からの基底要素数の取得と基底の数学的契約は維持する。
 
 評価器は状態評価・演算子の作用・演算子項の走査を分担し、状態の作用評価に Product 能力を要求しない。型制約は必要な操作にだけ付け、演算子構文は所有値・借用値の4通りに対応する。評価と最後の所有者になった式節点の破棄は反復的に行う。長い式の評価・破棄、共有、不要な primitive 複製の抑制、空・単一項のコンテナ無確保を検証条件とし、map 全般の無確保や特定の実行時間は保証しない。
 
@@ -98,6 +98,6 @@ Step 3 の空間・複合式・共有・束縛・エラー・評価経路は [�
 
 Norm・正規化・正規化期待値は、[Step 4 の合意事項](../step-4-decisions.md)に従って局所式・複合式に実装する。core の libm は任意 feature、qmb では既定で有効とする。Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。Partial trace・基底処理は Step 5、数値 backend は Step 6 で具体化し、初期版の必須範囲を維持する。bra 型・構築 API は初期版では導入しない。
 
-上記は Step 4 の実装を記録したものである。2026-10-25 に採用した[係数型の方針](../refactoring-coefficient-proposal.md)では、係数全体 C と個別の能力契約へ移行し、norm・normalized を qmb-normalize の拡張 trait へ移す。norm squared・正規化期待値は core に残し、Float は平方根を使う実数型 R に要求する。この移行は未実施である。
+上記は Step 4 の実装を記録したものである。2026-10-25 に採用した[係数型の方針](../refactoring-coefficient-proposal.md)では、係数全体 C と個別の能力契約へ移行し、norm・normalized・正規化期待値と NormalizationError を qmb-normalize へ移す。内積・期待値・norm squared・スカラー除算は core に残し、Float は平方根を使う実数型 R に要求する。この移行は実装済みであり、Norm／Normalize／NormalizedExpectation／NormalizedExpectationIn を import して呼び出す。qmb の既定 feature は normalize、旧 libm はその互換 alias とする。
 
 非公開の節点・作業領域・補助関数、メソッド名・型引数・シグネチャの詳細、および追加依存の選択は採用済み方針の範囲で各段階に定める。Step 2 の局所式・評価と API の移行、および Step 3 の空間・配置・複合評価と basic の UUID Index は実装済みである。Step 4 以降の機能と初期版全体の完成とは区別する。

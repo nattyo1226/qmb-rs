@@ -6,9 +6,11 @@
 
 係数型には **「必要な時に必要な trait bound を課す」**。これは合意した基本方針である。保持・構築・評価・導出操作を区別し、全数値能力をまとめた trait をすべての型や操作の必須条件にしない。
 
-本書は [リファクタリングの整理メモ](refactoring-notes.md)の数値部分を具体化する。現行コードと、Cargo.lock で解決されている num-traits 0.2.19・num-complex 0.4.6 のローカルソースを調査した。実装変更は行っていない。
+本書は [リファクタリングの整理メモ](refactoring-notes.md)の数値部分を具体化する。現行コードと、Cargo.lock で解決されている num-traits 0.2.19・num-complex 0.4.6 のローカルソースを調査した。第2〜8節は移行前の調査記録である。調査後に実装を移行し、[API・検証結果](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)に記録した。
 
 **採用した方針**：2026-10-25 の利用者の指示により、core には num-complex・num-traits を含め、Zero・One は num-traits をそのまま使い、不足する trait を Complex<f32>・Complex<f64> に直接実装する。係数全体 C の保持と個別能力、std を利用する qmb-normalize の拡張 trait、標準 Complex の左スカラー倍の個別実装、正規化期待値の純実分母の処理の維持も採用済みである。以前の数値依存解消や Zero・One の細分化を目標とした比較は調査経緯として扱う。採用事項の詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)、num-traits の使い分けは第14節に記録する。
+
+数値ライブラリの再公開は、その後の整理で削除した。現在は実装・テスト・doctest・利用例のすべてで num-complex・num-traits を直接 import する。以下の再公開に関する記述は移行前の記録である。
 
 現行の `T` は複素係数全体ではなく、`Complex<T>` の実部・虚部の型である。以下では現行の成分型を `T`、表現に依存しない係数全体を `C`、norm などの実数値の型を `R` と書き分ける。
 
@@ -19,8 +21,8 @@
 | 箇所 | 現在の依存 |
 | --- | --- |
 | [workspace 設定](../Cargo.toml)、[core 設定](../crates/qmb-core/Cargo.toml) | num-traits・num-complex を通常依存とする。両者の default features は無効。num-complex 自体も num-traits に依存する |
-| [core の再公開](../crates/qmb-core/src/lib.rs) | `num_complex::Complex` と `num_traits` を再公開する。移行は import の変更だけでは済まず、公開型・型制約にも及ぶ |
-| [qmb の設定](../crates/qmb/Cargo.toml)、[再公開](../crates/qmb/src/lib.rs) | qmb は Complex を再公開し、既定で core の `libm` を有効にする |
+| [core の再公開](../crates/qmb-core/src/lib.rs) | `num_complex::Complex` と `num_traits` を再公開していた。移行は import の変更だけでは済まず、公開型・型制約にも及ぶ |
+| [qmb の設定](../crates/qmb/Cargo.toml)、[再公開](../crates/qmb/src/lib.rs) | qmb は Complex を再公開しており、既定で core の `libm` を有効にする |
 | core の `libm` feature | `num-traits/libm` を有効にする。平方根を使う公開メソッド自体も feature により有効化される。平方根の能力契約と、その具体実装・feature の配置を見直す必要がある |
 
 ### 2.2. core の通常コード
@@ -36,7 +38,7 @@
 | [expr/evaluate.rs](../crates/qmb-core/src/expr/evaluate.rs) | 状態の作用評価で係数の複製・共役。項の走査と局所演算子の評価で乗算。内積・trace の集計で零生成・加算・乗算・共役を使う |
 | [expr/composite_eval.rs](../crates/qmb-core/src/expr/composite_eval.rs) | 作用評価で複製・共役。演算子項の走査で乗算・共役。Full trace で零・単位元生成、局所 trace の積と項の和を計算する |
 | [expr/inner_product.rs](../crates/qmb-core/src/expr/inner_product.rs) | 零・単位元生成、加算・乗算・共役。空の tensor product の内積と因子の積の初期値に数値の1を使う |
-| [expr/normalization.rs](../crates/qmb-core/src/expr/normalization.rs) | `.re`・`.im`、Zero の `is_zero()`、成分による除算式、Float の `sqrt()` を使う |
+| 旧 `expr/normalization.rs`（削除済み。正規化は [qmb-normalize](../crates/qmb-normalize/src/lib.rs) へ移行） | `.re`・`.im`、Zero の `is_zero()`、成分による除算式、Float の `sqrt()` を使う |
 | [basis.rs](../crates/qmb-core/src/basis.rs)、[local_structure.rs](../crates/qmb-core/src/local_structure.rs) | 基底展開・恒等元の返却型を介して係数表現に依存するが、trait 自体は数値能力を要求しない。次元・要素数の取得は係数に依存しない |
 
 ### 2.3. spin-half と利用側
@@ -185,7 +187,7 @@ Rust の bound が保証するのは、呼び出す演算と入出力の型で�
 
 - [線型結合](../crates/qmb-core/tests/linear_combination.rs)：数値能力のない係数の map、Clone・Num のない係数1の生成、零・単位元・比較を持たない型でのスケーリング。
 - [局所式](../crates/qmb-core/src/expr/tests.rs)、[複合式](../crates/qmb-core/src/expr/composite_tests.rs)：不透明な係数での構築、加算・乗算のない型での作用評価、Num・除算・剰余・Copy を持たない型での集計。
-- [正規化](../crates/qmb-core/src/expr/normalization.rs)：Float・Num・一般の PartialEq がない型での norm squared・正規化期待値、複素分母の商。
+- [正規化期待値の移行先](../crates/qmb-normalize/tests/expectation.rs)：Float・Num・一般の PartialEq がない型での norm squared・正規化期待値、複素分母の商。
 - [spin の最小 scalar](../crates/qmb-spin-half/tests/minimal_scalar.rs)：Clone・Copy・Num を持たない分数型での局所規則。
 - [独立した三次元代数](../crates/qmb-core/tests/local_algebra.rs)、[spin の行列照合](../crates/qmb-spin-half/tests/contracts.rs)、[モデル](../crates/qmb/tests/chain.rs)：単精度・倍精度、非正規直交基底、局所・複合・縦断計算の一致。
 
@@ -256,8 +258,8 @@ Zero・One は num-traits を再利用し、独自の細分化はしない。そ
 
 前節までの「norm には実数の平方根が必要」という能力の分析と、その能力・処理をどこへ置くかは別の判断である。qmb では次の三つを分ける。
 
-1. **代数的な共通処理**：式の保持・作用・内積・norm squared・正規化期待値。これらには平方根を要求しない。
-2. **Norm・正規化の導出**：自己内積から norm と逆数係数を得て、状態をスカラー倍する処理。qmb-normalize の拡張 trait に移す。
+1. **代数的な共通処理**：式の保持・作用・内積・norm squared・スカラー除算。これらには平方根を要求しない。
+2. **Norm・正規化の導出**：自己内積から norm と逆数係数を得て状態をスカラー倍する処理と、正規化期待値・零ノルムの検査。qmb-normalize の拡張 trait に移す。
 3. **具体的な数値計算**：qmb-normalize で実数型 R に Float を要求し、std 対応の平方根を利用する。core の一般の係数には要求しない。
 
 tensory の構成を参考に、調査時には正規化方針を渡す案も比較した。採用した構成では provider は導入しない。qmb の通常評価は式と局所規則から行列化せずに行うため、norm・正規化を提供する経路もその契約を維持する。数値コンテナへの export を必須の前提にはしない。
@@ -270,7 +272,7 @@ qmb の状態の正規化は zero-norm をエラーとし、結果には取り�
 
 ## 12. 設計案への接続
 
-上記の調査を踏まえ、[係数型の採用方針](refactoring-coefficient-proposal.md)に比較と採用事項をまとめた。core の標準 Complex への直接実装、係数全体 C の保持と個別の能力契約、qmb-normalize への norm・正規化の分離を採用している。Rust の局所的な実装制約は独立した試作で確認したが、製品コードの移行は未実施である。
+上記の調査を踏まえ、[係数型の採用方針](refactoring-coefficient-proposal.md)に比較と採用事項をまとめた。core の標準 Complex への直接実装、係数全体 C の保持と個別の能力契約、qmb-normalize への norm・正規化の分離を採用している。Rust の局所的な実装制約は独立した試作で確認したが、製品コードはその後に移行済みであり、現在の API は採用方針の第10節を参照する。
 
 ## 13. ndarray の要素型と数値ライブラリの接続
 
@@ -309,4 +311,4 @@ qmb への示唆は、標準演算や Zero・One をそのまま使える部分�
 
 例えば、具体的な Complex<f64> の共役実装で num-complex の `conj()` を使っても、共通評価の C に Num を要求することにはならない。一方、Complex<T> の T までジェネリックな実装で `conj()` を使う場合は T: Num 等が必要になるため、成分の最小限の処理で実装する案と比較する。
 
-この方針変更では Cargo.toml や製品コードを変更していない。両ライブラリは既に core の通常依存にある。次の作業は採用した能力契約と各メソッドの bound の実装、および qmb-normalize への分離である。
+方針採用後、能力契約と各メソッドの bound を実装し、qmb-normalize へ分離した。core の両数値ライブラリへの依存は維持し、core/libm は削除した。

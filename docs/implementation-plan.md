@@ -4,7 +4,7 @@
 
 ## 1. 目的と位置付け
 
-本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜4は実装済み、段階5以降と係数型のリファクタリングは未実装である。
+本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜4は実装済み、段階5以降は未実装である。係数型のリファクタリングと qmb-normalize への分離は実装済みである。
 
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
@@ -12,7 +12,7 @@ Step 2 の局所構造と演算能力の分離、共通パーツと項型、基�
 
 ## 2. crate の責任と依存関係
 
-係数型の採用方針を反映し、計画上は以下の7 crate を `crates/` 以下に配置する。package 名は表の名称とする。現時点で実装済みの crate は `qmb-core`・`qmb-spin-half`・`qmb-basic`・`qmb-geometry`・`qmb` であり、`qmb-export`・`qmb-normalize` は未実装である。
+係数型の採用方針を反映し、計画上は以下の7 crate を `crates/` 以下に配置する。package 名は表の名称とする。現時点で実装済みの crate は `qmb-core`・`qmb-spin-half`・`qmb-basic`・`qmb-geometry`・`qmb-normalize`・`qmb` であり、`qmb-export` は未実装である。
 
 | crate | 責任 | workspace 内の通常依存 |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Step 2 の局所構造と演算能力の分離、共通パーツと項型、基�
 | `qmb-spin-half` | spin-1/2 の局所構造・primitive・局所規則・基底、Heisenberg・Neel の構築 utility | `qmb-core`、`qmb-geometry` |
 | `qmb-geometry` | Geometry・Site、Chain、近接関係、自由度と Site の対応付け、配置用 Index 発行の補助 | `qmb-core` |
 | `qmb-export` | 外部数値ライブラリへの密・疎変換、空間・基底・精度情報との対応付け | `qmb-core` |
-| `qmb-normalize` | 平方根を伴う norm・状態の正規化を拡張 trait で提供する。std を利用でき、実数型 R に Float を要求する | `qmb-core` |
+| `qmb-normalize` | norm・状態の正規化・正規化期待値と NormalizationError を提供する。std を利用でき、実数型 R に Float を要求する | `qmb-core` |
 | `qmb` | 各 crate と構築 utility の再公開、利用例、縦断的な結合テスト | 上記6 crate |
 
 以下の矢印は「依存する」を表す。
@@ -44,9 +44,9 @@ graph TD
 
 将来の別の具体的代数も、専用 crate として `qmb-core` の契約を実装し、共通型を直接利用できる。初期版には未実装の代数用 crate を作らない。core は具体的代数を列挙せず、独自代数も同じ式木・評価機構で扱う。core の通常依存に具体的代数・Geometry・数値 backend を持ち込まない。
 
-`qmb` は core・共通代数処理・basic の具体型 Id128・spin-1/2・Geometry を既定で再公開し、core の任意の `libm` feature を既定で有効にする。core 自体では libm を既定で有効にしない。数値 export は `export` feature で有効にし、数値 backend に依存せず代数計算だけを利用できる構成にする。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
+`qmb` は core・共通代数処理・basic の具体型 Id128・spin-1/2・Geometry を再公開する。既定の `normalize` feature が qmb-normalize と Norm・Normalize・NormalizedExpectation・NormalizedExpectationIn 拡張 trait を有効にし、prelude からも提供する。`--no-default-features` では正規化の拡張を除く代数 API を利用できる。旧 `qmb/libm` は `normalize` の互換 alias とし、`qmb-core/libm` は削除した。core は内積・期待値・norm squared・スカラー除算を保持し、単独で no_std + alloc を維持する。
 
-上記の libm 接続は Step 4 の現行実装である。係数型のリファクタリングでは norm・normalized を qmb-normalize の拡張 trait に移し、qmb と prelude から再公開する。core は norm squared・正規化期待値と共通エラーを保持する。既存 feature・API・利用例を移行し、core 単独の no_std + alloc を維持する。
+数値 export は後続の `export` feature で有効にし、代数計算だけでも利用できる構成とする。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
 
 ## 3. 抽象契約と共通実装の境界
 
@@ -60,17 +60,17 @@ Step 3 以降の自由度・空間・配置済みの式は Index 型をジェネ
 
 局所構造の次元・一致条件・primitive の関連付け、内積・Product・Act・随伴・trace・恒等元、および基底の展開・順序番号・列挙の契約を置く。Act は状態 primitive が演算子 primitive の作用を受ける能力とする。
 
-Step 2 で `LocalStructure` から型引数 `T` と演算能力の制約を外し、状態・演算子の関連型と次元だけを定める。恒等演算子の規則は `Identity<T>: LocalStructure` に分離する。`LocalState<L, T>`・`LocalOperator<L, T>` は維持し、演算能力と入出力の対応は各メソッドで要求する。保持・係数計算を伴わない遅延構築・`map` に数値制約を付けず、primitive の最小限の数値制約を維持する。全能力をまとめた係数 trait は導入しない。
+Step 2 で `LocalStructure` から型引数 `T` と演算能力の制約を外し、状態・演算子の関連型と次元だけを定める。恒等演算子の規則は `Identity<C>: LocalStructure` に分離する。`LocalState<L, C>`・`LocalOperator<L, C>` は維持し、演算能力と入出力の対応は各メソッドで要求する。保持・係数計算を伴わない遅延構築・`map` に数値制約を付けず、primitive の最小限の数値制約を維持する。全能力をまとめた係数 trait は導入しない。
 
 局所契約・有限線型結合、局所・複合式、Index・空間、配置・束縛、評価、および基底処理を module で分離する。基底 trait と primitive 一つの展開から、式全体の展開・複合基底・座標取得までを core が担当する。外部の数値コンテナ型は必須 API に持ち込まない。
 
-Step 1 の局所規則と局所基底展開は `LinearCombination` を返す。Step 2 でもこの薄い有限線型結合型を維持する。`ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとして実装し、局所式の各 variant がこれらを保持する。線型結合の保持には `SumExpr<ScaleExpr<P, T>>` を使い、項順序・重複・零係数と空・単一要素のコンテナ割り当て特性を維持する。
+Step 1 の局所規則と局所基底展開は `LinearCombination` を返す。Step 2 でもこの薄い有限線型結合型を維持する。`ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとして実装し、局所式の各 variant がこれらを保持する。線型結合の保持には `SumExpr<ScaleExpr<P, C>>` を使い、項順序・重複・零係数と空・単一要素のコンテナ割り当て特性を維持する。
 
-共通パーツは `expr::parts` で型と保持内容を公開し、式ハンドルを crate root から再公開する。式の節点 enum と共有の内部表現は非公開とする。項型 `Term<P, T>` は `ScaleExpr<P, T>` の別名にし、要素フィールドを `operand` に統一する。既存の線型結合の構築・走査 API は維持し、走査の実装を `SumExpr` へ集約する。演算 trait の関連型 `Term` は係数を含まない要素型であり、この項型とは区別する。
+共通パーツは `expr::parts` で型と保持内容を公開し、式ハンドルを crate root から再公開する。式の節点 enum と共有の内部表現は非公開とする。項型 `Term<P, C>` は `ScaleExpr<P, C>` の別名にし、要素フィールドを `operand` に統一する。既存の線型結合の構築・走査 API は維持し、走査の実装を `SumExpr` へ集約する。演算 trait の関連型 `Term` は係数を含まない要素型であり、この項型とは区別する。
 
-Product・Act・随伴の trait は係数精度 `T` を型引数、返却要素を関連型 `Term` とし、出力を `LinearCombination<Self::Term, T>` に限定する。Act の演算子型も関連型 `Operator` とする。数値制約は各 `impl<T>` に置き、演算 trait を局所式・局所構造に依存させない。局所規則と恒等演算子は対応する primitive の線型結合を返し、局所基底展開も選択基底の primitive の線型結合を返す。式木側が所有権付きの `map` で要素を変換し、共通 constructor で和・スカラー倍として取り込む。変換自体に要素・係数の `Clone` は要求しない。
+Product・Act・随伴の trait は係数全体 `C` を型引数、返却要素を関連型 `Term` とし、出力を `LinearCombination<Self::Term, C>` に限定する。Act の演算子型も関連型 `Operator` とする。数値制約は各 `impl<C>` に置き、演算 trait を局所式・局所構造に依存させない。局所規則と恒等演算子は対応する primitive の線型結合を返し、局所基底展開も選択基底の primitive の線型結合を返す。式木側が所有権付きの `map` で要素を変換し、共通 constructor で和・スカラー倍として取り込む。変換自体に要素・係数の `Clone` は要求しない。
 
-core の局所構造・恒等演算子・演算 trait と関連型の制約、項型・`map`・共通 constructor、spin-half と非公開の局所代数・テスト・doc test の整備は Step 2 に含める。`Basis<P, T>` は維持し、`StateBasis`・`OperatorBasis` の定義・再公開・実装宣言・利用を削除する。利用側は `L: LocalStructure` と `Basis<L::State, T>` または `Basis<L::Operator, T>` を直接要求する。次元取得 API からは不要な `T` を外し、基底の完全性・線型独立性・要素数の契約は維持する。`SzBasis`・`CartesianBasis`・`LadderBasis` は線型結合を返す契約を維持し、局所式への取り込みも同じ Step 2 で検証する。段階1の完了をこの整備済みという意味にしない。
+core の局所構造・恒等演算子・演算 trait と関連型の制約、項型・`map`・共通 constructor、spin-half と非公開の局所代数・テスト・doc test の整備は Step 2 に含める。`Basis<P, C>` は維持し、`StateBasis`・`OperatorBasis` の定義・再公開・実装宣言・利用を削除する。利用側は `L: LocalStructure` と `Basis<L::State, C>` または `Basis<L::Operator, C>` を直接要求する。次元取得 API からは不要な `T` を外し、基底の完全性・線型独立性・要素数の契約は維持する。`SzBasis`・`CartesianBasis`・`LadderBasis` は線型結合を返す契約を維持し、局所式への取り込みも同じ Step 2 で検証する。段階1の完了をこの整備済みという意味にしない。
 
 不変な式節点・primitive は式ハンドルの `Arc` を基本として共有する。既存のハンドルを再利用した箇所で部分式を共有し、式の合成や `Clone` で木全体を複製しない。同形の式の自動検出・共有は行わない。共通評価は線型性・共役線型性・合成則から primitive の規則へ委譲する。状態式の `act` は `Act` 節点による遅延構築、`evaluate` は基底を指定しない局所規則による評価とする。通常の作用・内積・trace に、指定基底への展開や行列化を必須としない。
 
@@ -133,7 +133,7 @@ crate ごとに完成させるのではなく、抽象契約と具体的代数�
 
 2026-10-23 に段階3の完了条件を満たすことを確認した。
 
-- `HilbertSpace<I, L>`、`State<I, L, T>`・`Operator<I, L, T>` と配置・束縛・複合評価、`qmb-basic` の UUID v4 Index を実装した。Index の照合は標準の `Eq` を使い、core は UUID・乱数源に依存しない。
+- `HilbertSpace<I, L>`、`State<I, L, C>`・`Operator<I, L, C>` と配置・束縛・複合評価、`qmb-basic` の UUID v4 Index を実装した。Index の照合は標準の `Eq` を使い、core は UUID・乱数源に依存しない。
 - Spin-half の三因子系と、非公開の三次元代数の二因子系を、単精度・倍精度の独立した Kronecker 行列計算と照合した。非正規直交基底からの取り込み、空間・束縛・エラー・所有権、総次元の overflow、2万段の空間・状態・演算子の128 KiB スタック上での処理も検証した。
 - Rust 1.98.0 の direnv 環境で全70テスト（doc test 含む）、format check、Clippy、警告をエラーとするドキュメント生成を確認した。MSRV（Rust 1.85）での実行と `std` のない target 向けビルドは対応環境がないため未確認である。詳細は [Step 3 の検証状況](step-3-design.md#12-実装検証状況)に記録する。
 
@@ -169,7 +169,7 @@ Step 2 の局所構造と演算能力の分離、共通パーツの公開、項�
 
 Step 3 では、core の Index のジェネリック化と basic の UUID 発行、Dof の葉への統合、型 `L` による固定定義、`Arc` による空間・式の共有、反復的な走査・破棄、次元取得時の overflow 検出、常に空間を持つ状態、ハンドルに集約する演算子の束縛、fallible な複合操作、目的別の評価経路を採用済みとする。詳細は [Step 3 の実装方針](step-3-design.md)に従う。
 
-Step 3 の具体型は `HilbertSpace<I, L>`・`State<I, L, T>`・`Operator<I, L, T>` とし、Index には必要なメソッドで標準の `Eq` を要求する。非公開の節点・作業スタック、`SpaceError`・`ExpressionError`、basic の UUID v4 による具体型・発行 API も実装した。API と検証結果は [Step 3 の実装方針](step-3-design.md#11-実装した-api-と後続事項)に記録する。Norm・正規化・正規化期待値の数値 API は [Step 4 の合意事項](step-4-decisions.md)に従って実装する。bra は初期版では導入せず、braket は内積で計算する。Partial trace・基底処理は段階5、数値 backend は段階6で具体化する。実行時の局所構造パラメータ・異なる実装型間の定義照合は後続へ延期する。速度比較・追加の割り当て最適化も別途検証する。新しい production 依存は、採用理由と用途を具体化してから確認する。
+Step 3 の具体型は `HilbertSpace<I, L>`・`State<I, L, C>`・`Operator<I, L, C>` とし、Index には必要なメソッドで標準の `Eq` を要求する。非公開の節点・作業スタック、`SpaceError`・`ExpressionError`、basic の UUID v4 による具体型・発行 API も実装した。API と検証結果は [Step 3 の実装方針](step-3-design.md#11-実装した-api-と後続事項)に記録する。Norm・正規化・正規化期待値の数値 API は [Step 4 の合意事項](step-4-decisions.md)に従って実装する。bra は初期版では導入せず、braket は内積で計算する。Partial trace・基底処理は段階5、数値 backend は段階6で具体化する。実行時の局所構造パラメータ・異なる実装型間の定義照合は後続へ延期する。速度比較・追加の割り当て最適化も別途検証する。新しい production 依存は、採用理由と用途を具体化してから確認する。
 
 初期版は同種局所構造・ordinary・単一スレッドを対象とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加 Geometry、ML・tensor network などの接続は既存の初期版設計に従って延期する。これらのための crate は先に作らない。不変実体の共有と後続機能の数学的契約は維持する。
 
@@ -178,3 +178,9 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 同じリファクタリングで、core の係数型と数値能力を整理する。2026-10-25 の方針変更により `num-complex`・`num-traits` は core に含め、不足する能力 trait を `Complex<f32>`・`Complex<f64>` に直接実装し、必要な操作で必要な trait bound を課す。零・単位元には num-traits の Zero・One をそのまま使い、付随する能力も受け入れる。また、LocalStructure の必要性、操作的量子論に基づく Operator・State の一般の演算子の特別な形としての整理、Index と Grading だけによる HilbertSpace の構成、その構成から Grading を除いた Chain の内部表現について、議論して設計上の結論と根拠を記録する。これら五つの課題を必須課題とし、Step 4 の完了条件には追加しない。
 
 係数型の残る推奨案は同日にすべて採用した。係数全体 C への型引数の移行、個別の共役・実数値取得・実係数の埋め込み・純虚係数生成、qmb-normalize の拡張 trait、標準 Complex の左スカラー倍の個別実装と任意の C の scaled(c)、正規化期待値の純実分母の処理の維持を実装する。追加 provider は導入しない。移行順序と検証基準は [係数型の採用方針](refactoring-coefficient-proposal.md)に従う。
+
+## 7. 係数型のリファクタリング
+
+2026-10-25 に、薄い線型結合・共通パーツ・演算 trait・局所／複合式・共通評価・spin 規則・基底・モデル utility・利用例を係数全体 C へ移行した。保持・共有・構築に数値 bound はなく、必要な操作で標準演算、num-traits の Zero／One、独立した Conjugate・RealPart・ImaginaryUnit・Divide を要求する。実係数は From<R> で埋め込む。標準 Complex は core 内で直接接続し、正規化期待値では純実分母を不要に二乗しない。
+
+norm・normalized・正規化期待値と NormalizationError は qmb-normalize に移した。core/expr の正規化 module は削除し、norm_squared は内積の実装側へ移した。Float は関連する実数型だけに課し、core には残さない。API・feature の移行と検証結果は [係数型の採用方針](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)に記録する。

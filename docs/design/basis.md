@@ -8,20 +8,20 @@
 
 基底の能力契約、式全体への展開、複合基底、座標取得は `qmb-core` が担当する。具体的代数の crate は局所基底と primitive の展開規則を実装する。得られた係数を外部数値コンテナへ格納する処理は `qmb-export` に置く。
 
-基底の定義は `PauliBasis` のような struct が表し、対象の要素型を指定した `Basis<P, T>` を実装する。その実装が、特定の primitive たちを基底とする規則と、各 primitive をその基底へ展開する手続きを提供する。状態基底の展開は `LinearCombination<L::State, T>`、演算子基底の展開は `LinearCombination<L::Operator, T>` を返す。式木側が要素を `map` して通常の式へ取り込む。利用者が基底要素の配列や集合そのものを入力することは要求しない。
+基底の定義は `PauliBasis` のような struct が表し、対象の要素型を指定した `Basis<P, C>` を実装する。その実装が、特定の primitive たちを基底とする規則と、各 primitive をその基底へ展開する手続きを提供する。状態基底の展開は `LinearCombination<L::State, T>`、演算子基底の展開は `LinearCombination<L::Operator, T>` を返す。式木側が要素を `map` して通常の式へ取り込む。利用者が基底要素の配列や集合そのものを入力することは要求しない。
 
-展開・順序番号・列挙は単一の `Basis<P, T>` 実装で提供する。共通 trait 自体には数値制約を置かず、各具体基底の実装に、その展開規則で必要な能力だけを要求する。この実装の制約は `index`・`elements` にも適用される。係数精度を推論できない情報取得では、`<B as Basis<P, T>>::elements` のように明示する。
+展開・順序番号・列挙は単一の `Basis<P, C>` 実装で提供する。共通 trait 自体には数値制約を置かず、各具体基底の実装に、その展開規則で必要な能力だけを要求する。この実装の制約は `index`・`elements` にも適用される。係数精度を推論できない情報取得では、`<B as Basis<P, C>>::elements` のように明示する。
 
-既存の `LinearCombination` を返す契約と `Basis<P, T>` を維持し、[実装計画](../implementation-plan.md)の Step 2 で core・spin-half・テスト実装と局所式の接続を整備する。`StateBasis`・`OperatorBasis` は削除し、利用側で `L: LocalStructure` と次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得の実装は Step 5 に置く。
+既存の `LinearCombination` を返す契約と `Basis<P, C>` を維持し、[実装計画](../implementation-plan.md)の Step 2 で core・spin-half・テスト実装と局所式の接続を整備する。`StateBasis`・`OperatorBasis` は削除し、利用側で `L: LocalStructure` と次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得の実装は Step 5 に置く。
 
 | 基底を使う処理 | 型制約 |
 | --- | --- |
-| 局所状態の基底処理 | `B: Basis<L::State, T>` |
-| 局所演算子の基底処理 | `B: Basis<L::Operator, T>` |
+| 局所状態の基底処理 | `B: Basis<L::State, C>` |
+| 局所演算子の基底処理 | `B: Basis<L::Operator, C>` |
 
 局所基底要素は対応する primitive の部分集合とし、線型独立かつ対象空間全体に完全であることを要求する。局所基底要素として一般の式を指定することは本契約に含めない。正規直交性は要求しない。Primitive 全体は線型従属でもよい。
 
-基底を使う側は、対応する[局所構造](local-structure.md)、その定義パラメータ、および対象が状態か演算子かを確定する。型の対応は `Basis<L::State, T>` または `Basis<L::Operator, T>` で指定し、独立した所属宣言は要求しない。選択基底は局所構造や自由度の Index の同一性とは区別する。
+基底を使う側は、対応する[局所構造](local-structure.md)、その定義パラメータ、および対象が状態か演算子かを確定する。型の対応は `Basis<L::State, C>` または `Basis<L::Operator, C>` で指定し、独立した所属宣言は要求しない。選択基底は局所構造や自由度の Index の同一性とは区別する。
 
 初期版の複合基底は、同じ局所構造型 `L` の基本因子に対応する局所基底から構成する。因子ごとに異なる基底を選んでも、局所構造自体が異種になるわけではない。異種局所構造を混在させた系の基底は後続へ延期する。別の独自代数の基底は、その代数だけを使う別の系で利用・検証する。
 

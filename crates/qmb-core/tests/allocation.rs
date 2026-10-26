@@ -5,7 +5,8 @@ use std::{
     cell::Cell,
 };
 
-use qmb_core::{Complex, LinearCombination, Term};
+use num_complex::Complex;
+use qmb_core::{LinearCombination, Term};
 
 struct CountingAllocator;
 thread_local! {
@@ -59,10 +60,10 @@ fn without_allocation(f: impl FnOnce()) {
 #[test]
 fn empty_and_single_term_storage_and_iteration_do_not_allocate() {
     without_allocation(|| {
-        let zero = LinearCombination::<u8, f64>::zero();
+        let zero = LinearCombination::<u8, Complex<f64>>::zero();
         assert_eq!(zero.terms().next(), None);
         assert_eq!(zero.into_terms().next(), None);
-        let empty = LinearCombination::<u8, f64>::from_terms([]);
+        let empty = LinearCombination::<u8, Complex<f64>>::from_terms([]);
         assert_eq!(empty.into_iter().len(), 0);
         let single = LinearCombination::from_terms([Term {
             coefficient: Complex::new(2.0, 0.0),
@@ -71,7 +72,8 @@ fn empty_and_single_term_storage_and_iteration_do_not_allocate() {
         let single = single + LinearCombination::zero();
         assert_eq!(single.terms().len(), 1);
         assert_eq!(single.into_terms().next().unwrap().operand, 1);
-        let single = LinearCombination::<_, f64>::primitive(2).scaled(Complex::new(0.0, 0.0));
+        let single =
+            LinearCombination::<_, Complex<f64>>::primitive(2).scaled(Complex::new(0.0, 0.0));
         assert_eq!(single.into_iter().next_back().unwrap().operand, 2);
     });
 }
@@ -93,7 +95,7 @@ fn owning_iteration_reuses_the_existing_multiple_term_storage() {
 #[test]
 fn empty_and_single_term_mapping_do_not_allocate() {
     without_allocation(|| {
-        let empty = LinearCombination::<u8, f64>::zero().map(u16::from);
+        let empty = LinearCombination::<u8, Complex<f64>>::zero().map(u16::from);
         assert!(empty.is_empty());
         let single = LinearCombination::term(Complex::new(0.0, 1.0), 3_u8).map(u16::from);
         let term = single.into_iter().next().unwrap();

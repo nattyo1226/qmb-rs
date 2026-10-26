@@ -4,7 +4,7 @@
 
 ## 1. 位置づけと採用事項
 
-[係数型の依存・能力の調査](refactoring-coefficients.md)と、tensory・ndarray の設計を踏まえた作業用文書である。2026-10-25 に、利用者が未決事項に対する推奨案をすべて採用した。本書は採用事項と実装・検証の基準を記録する。製品コードの移行はまだ行っていない。
+[係数型の依存・能力の調査](refactoring-coefficients.md)と、tensory・ndarray の設計を踏まえた作業用文書である。2026-10-25 に、利用者が未決事項に対する推奨案をすべて採用した。本書は採用事項と実装・検証の基準を記録する。製品コードを採用方針へ移行した。具体的な API と検証結果は第10節に記録する。
 
 **式が係数全体 C を保持し、個別の演算能力で評価する構成**を採用する。core に num-complex・num-traits を含め、Zero・One は num-traits を利用し、付随する能力を受け入れる。不足する能力は個別の trait に分け、標準の Complex へ core 内で直接実装する。
 
@@ -12,14 +12,14 @@
 | --- | --- |
 | 型引数 | 成分型 T から係数全体 C へ移行する |
 | 追加能力 | 共役・実数値取得・実係数の埋め込み・純虚係数の生成を必要な箇所に限定して提供する |
-| Norm | std を利用する qmb-normalize の拡張 trait で norm・normalized を提供し、平方根を使う処理の実数型に Float を要求する。provider は導入しない |
+| 正規化の責務 | qmb-normalize の拡張 trait で norm・normalized・正規化期待値を提供し、NormalizationError も同 crate に置く。Float は平方根を使う処理の実数型に限定する |
 | 左スカラー倍 | 標準 Complex は個別実装し、任意の C は scaled(c) を基本経路とする |
 | 除算 | 正規化期待値の純実分母を不要に二乗しない、既存の数値的な処理を維持する |
 
 - 式の保持・共通評価は C の内部表現に依存させない。core 内の具体的な trait 実装では Complex の実部・虚部を利用できる。
 - Add・Mul 等は標準 trait、不足する能力は小さな独立した trait で表す。
 - Norm・正規化は現在の内積から導出し、必要な操作だけに追加の数値能力を要求する。
-- 標準の複素数接続は core に置き、平方根を伴う norm・正規化は qmb-normalize に置く。
+- 標準の複素数接続とスカラー除算は core に置き、norm・正規化・正規化期待値と零ノルムの検査は qmb-normalize に置く。
 
 tensory の構築と実行の分離、Regulator と具体 backend の分離を参考にする。qmb の共通 evaluator と不変共有を維持し、最初から全演算を task・runtime に置き換える要求にはしない。
 
@@ -36,7 +36,7 @@ tensory の構築と実行の分離、Regulator と具体 backend の分離を�
 
 ## 3. 係数全体 C を直接保持する
 
-現在の `T` は Complex<T> の成分型である。採用した方針では、その場所を係数全体 C に置き換える。
+移行前の `T` は Complex<T> の成分型であった。現在は、その場所を係数全体 C に置き換えている。
 
 ```rust
 pub struct ScaleExpr<E, C> {
@@ -63,7 +63,7 @@ Product・Act・Adjoint・Identity・Basis の係数型も C に揃える。Prim
 
 加減乗除・負号には core::ops の trait を用いる。標準 trait の一般性は保ち、共通評価メソッドで必要な場合に `Output = C` を課す。
 
-Zero・One は num-traits を使う。共役は借用から係数を返す能力、実数値の取得は関連型 Real への射影として個別に定義する。具体的な名前の案とシグネチャは以下のとおりである。
+Zero・One は num-traits を使う。共役は借用から係数を返す能力、実数値の取得は関連型 Real への射影として個別に定義する。実装した名前とシグネチャは以下のとおりである。
 
 ```rust
 use num_traits::{One, Zero};
@@ -82,13 +82,13 @@ Zero の Add・ゼロ判定、One の Mul は受け入れる。ゼロ判定は Z
 
 数学的な整合性は実装の契約として記述する。これらの trait に unsafe は必要としない。Scalar の可換性や共役と乗算の関係が必要な操作については、その法則も契約・検証対象に含める。
 
-Conjugate・RealPart 等の追加 trait の定義元が core なので、同じ crate 内で Complex<f32>・Complex<f64> に直接実装できる。Zero・One と標準演算は既存実装を利用し、再実装しない。成分型までジェネリックな Complex<T> の実装は、必要な条件を確認したうえで追加を検討する。
+Conjugate・RealPart 等の追加 trait の定義元が core なので、同じ crate 内で Complex<f32>・Complex<f64> に直接実装できる。Zero・One と標準演算は既存実装を利用し、再実装しない。共役は T: Clone + Neg、実数値取得は T に bound なし、虚数単位は T: Zero + One、Divide は成分演算に必要な bound のみで Complex<T> にも実装した。
 
 num-traits の Zero・One は、生成だけの操作でも必要な場所に bound として課す。能力を使わない保持・構築には要求しない。Num・Float の一律な導入は避け、Float は qmb-normalize の平方根を使う実数型に限定する。
 
 ### 4.2. 評価経路ごとの条件
 
-| 経路 | 係数側の条件の案 | 保持する特性 |
+| 経路 | 係数側の条件 | 保持する特性 |
 | --- | --- | --- |
 | 保持・map・式の遅延構築・配置・束縛 | 数値 bound なし | 式ハンドルの Clone に C: Clone を追加しない |
 | 係数1を明示する constructor | One | One の Mul は受け入れる。Zero を別途要求しない |
@@ -99,11 +99,11 @@ num-traits の Zero・One は、生成だけの操作でも必要な場所に bo
 | 局所の内積・trace 等の集計 | Clone + Zero + Mul<Output = C> + Conjugate<Output = C> | Add は Zero が含む。One・Div を追加しない |
 | 複合の内積・full trace 等の集計 | 前行と One | 空の tensor product 等に数値の1を使う |
 | norm squared | 内積の条件と RealPart | 平方根・除算・ゼロ判定を追加しない |
-| 正規化期待値 | 内積・期待値の条件と係数の除算能力 | Zero::is_zero で検査し、自己内積全体で割る。標準 Complex の純実分母の処理を維持し、平方根は要求しない |
+| 正規化期待値 | 内積・期待値の条件と Divide<Output = C> | Zero::is_zero で検査し、自己内積全体で割る。標準 Complex の純実分母の処理を維持し、平方根は要求しない |
 
 実際には primitive 側の Act・Product・Adjoint 等の能力も各経路で要求する。具体的な規則が必要とする分数等の能力は、その実装側の条件であり、上表の共通処理の条件とは分ける。
 
-標準 Complex の Div をそのまま呼ぶだけで既存の数値特性を維持できるとは限らない。正規化期待値の除算は、純実分母を二乗せずに実部・虚部を直接割る経路を残す。係数 C の抽象化との接続方法は実装時に定め、この経路の回帰検証を行う。
+標準 Complex の Div をそのまま呼ぶだけで既存の数値特性を維持できるとは限らない。正規化期待値の除算は、純実分母を二乗せずに実部・虚部を直接割る経路を残す。この接続には Divide を使用し、両精度・局所／複合式で回帰検証した。
 
 Clone は現在の評価器が共有節点の係数を再利用するための条件として残す。tensory の借用加算を参考に、借用演算で扱える箇所は検討するが、全係数に所有値・借用値の全組合せを要求することはしない。最初の移行で評価器全体の Clone 除去を完了条件にしない。
 
@@ -111,19 +111,19 @@ Clone は現在の評価器が共有節点の係数を再利用するための�
 
 ### 5.1. qmb-normalize への分離
 
-平方根を伴う norm・状態の正規化を `qmb-normalize` に分ける。新 crate は std を利用でき、no_std 対応は要件としない。norm 用 provider・独自 Sqrt trait・core の `_with` API は導入しない。
+norm・状態の正規化・正規化期待値を `qmb-normalize` に分ける。新 crate は std を利用でき、no_std 対応は要件としない。norm 用 provider・独自 Sqrt trait・core の `_with` API は導入しない。
 
 | 担当 | 機能・責任 |
 | --- | --- |
-| qmb-core | 係数の基本契約と標準 Complex への不足する trait の実装、式の構築・共有・評価、作用・内積・期待値、norm squared、平方根を使わない正規化期待値 |
-| qmb-normalize | norm・状態の正規化、平方根と実数の逆数の計算、実係数の構築。std の利用を許容する |
+| qmb-core | 係数の基本契約と標準 Complex への不足する trait の実装、式の構築・共有・評価、作用・内積・期待値、norm squared、スカラー除算 |
+| qmb-normalize | norm・状態の正規化・正規化期待値、零ノルムの検査と NormalizationError、平方根と実数の逆数の計算、実係数の構築。std の利用を許容する |
 | qmb | 新 crate と拡張 trait を再公開し、既定の利用例と feature を接続する |
 
 依存方向は `qmb-normalize -> qmb-core` とし、core は新 crate に依存しない。新 crate は core の公開された inner_product・scaled 等を利用し、非公開節点へのアクセスや evaluator の複製は必要としない。core の既存の num-complex・num-traits 依存は維持する。
 
-現行 core の norm・normalized の inherent method を移行し、新 crate が定義する拡張 trait で提供する。別 crate から core の型へ inherent method は追加できないため、利用側には拡張 trait の import が必要になる。qmb から再公開し、prelude からも利用できるようにする。trait の具体名は実装時に定める。
+norm・normalized・normalized_expectation・normalized_expectation_in は qmb-normalize が定義する拡張 trait で提供する。別 crate から core の型へ inherent method は追加できないため、利用側には拡張 trait の import が必要になる。qmb から再公開し、prelude からも利用できるようにする。拡張 trait 名は Norm・Normalize・NormalizedExpectation・NormalizedExpectationIn とする。
 
-norm squared は自己内積の実数値への接続、正規化期待値は期待値と自己内積の商なので core に残す。既存の NormalizationError も、正規化期待値と新 crate で共用するため core に残す。
+norm squared は自己内積の実数値への接続として core の内積実装側に残す。正規化期待値は内積・期待値・スカラー除算を組み合わせる便宜 API であり、零ノルムの検査と NormalizationError を含めて qmb-normalize に置く。core/expr/normalization.rs は削除し、core は正規化に固有の API・エラーを持たない。
 
 ### 5.2. 演算と能力の範囲
 
@@ -135,7 +135,7 @@ normalized は自己内積全体の厳密なゼロを Zero::is_zero で検査し
 
 ### 5.3. feature と移行範囲
 
-新 crate の標準経路では num-traits の std 対応による Float の平方根実装を利用できるため、no_std 用の libm 接続を必須にする必要はない。既存の qmb・core の libm feature の互換性と再公開方法は、移行時に整理する。Cargo の feature は依存間で統合されるため、新 crate と同時に使う構成では num-traits の std も統合され得る。core 単独で no_std + alloc を使えることと、core の機能・公開 bound が平方根を要求しないことを維持する。
+新 crate の標準経路では num-traits の std 対応による Float の平方根実装を利用できるため、no_std 用の libm 接続を必須にする必要はない。qmb の既定 feature は normalize とし、旧 qmb/libm は normalize の互換 alias にした。core/libm は削除した。Cargo の feature は依存間で統合されるため、新 crate と同時に使う構成では num-traits の std も統合され得る。core 単独で no_std + alloc を使えることと、core の機能・公開 bound が平方根を要求しないことを維持する。
 
 現行の normalized は正規化した状態だけを返す。元の値を「正規化した本体と取り出した係数」の組として保持する regulate、自動規格化、RegulatedState の導入は今回の実装範囲に含めない。
 
@@ -191,15 +191,92 @@ Spin-half の規則では C の0・1・純虚係数・分数を生成する必�
 
 ## 9. 試作で確認した点と実装上の確認事項
 
-Zero・One の採用を確定する前に、Rust 1.98.0 の独立した一時ファイルで以下をコンパイル・一部実行して確認した。分離した Zero・One・IsZero を使う試作は旧案の確認であり、現在の採用仕様ではない。製品コードは変更していない。
+Zero・One の採用を確定する前に、Rust 1.98.0 の独立した一時ファイルで以下をコンパイル・一部実行して確認した。分離した Zero・One・IsZero を使う試作は旧案の確認であり、現在の採用仕様ではない。この試作自体は製品コードを変更しなかった。
 
 - 数値能力のない型を係数とする構築と、同じ式型の積・右スカラー倍の実装が共存する最小例。
 - Add・Mul 等を要求しない One、および外部の数値型を包むローカル newtype への追加 trait の実装。
 - no_std の契約側と、外側の平方根を使う norm 方針の分離。正規化係数の計算と、共通処理での零の拒否。
 - 外部 trait と外部数値型への接続 crate からの直接 impl が E0117、ジェネリックな裸の左係数への Mul impl が E0210 となること。
 
-この試作は trait と構文の局所的な成立性の確認であり、qmb の全型・借用構文・評価器へ接続した検証ではない。MSRV 1.85 での確認、製品コードのテスト・性能比較も未実施である。
+この試作は trait と構文の局所的な成立性の確認であり、qmb の全型・借用構文・評価器へ接続した検証ではない。MSRV 1.85 での確認・性能の速度比較は未実施である。製品コードの移行後のテストは第10節に記録する。
 
 上記の orphan rule の失敗例は、trait と数値型の両方が外部にある別 crate からの接続の確認である。採用した core 内の標準 Complex への不足する trait の実装には当てはまらない。
 
-第1節の5項目に関する設計方針はすべて採用済みである。追加 trait の具体名・シグネチャ、純実分母の除算経路の接続、既存 libm feature と呼び出し箇所の移行は、採用方針に沿って実装・検証する事項として残る。LocalStructure の廃止や State／Operator の統合、対数係数・自動規格化の導入は、本方針の前提にも実装目標にも追加しない。
+第1節の5項目に関する設計方針はすべて実装した。追加 trait、純実分母の除算経路、既存 feature と呼び出し箇所の移行は第10節の API と検証に具体化した。LocalStructure の廃止や State／Operator の統合、対数係数・自動規格化の導入は、本方針の前提にも実装目標にも追加しない。
+
+## 10. 実装した API と移行方法
+
+2026-10-25 に、線型結合・共通パーツ・演算 trait・局所／複合式・共通評価・spin-half の規則と基底・モデル utility・再公開・利用例を移行した。LocalStructure、空間の構造、State／Operator の分離、共有と反復的な評価・破棄は維持している。
+
+| 能力 | 実装した接続 |
+| --- | --- |
+| 共役 | `Conjugate::conjugate(&self)`、関連型 Output |
+| 実数値取得 | `RealPart::real_part(self)`、関連型 Real |
+| 実係数の埋め込み | 標準の `From<R>`。normalized と実結合のモデル utility で要求する |
+| 純虚係数 | `ImaginaryUnit::imaginary_unit()` と標準の Mul。必要な spin 規則・基底だけで要求する |
+| 正規化期待値の除算 | `Divide::divide(self, rhs)`、関連型 Output。標準 Complex は純実分母を二乗しない |
+| 零・単位元 | num_traits の Zero／One。独自の生成・ゼロ判定 trait は追加していない |
+| 正規化の API | qmb_normalize の Norm／Normalize／NormalizedExpectation／NormalizedExpectationIn と NormalizationError。Float は平方根を使う Norm／Normalize の実数型 R にだけ要求する |
+
+[係数の能力と標準接続](../crates/qmb-core/src/coefficient.rs)は公開 module と root から利用できる。Conjugate・RealPart・ImaginaryUnit・Divide は generic な Complex<T> に必要な条件だけで実装しており、標準の Complex<f32>・Complex<f64> を直接使える。実係数 f32・f64 も共役・実数値取得・Divide を提供する。
+
+[正規化の拡張](../crates/qmb-normalize/src/lib.rs)は core の公開 inner_product・norm_squared・expectation・expectation_in・scaled と Divide だけを使う。norm は実係数の埋め込みを要求しない。normalized は自己内積を一度だけ計算し、自己内積全体の厳密なゼロを検査してから正の実係数でスケーリングする。正規化期待値には Float・RealPart・実係数の埋め込みを要求せず、自己内積全体の零を検査して期待値を割る。provider・独自 Sqrt は導入しない。
+
+型引数は成分型から係数全体へ変更する。
+
+```rust
+use num_complex::Complex;
+use qmb::prelude::*;
+use qmb::{SpinHalf, SpinHalfState};
+
+let state = LocalState::<SpinHalf, Complex<f64>>::primitive(SpinHalfState::Up);
+assert_eq!(state.norm_squared(), 1.0);
+assert_eq!(state.norm(), 1.0);
+let normalized = state.normalized()?;
+```
+
+num-complex・num-traits の型・trait は qmb-core・qmb・prelude から再公開しない。使用する crate を利用側の Cargo.toml に直接追加し、`use num_complex::Complex;`・`use num_traits::{One, Zero};` のように import する。core の数値ライブラリ依存と標準 Complex への追加 trait の実装は維持する。
+
+旧 LocalState<SpinHalf, f64> の複素係数に相当する型は、上記の LocalState<SpinHalf, Complex<f64>> である。係数 C = f64 は現在は実係数そのものを意味する。spin-half の Sy 等を含む全規則には虚数単位が必要なので、標準の利用には Complex を指定する。
+
+任意の C の右スカラー倍と scaled(c) は数値 bound なしで構築できる。借用係数を演算子へ渡す場合だけ Clone が必要になる。標準 Complex<f32>・Complex<f64> には左スカラー倍の所有／借用4通りも実装した。
+
+モデル utility は実結合 R を受け取り、必要な場所で C: From<R> を使う。戻り値から C が推論できない場合は、`heisenberg::<_, _, Complex<f64>>(&chain, 1.0)`、`neel::<_, Complex<f64>>(&chain, first)` のように指定する。
+
+qmb の既定 feature は normalize とし、Norm／Normalize／NormalizedExpectation／NormalizedExpectationIn を root と prelude から再公開する。NormalizationError は qmb-normalize と、normalize feature 有効時の qmb root から利用できる。直接 qmb-core を使う場合は、qmb-normalize を依存に加え、拡張 trait を import する。qmb の default feature 無効時には拡張を再公開せず、内積・期待値・norm_squared・スカラー除算を利用できる。期待値と自己内積の商は利用側で計算でき、その際の分母の検査も利用側が担う。旧 qmb/libm は normalize を有効にする互換 alias、旧 qmb-core/libm は削除済みである。
+
+### 10.1. 検証
+
+Rust 1.98.0 で以下を確認した。並列ビルド時に環境のメモリ不足が発生したため、Cargo の同時ジョブ数を2に制限して実行した。
+
+- workspace の全 feature 有効・default feature 無効のテスト（doctest を含む）。
+- format check、全 target・全 feature の Clippy（警告をエラー化）、警告をエラーとするドキュメント生成。
+- core 単独の default feature 無効ビルドと依存 feature。通常依存に std・libm・normalize はない。
+- Heisenberg の実行例。既定構成で期待値 1.25・norm 1、default feature 無効で期待値 1.25。
+
+[係数契約](../crates/qmb-core/tests/coefficient_contracts.rs)は、数値能力のない C の保持・map・局所／複合式の共有と構築、RealPart・Float・Num・一般の PartialEq を持たない係数での内積・期待値のスカラー除算、極端に大きい／小さい純実分母と複素分母の商を検証する。局所／複合の既存テストでは、加算・乗算・Neg のない C での作用評価、One のない局所集計、深い式の128 KiB スタック上での評価・破棄も維持した。
+
+[正規化期待値の契約](../crates/qmb-normalize/tests/expectation.rs)は、平方根・実数値取得を持たない係数、零ノルムの拒否、両精度の極端な実分母と複素分母を検証する。[正規化契約](../crates/qmb-normalize/tests/contracts.rs)は、One・実係数の埋め込み・係数 Float のない C での norm、入力位相の保持、自己内積が一度だけ計算されることを検証する。[三次元代数](../crates/qmb-normalize/tests/three_level.rs)と facade の縦断テストは、両精度・非正規直交な primitive・相殺による zero norm とエラーを確認する。spin-half の全局所規則と複合評価は独立した行列と照合し、Clone・Copy・Num のない独自係数でも分数を含む全規則を確認した。
+
+MSRV 1.85 と専用 no_std target の実ビルド、実行時間のベンチマークは未確認である。既存の direnv 環境は Rust 1.98.0 を提供し、rustup は同環境にも存在しない。
+
+### 10.2. 正規化の責務の分離
+
+core/expr の正規化 module は削除した。norm_squared は局所の evaluate.rs と複合の composite_eval.rs に置き、内積と同じ能力に RealPart だけを加えて提供する。係数の Divide は正規化から独立したスカラー除算の能力として core に残す。
+
+正規化期待値は、次の拡張 trait を import して呼び出す。正規化期待値のために Float を要求する変更はない。
+
+```rust
+use num_complex::Complex;
+use qmb_core::{LocalOperator, LocalState};
+use qmb_normalize::NormalizedExpectation;
+use qmb_spin_half::{SpinHalf, SpinHalfState};
+
+let state = LocalState::<SpinHalf, Complex<f64>>::primitive(SpinHalfState::Up);
+let identity = LocalOperator::identity();
+let value = state.normalized_expectation(&identity)?;
+```
+
+複合式で明示的な空間を優先する場合は NormalizedExpectationIn を import し、normalized_expectation_in を使う。零ノルムは NormalizationError::ZeroNorm、配置・束縛・縮約の失敗は NormalizationError::Expression となる。従来のエラーの優先順と、純実分母を不要に二乗しない除算経路は維持する。
+
+零ノルム・非正規直交な primitive・明示空間の優先を確認するテストは qmb-normalize に移した。core 単独のテストは内積・norm_squared・期待値・スカラー除算を検証し、normalize への依存を持たない。facade の default feature 無効の利用例も、この代数 API の組み合わせで期待値を計算する。
