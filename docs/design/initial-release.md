@@ -29,7 +29,7 @@
 
 標準提供する局所構造は spin-1/2 のみとする。非公開の別の局所代数や非正規直交基底による検証は、拡張性の完成条件であり、追加の builtin を公開する要求とは区別する。
 
-一つの系の全基本因子は、同じ primitive 型 S・O で表す一種類の局所代数とする。異種局所構造の混在・合成は初期版に含めず、そのための型消去・保持機構も要求しない。同種因子の入れ子、一つの Site への複数自由度の配置は引き続き扱う。複合基底には一つの局所基底を全基本因子へ共通に適用し、因子ごとに異なる基底を選ぶことは扱わない。別基底への再展開は引き続き扱う。採用した方針は [Step 5 の一時設計メモ](../step-5-design.md)に記録する。
+一つの系の全基本因子は、同じ primitive 型 S・O で表す一種類の局所代数とする。異種局所構造の混在・合成は初期版に含めず、そのための型消去・保持機構も要求しない。同種因子の入れ子、一つの Site への複数自由度の配置は引き続き扱う。複合基底には一つの局所基底を全基本因子へ共通に適用し、因子ごとに異なる基底を選ぶことは扱わない。別基底への再展開は引き続き扱う。詳細は[基底の設計](basis.md)に定める。
 
 ## 3. 完成条件
 
@@ -91,7 +91,7 @@ crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定
 
 geometry は core に依存せず、両 crate に依存する qmb::space の ToSpace が空間変換を担当する。Chain の移行範囲と検証結果は[実装計画第9節](../implementation-plan.md#9-chain-の-index-列保持への移行)に従う。
 
-式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, C>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数全体 `C` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装する。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
+式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, C>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数全体 `C` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装した。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
 
 LocalStructure は廃止し、式には S・O を直接指定する。恒等元は O の Identity、次元は primitive 型全体の SpanDimension とする。共通パーツは `expr::parts` で保持内容も公開し、式ハンドルを再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, C>` は `ScaleExpr<P, C>` の別名に統合し、要素名を `operand` に揃える。既存の線型結合の構築・走査 API は維持する。`StateBasis`・`OperatorBasis` は削除し、状態には `Basis<S, C>`、演算子には `Basis<O, C>` を直接使う。次元からの基底要素数の取得と基底の数学的契約は維持する。
 
@@ -101,6 +101,6 @@ Step 3 の空間・複合式・共有・束縛・エラー・評価経路は [�
 
 Norm・正規化・正規化期待値と NormalizationError は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Norm／Normalize／NormalizedExpectation／NormalizedExpectationIn を import して呼び出す。内積・期待値・norm squared・スカラー除算は core に残し、Float は平方根を使う実数型 R に要求する。qmb の既定 feature は normalize、旧 libm はその互換 alias とし、core の libm feature は設けない。
 
-XYZ・Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。[Chain の配置契約](geometry.md)に従い、利用側が保持する空間へ接続する。基底処理は Step 5、数値 backend は Step 6 で具体化し、初期版の必須範囲を維持する。Partial trace は future work とし、初期版の必須範囲に含めない。bra 型・構築 API は初期版では導入しない。
+XYZ・Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。[Chain の配置契約](geometry.md)に従い、利用側が保持する空間へ接続する。基底処理は Step 5 で実装済みとし、数値 backend は Step 6 で具体化する。Partial trace は future work とし、初期版の必須範囲に含めない。bra 型・構築 API は初期版では導入しない。
 
-Step 5 は [一時設計メモ](../step-5-design.md)の方針に従い、追加依存なしで実装済みである。`expand_in` は通常の式を返し、`coordinates_in` は独立した集約済みの疎な座標を返す。現在の公開 API と契約は[基底の設計第8節](basis.md#8-実装した公開-api2026-10-27)、検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。Step 6 の数値 backend とその追加依存は同段階で選定する。段階1〜5の実装と初期版全体の完成とは区別し、数値 export とその受入確認は引き続き未実装とする。
+Step 5 は追加依存なしで実装済みである。`expand_in` は通常の式を返し、`coordinates_in` は独立した集約済みの疎な座標を返す。現在の公開 API と契約は[基底の設計第8節](basis.md#8-実装した公開-api2026-10-27)、検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。Step 6 の数値 backend とその追加依存は同段階で選定する。段階1〜5の実装と初期版全体の完成とは区別し、数値 export とその受入確認は引き続き未実装とする。

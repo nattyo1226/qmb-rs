@@ -112,7 +112,7 @@ Core の共通機構が展開を線型に式全体へ拡張し、順序番号か
 
 局所契約を満たすことは局所構造の提供者、契約を保存する合成則は共通機構の責任とする。操作時には適用の前提を検証し、数学的法則を任意の実装について実行時に自動証明することは要求しない。能力一覧・数式・検証対象の詳細は [埋め込み・複合空間の式と数学的能力](design/composite-expression.md)に定める。初期版は ordinary な演算を提供し、graded な演算の実装は後続へ回す。
 
-Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 `Operator` は一つの型で未束縛・束縛済みを扱う。束縛情報は外側のハンドルに集約し、明示空間・既存束縛・未束縛の作用時の状態空間の順に選択する。検証が必要な複合操作とその演算子構文は `Result` を返し、空間不整合を早期に検出して局所規則の実行を遅延させる。評価は作用・内積・full trace の経路を分担し、全大域演算子の完全展開を必須にしない。採用した型・共有・空間保持・エラー・評価方針と受入条件は [Step 3 の実装方針](step-3-design.md)にまとめる。
+Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 `Operator` は一つの型で未束縛・束縛済みを扱う。束縛情報は外側のハンドルに集約し、明示空間・既存束縛・未束縛の作用時の状態空間の順に選択する。検証が必要な複合操作とその演算子構文は `Result` を返し、空間不整合を早期に検出して局所規則の実行を遅延させる。評価は作用・内積・full trace の経路を分担し、全大域演算子の完全展開を必須にしない。採用方針と公開 API は[複合式の設計](design/composite-expression.md)、検証状況は[実装計画第4.3節](implementation-plan.md#43-段階3の実装検証状況)に記録する。
 
 ## 8. 幾何・モデル構築
 
@@ -150,7 +150,7 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[実装計画第7節](implementation-plan.md#7-係数型のリファクタリング)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持・ToSpace・モデル utility の実装移行も2026-10-27に実施した。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
 
-係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
+係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。移行内容は[実装計画第7節](implementation-plan.md#7-係数型のリファクタリング)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
 
 LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を直接指定する。次元は primitive 型全体の span の次元（S は d、O は d²）、恒等元は係数型に依存せず生成する O の値とする。空間・Geometry／Chain から L を外し、因子構造と局所規則を分離する。採用した契約と移行前の仕様の扱いは[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。全 crate の製品コード・テスト・利用例を移行済みである。
 

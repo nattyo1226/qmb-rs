@@ -6,7 +6,7 @@
 
 本書は、[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づき、具体的な自由度を持つ Hilbert 空間の構成、grouping、および互換性を定める。
 
-ジェネリックな Index の照合・Hilbert 空間と、その上の共通の式・評価は `qmb-core` が担当する。具体的な UUID Index の発行は `qmb-basic`、Site への対応付けは `qmb-geometry` に置き、空間の構築・合成に Geometry を必須としない。Step 3 の具体的な採用方針は [実装方針](../step-3-design.md)に従う。
+ジェネリックな Index の照合・Hilbert 空間と、その上の共通の式・評価は `qmb-core` が担当する。具体的な UUID Index の発行は `qmb-basic`、Site への対応付けは `qmb-geometry` に置き、空間の構築・合成に Geometry を必須としない。現在の公開 API は第10節、実装・検証状況は[実装計画第4.3節](../implementation-plan.md#43-段階3の実装検証状況)に記録する。
 
 Hilbert 空間自体を再帰的な構造とし、基本自由度の空間と、順序付きの子空間の tensor product を表す。複合空間をさらに複合させられるようにし、grouping はその木の括り方で表す。提供する能力は構築・合成、構成要素・Index の列挙、互換性判定、および部分系判定とする。任意の因子集合を指定した部分系の取得と Regrouping の操作は提供しない。Grouping のための独立した Group 型は追加しない。Factor と Tensor は概念上の名前であり、具体的な Rust の型・公開 API を指定するものではない。
 
@@ -153,7 +153,7 @@ Site 上の複数の自由度は、利用側が構成する Tensor の内部因�
 
 構築・合成、構成要素・Index の列挙、互換性判定、および部分系判定を提供する。任意の因子集合を指定した部分系の取得と Regrouping は提供しない。これらを本書の合意済みの契約とし、Hilbert 空間の数学的な基本契約について、現時点で追加の未決事項はない。
 
-公開型 `HilbertSpace` への統一、Dof の葉への統合、`Arc` による共有、非公開の節点 enum、借用による列挙、ordinary な葉列の照合、反復的な走査・破棄、および次元取得時の overflow 検出は採用済みとする。具体的な実装方針と検証条件は [Step 3 の実装方針](../step-3-design.md)に従う。
+公開型 `HilbertSpace` への統一、Dof の葉への統合、`Arc` による共有、非公開の節点 enum、借用による列挙、ordinary な葉列の照合、反復的な走査・破棄、および次元取得時の overflow 検出は採用済みとする。検証結果は[実装計画第4.3節](../implementation-plan.md#43-段階3の実装検証状況)に記録する。
 
 Step 3 で空間・constructor・列挙・判定・次元取得の API、非公開の節点と作業スタックを実装した。LocalStructure 廃止後の公開型は `HilbertSpace<I>` とする。Index は照合するメソッドで `Eq` を要求し、重複検出には等値比較を用いる。現在の API は第10節に記録する。
 
