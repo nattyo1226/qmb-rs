@@ -216,6 +216,8 @@ LocalStructure・旧 Identity<C>・SpinHalf marker を削除し、core の primi
 3. XYZ・Heisenberg・Neel の Factor・空間の取得、空間構築・対応検証・配置・束縛をモデル utility・利用側へ移す。Site 順と既存全空間の因子順序を区別し、Index を再発行しない。所有データの複製や借用 Index からの Factor 構築にだけ Clone を要求できる。具体的な公開シグネチャはこの責任分担に沿って実装時に定める。
 4. facade・利用例・関連テストを移行する。移行前の「Chain が空間の Arc 節点を共有する」という検証を、識別値の保持と利用側での空間管理の検証へ置き換える。core の式・空間の共有は維持する。
 
+空間変換の拡張 trait は `ToSpace`、メソッドは `to_space` とし、qmb の接続用 module に配置して公開する。Chain への実装にだけ `I: Clone + Eq` を要求し、借用から Index を複製して Site 順・Site 内の順で空間を構築する。空の Chain は単位空間とし、繰り返し変換した空間の Index・順序の一致、互換性、元の Chain の不変性を検証する。標準の Into／From に変換契約を固定せず、Grading に必要な情報の渡し方は fermion 系の実装時に具体化する。詳細は[ToSpace の契約](design/geometry.md#61-空間への変換能力-tospace)に従う。この trait の実装も未着手である。
+
 移行後は、Clone・Default のない Index の保持・借用列挙、重複・範囲外・Site 数不一致、発行回数と順序、空・可変長・複数自由度、open／periodic の長さ0・1・2と通常長、両 Index ペア方式を検証する。接続側では未配置・不足・不一致、Site 順と異なる全空間の因子順序、利用側で保持する grouping、既存 Index の再利用、一 Site 一 spin・0-site・XYZ／Heisenberg／Neel の両精度の独立行列・解析値との一致を確認する。
 
 対象テストの後に workspace の全 feature 有効／default 無効のテスト、format、Clippy、必要なドキュメント生成と実行例を確認し、依存・feature と qmb-geometry の no_std + alloc を検証する。結果を記録して実装移行を完了とする。State／Operator の統合や fermion・Grading の設計は今回の移行に追加しない。

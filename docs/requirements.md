@@ -853,6 +853,8 @@ Chain は局所代数に依存せず、Site ごとの Index 列 `Vec<Vec<I>>` �
 
 別の Chain や空間で同じ Index を再利用できる。全空間との対応・未配置・必要数に対する過不足は、その空間と接続するモデル構築側・利用側が検証する。空間の構築・保持・因子順序・grouping・局所式の配置と束縛も利用側が担当する。Site 順と全空間の因子順序は異なり得るものとし、既存空間の順序・grouping を暗黙に変更しない。接続時に Index を再発行しない。
 
+空間への変換能力は独立した拡張 trait `ToSpace` と `to_space` メソッドで提供する。Chain では `I: Clone + Eq` を変換実装にだけ要求し、元の対象を借用して同じ Index を持つ空間を Site 順・Site 内の Index 順で構築する。同じ Arc 節点の返却は保証せず、生成した空間は利用側が保持する。Grading に必要な情報の渡し方は fermion 系の実装時に具体化する。詳細は[ToSpace の契約](design/geometry.md#61-空間への変換能力-tospace)に従う。
+
 Site 数ゼロと自由度数ゼロの Site を認め、それぞれ空の外側 Vec・空の内側 Vec で表す。空 Site を削除したり、入力不足から暗黙に補ったりしない。単位空間や空 Tensor は必要な利用側が構築する。配置は構築後に不変とする。Chain 内の自由度は Site の位置と Site 内の Index 順序で参照し、内部ラベルは導入しない。
 
 Chain は近接 Site ペアを列挙する。関係ごとの trait を設け、NearestNeighborRelation の `nn_pairs()` は Site 間の Index 全組合せ、`nn_pairs_by_pos()` は同じ位置同士を短い方まで借用列挙する。片側が空ならペアなしとし、Site ペア順と Site 内の Index 順序を維持する。相互作用項の演算子・係数の選択はモデル構築側が行う。構築・列挙・空間接続の契約は [Chain の設計](design/geometry.md)に従う。Step 4 の空間保持 API は移行前の記録とする。

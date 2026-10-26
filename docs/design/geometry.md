@@ -72,6 +72,28 @@ site 1 → [c]
 
 HilbertSpace の grouping と全体の因子順序は利用側が保持する。Chain は Site と Site 内の位置から Index を参照できればよく、内部ラベルの型・名前による指定は導入しない。空間との接続は Index の等値比較で行い、同じ Arc 節点の共有を必須条件にしない。core の式・空間内部の不変な共有は維持する。
 
+### 6.1. 空間への変換能力 ToSpace
+
+2026-10-26 に、空間への変換を独立した拡張 trait `ToSpace`、メソッド `to_space` で提供する方針を採用した。Chain と HilbertSpace の両方に依存する `qmb` の接続用 module に置き、qmb から公開する。Chain の保持構造や `NearestNeighborRelation` の必須能力には含めず、qmb-geometry に空間への依存を戻さない。実装は未着手である。
+
+ordinary な空間に対するシグネチャは次の形を想定する。
+
+```rust
+pub trait ToSpace {
+    type Index;
+
+    fn to_space(&self) -> Result<HilbertSpace<Self::Index>, SpaceError>;
+}
+```
+
+Chain に対しては `I: Clone + Eq` のときに実装する。Clone はこの変換実装で要求し、trait 全体や Chain の保持・借用列挙の条件にしない。既存の空間を共有保持する別の型は、その Index の Clone を要求せずに実装できる。
+
+変換は元の対象を借用し、Index の識別値を維持する。Chain の実装は各 Site の Index から Factor と Site ごとの空間を構築し、Site 順・Site 内の Index 順で全空間を構成する。空の Chain は単位空間になる。同じ Chain から繰り返し変換した空間は同じ Index・因子順序を持つが、同じ Arc 節点を返す保証は設けない。生成した空間の保持は呼び出し側が担当する。
+
+Chain の Index 列に含まれない任意の grouping や、Site 順と異なる既存全空間の因子順序を復元する API ではない。既存空間を利用する場合は、その空間を利用側で保持し、モデル構築時に Chain と併せて渡して対応を検証する。
+
+変換契約は標準の Into／From に固定せず、独立した能力として定める。将来 Grading のために必要となる情報の渡し方と変換 API の拡張は、fermion 系の実装時に具体化する。現時点で Grading の型や変換コンテキストを先行導入しない。
+
 ## 7. 関係の列挙とモデル構築の境界
 
 Chain は Site ごとの Index 列の借用と、`nn_site_pairs()` による近接 Site ペアの列挙を提供する。近接 Site ペアは正規化した番号の辞書順とし、self-loop・重複辺を生成しない。長さ0・1では辺なし、長さ2では open / periodic とも `(0,1)` 一つとする。
@@ -96,6 +118,7 @@ Chain の Site 順序・関係・配置は構築後に変更しない。異な�
 - 新規発行の回数と順序、参照・複製・空間接続による識別値の保持。
 - open／periodic の小規模規約、二つの Index ペア方式の順序と空の扱い、別の幾何型での関係 trait の再利用。
 - 利用側での空間との対応検証、Site 順と異なる全空間の因子順序、利用側で保持する grouping、既存 Index の再利用。
+- ToSpace の変換前後での Index の同一性と順序、空の Chain、繰り返し変換した空間の互換性、元の Chain の不変性。Clone の要求が変換実装に限定されること。
 - 一 Site 一 spin の制約、0-site、両精度の Neel の norm、XYZ・Heisenberg の Hermiticity と独立行列・解析的期待値との一致。
 
 ## 10. 実装移行の境界

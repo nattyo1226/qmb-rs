@@ -122,6 +122,8 @@ Site は外側の Vec の位置を表す usize、内側の Vec は Site 内の�
 
 Chain は open / periodic を扱う。近接 Site ペアを正規化した辞書順で列挙し、長さ0・1で辺なし、長さ2では両境界条件とも一辺とする。関係ごとの trait を設け、NearestNeighborRelation は全 Index 組合せの `nn_pairs()` と同じ位置同士の `nn_pairs_by_pos()` を提供する。後者は短い方まで列挙する。関係の列挙と相互作用項の生成は区別し、Heisenberg・Neel utility は spin-half に置く。
 
+空間への変換は qmb の接続用 module が提供する独立した拡張 trait `ToSpace` の `to_space` で扱う。Chain には `I: Clone + Eq` のときに実装し、借用から同じ Index と既定の因子順序を持つ空間を構築する。生成した空間は利用側が保持する。trait 全体や幾何関係の列挙には Clone を要求せず、Grading の情報の渡し方は fermion 系の実装時に具体化する。この実装は未着手である。
+
 Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移す。移行先の契約は [Chain の設計](design/geometry.md)、実装範囲と検証は [実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に従う。Step 4 の空間保持・共有に関する契約は移行前の記録とする。
 
 ## 9. 初期版の提供範囲と完成条件

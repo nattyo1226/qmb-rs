@@ -147,6 +147,7 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 - Index の新規発行にだけ Default、所有データの複製や借用 Index から別の空間を作る操作にだけ Clone を要求する。同一 Index の Clone／Copy は新規発行ではない。
 - 空・複数自由度・可変長の Site と構築後の不変性、open／periodic の小規模規約、二つの Index ペア列挙の意味と順序を維持する。
 - Site 順と全空間の因子順序を区別する。外部空間との対応・必要な Factor・配置の完全性は接続側が検証し、既存 Index を再発行しない。
+- 空間変換は独立した拡張 trait ToSpace の to_space で提供し、qmb の接続用 module に置く。Chain は Clone + Eq の Index を借用から複製し、Site 順・Site 内の順で空間を構築する。Clone は変換実装にだけ要求し、同じ Arc 節点を返す保証は設けない。Grading の情報の渡し方は fermion 系の実装時に具体化する。
 - XYZ・Heisenberg・Neel の空間取得・配置・束縛を利用側の構成へ移す。一 Site 一 spin、0-site、既存空間の因子順序、解析的期待値の契約を維持する。
 
 **依存関係**：3.3の型統合や Grading の設計完了を前提にしない。qmb-geometry crate と関係 trait は維持し、Geometry の再公開、空間を受け渡す API、モデル utility・テスト・例を一緒に移行する。
