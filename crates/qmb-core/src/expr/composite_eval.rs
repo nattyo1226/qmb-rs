@@ -249,11 +249,11 @@ impl<I, O, C: Clone> Clone for OpBranch<'_, I, O, C> {
         }
     }
 }
-struct OpTerms<'a, I, O, C> {
+pub(super) struct OpTerms<'a, I, O, C> {
     branches: Vec<OpBranch<'a, I, O, C>>,
 }
 impl<'a, I, O, C> OpTerms<'a, I, O, C> {
-    fn new(root: &'a OpExpr<I, O, C>) -> Self {
+    pub(super) fn new(root: &'a OpExpr<I, O, C>) -> Self {
         Self {
             branches: vec![OpBranch {
                 pending: vec![(root, false)],

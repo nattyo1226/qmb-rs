@@ -36,8 +36,8 @@ pub use qmb_spin_half as spin_half;
 
 pub use qmb_basic::Id128;
 pub use qmb_core::{
-    Conjugate, Divide, ExpressionError, HilbertSpace, Identity, ImaginaryUnit, LocalOperator,
-    LocalState, Operator, RealPart, SpanDimension, State,
+    Basis, BasisError, Conjugate, Coordinates, Divide, ExpressionError, HilbertSpace, Identity,
+    ImaginaryUnit, LocalOperator, LocalState, Operator, RealPart, SpanDimension, State,
 };
 pub use qmb_geometry::{Boundary, Chain, ChainError, NearestNeighborRelation};
 pub use qmb_spin_half::{SpinHalfOperator, SpinHalfState};
@@ -55,7 +55,7 @@ pub use qmb_normalize::{
 
 /// Common expression types and optional normalization extension traits.
 pub mod prelude {
-    pub use crate::{HilbertSpace, LocalOperator, LocalState, Operator, State, ToSpace};
+    pub use crate::{Basis, HilbertSpace, LocalOperator, LocalState, Operator, State, ToSpace};
     #[cfg(feature = "normalize")]
     pub use qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn};
 }

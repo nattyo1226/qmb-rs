@@ -1,12 +1,14 @@
 # 埋め込み・複合空間の式と数学的能力
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 対象と責任分担
 
 本書は、[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づき、局所式の配置、全 Hilbert 空間への束縛、および複合系の状態・演算子式の数学的能力と整合性を定める。[局所 primitive・式木の数学的能力](primitive-expression.md)を、[Hilbert 空間の再帰構造](hilbert-space.md)に沿って複合系へ拡張する契約である。
 
-初期版で合成する全基本因子は、同じ primitive 型 S・O で表す一種類の局所代数を持つ。配置・束縛・作用・縮約も同じ `L` の系の内部で行う。異種局所構造の混在・合成と、そのための型消去・保持機構は後続へ延期する。異なる Index や入れ子の grouping は、異種局所構造を意味しない。
+2026-10-27に、partial trace を一旦 future work とし、Step 5 の担当範囲と初期版の必須機能・検証項目から外した。本書の partial trace に関する契約と検証条件は将来の実装向けに保持する。
+
+初期版で合成する全基本因子は、同じ primitive 型 S・O で表す一種類の局所代数を持つ。配置・束縛・作用・縮約も同じ局所代数の系の内部で行う。異種局所構造の混在・合成と、そのための型消去・保持機構は後続へ延期する。異なる Index や入れ子の grouping は、異種局所構造を意味しない。
 
 | 対象 | 責任 |
 | --- | --- |
@@ -15,7 +17,7 @@
 | 状態・演算子式 | 対応する空間の規則に従って構築・評価される |
 | 共通の合成・埋め込み・評価機構 | 局所契約を保存する共通の合成則を提供し、複合 Hilbert 空間の数学的能力を実現する |
 
-複合 Hilbert 空間は、局所構造に相当する整合性の責任を持つ。これは概念上の責任分担であり、独立した「複合構造」型、追加の空間の木、または個々の演算を空間のメソッドとすることを要求しない。Step 3 の型・公開 API・内部表現の採用方針は9節と [Step 3 の実装方針](../step-3-design.md)にまとめる。
+複合 Hilbert 空間は、局所構造に相当する整合性の責任を持つ。これは概念上の責任分担であり、独立した「複合構造」型、追加の空間の木、または個々の演算を空間のメソッドとすることを要求しない。複合式の実装方針は第9節、現在の公開 API は第10節にまとめる。
 
 局所構造の提供者が局所契約を満たすことを前提に、共通機構はその契約を保存する合成則を提供する。子が基本因子でも複合空間でも、同じ数学的契約に従って再帰的に合成する。複合系ごとに積・作用・随伴などを独立に再定義することは要求しない。
 
@@ -50,7 +52,7 @@ Index の付与を「配置」、spectator を含む全 Hilbert 空間の確定�
 | 状態式 | Act | 状態式と演算子式 | 状態式。線型性・因子順序・grading に従い、状態 primitive の Act による局所作用へ委譲する |
 | 演算子式 | 随伴 | 演算子式 | 演算子式。係数の共役・積の順序反転・局所式の随伴を扱う |
 | 演算子式 | Full trace | 全作用空間が確定した演算子式 | 複素 scalar。通常の非正規化 trace を計算する |
-| 演算子式 | Partial trace | 演算子式・全作用空間・縮約対象の部分系 | 残存空間に束縛された演算子式。残存因子の Index・局所構造・順序を保持する |
+| 演算子式（future work） | Partial trace | 演算子式・全作用空間・縮約対象の部分系 | 残存空間に束縛された演算子式。残存因子の Index・局所構造・順序を保持する |
 | 状態・演算子式 | Grading の処理〈graded の場合〉 | homogeneous な成分 | 成分の parity から符号を処理する。混合 parity の式に単一の parity を要求しない |
 
 積と作用は各引数について線型、内積は第一引数について共役線型・第二引数について線型、随伴は共役線型、full/partial trace は線型とする。`AB` は右側の `B` から状態に作用する。局所式に含まれる primitive 間の線型関係を保存し、結果の係数列や式構造の一意性は要求しない。
@@ -166,6 +168,8 @@ Full trace は、ordinary / graded ともに通常の非正規化 trace とす�
 
 `Tr(XY) = Tr(YX)` と `Tr(I_H) = dim H` を要求する。巡回性に parity の符号を追加せず、supertrace は採用しない。
 
+以下の partial trace は future work の数学的契約であり、今回の実装・検証対象には含めない。
+
 Partial trace は、確定した因子順序と通常の tensor 表現に対して定義する。`ambient = H` の部分系 `T` を縮約し、残存空間を `R` とする。残存因子の基底 index を `r,r'`、縮約因子の完全正規直交基底 index を `t` としたとき、`B = Tr_T^H(X)` の行列要素は以下とする。
 
 ```math
@@ -210,7 +214,7 @@ Graded な場合も埋め込み後の実際の作用を縮約する。二 mode �
 
 ## 9. 未決事項と実装範囲
 
-Step 3 の設計判断は以下を採用済みとする。具体的な構成と検証条件は [Step 3 の実装方針](../step-3-design.md)に従う。Step 3 の ordinary な配置・束縛・複合評価は実装済みである。後続の partial trace・基底処理・graded な演算とは区別する。
+Step 3 の設計判断は以下を採用済みとする。実装・検証状況は[実装計画第4.3節](../implementation-plan.md#43-段階3の実装検証状況)に記録する。Ordinary な配置・束縛・複合評価と Step 5 の基底処理は実装済みであり、後続の partial trace・graded な演算とは区別する。
 
 | 対象 | 採用した方針 |
 | --- | --- |
@@ -223,8 +227,21 @@ Step 3 の設計判断は以下を採用済みとする。具体的な構成と�
 | 評価経路 | 作用・内積・full trace を分担し、全経路共通の完全展開形を強制しない。作用は primitive の Product を要求せず、full trace は必要な項の局所積・局所 trace へ委譲する |
 | 深い式 | 評価・走査・最後の所有者になった節点の破棄には明示的な作業スタックを使う |
 
-Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積までを含む。局所式・複合式の Norm・正規化・正規化期待値は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。bra 型・構築 API は初期版では導入せず、braket は内積で計算する。Partial trace・基底展開・座標取得は Step 5 に置き、初期版の必須範囲からは除外しない。
+Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積までを含む。局所式・複合式の Norm・正規化・正規化期待値は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。bra 型・構築 API は初期版では導入せず、braket は内積で計算する。基底展開・座標取得は Step 5 で実装済みであり、初期版の必須範囲を維持する。Partial trace は future work とし、Step 5 と初期版の必須範囲に含めない。
 
-Step 3 の具体型は `State<I, L, T>`・`Operator<I, L, T>` とし、非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。詳細は [実装した API](../step-3-design.md#11-実装した-api-と後続事項)に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
+Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。LocalStructure 廃止後の公開型は `State<I, S, O, C>`・`Operator<I, O, C>` とする。現在の API は第10節に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
 
 本書は数学的な契約を定める。[初期版の提供範囲](initial-release.md)は同種局所構造の ordinary な演算とし、異種局所構造の合成と graded な演算の実装は後続へ延期する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
+
+## 10. 現在の公開 API
+
+| 対象 | 主な API と契約 |
+| --- | --- |
+| 局所式の配置 | `LocalState::at(&factor)`・`LocalOperator::at(&factor)` は因子への配置を検証し、局所式を共有する。状態は所属空間を持ち、演算子は未束縛とする |
+| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`add`・`tensor`・`tensor_product`・`scaled` と、`space`・`domain`・`codomain` を提供する |
+| `State<I, S, O, C>` の演算・評価 | `act`・`act_in`・`evaluate`・`inner_product`・`norm_squared`・`expectation`・`expectation_in` を提供する。作用は遅延構築する |
+| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`add`・`product_all`・`product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
+| `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hilbert_schmidt_inner_product`・`hilbert_schmidt_inner_product_in` を提供する。交換子は遅延構築する |
+| エラー | 空間の重複には `SpaceError`、複合式の接続・評価には `ExpressionError`、次元取得には `DimensionOverflow` を使う |
+
+Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。

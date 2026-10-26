@@ -193,17 +193,17 @@ impl<S, O, C> LocalState<S, O, C> {
 
 // Both state and operator scalar reductions use this same linear walker.
 // None as coefficient means an implicit one, so generating it needs no One.
-enum LinearView<'a, E, P, C> {
+pub(super) enum LinearView<'a, E, P, C> {
     Leaf(Option<&'a P>),
     Scale(&'a C, &'a E),
     Sum(&'a SumExpr<E>),
 }
-struct LinearTerms<'a, E, P, C> {
+pub(super) struct LinearTerms<'a, E, P, C> {
     pending: Vec<(&'a E, Option<C>)>,
     view: fn(&'a E) -> LinearView<'a, E, P, C>,
 }
 impl<'a, E, P, C> LinearTerms<'a, E, P, C> {
-    fn new(root: &'a E, view: fn(&'a E) -> LinearView<'a, E, P, C>) -> Self {
+    pub(super) fn new(root: &'a E, view: fn(&'a E) -> LinearView<'a, E, P, C>) -> Self {
         Self {
             pending: vec![(root, None)],
             view,
@@ -236,7 +236,9 @@ where
         None
     }
 }
-fn state_view<S, O, C>(state: &LocalState<S, O, C>) -> LinearView<'_, LocalState<S, O, C>, S, C> {
+pub(super) fn state_view<S, O, C>(
+    state: &LocalState<S, O, C>,
+) -> LinearView<'_, LocalState<S, O, C>, S, C> {
     match state.node() {
         StateNode::Primitive(p) => LinearView::Leaf(Some(p)),
         StateNode::Scale(s) => LinearView::Scale(&s.coefficient, &s.operand),
@@ -244,7 +246,9 @@ fn state_view<S, O, C>(state: &LocalState<S, O, C>) -> LinearView<'_, LocalState
         StateNode::Act(_) => unreachable!("evaluated state"),
     }
 }
-fn operator_view<O, C>(op: &LocalOperator<O, C>) -> LinearView<'_, LocalOperator<O, C>, O, C> {
+pub(super) fn operator_view<O, C>(
+    op: &LocalOperator<O, C>,
+) -> LinearView<'_, LocalOperator<O, C>, O, C> {
     match op.node() {
         OperatorNode::Primitive(p) => LinearView::Leaf(Some(p)),
         OperatorNode::Identity => LinearView::Leaf(None),
@@ -263,7 +267,7 @@ enum OperatorTask<O, C> {
 }
 
 impl<O, C> LocalOperator<O, C> {
-    fn evaluated(&self) -> Self
+    pub(super) fn evaluated(&self) -> Self
     where
         C: Clone + Mul<Output = C> + Conjugate<Output = C>,
         O: Product<C, Term = O> + Adjoint<C, Term = O>,
