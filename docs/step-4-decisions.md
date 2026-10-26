@@ -6,6 +6,8 @@
 
 2026-10-26 の LocalStructure 廃止で、本文の L を用いる型は現在の API へ移行済みである。Geometry／Chain／HilbertSpace は I のみ、式は S・O を直接指定する。以下は Step 4 当時の判断の記録であり、現在の契約は[局所 primitive の設計](design/local-structure.md)と[実装計画](implementation-plan.md)を参照する。
 
+同日に、Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する方針を採用した。空間の構築・保持・grouping・因子順序・配置と束縛はモデル utility・利用側へ移す。この移行は未実装である。本文の空間保持 API・Arc 共有・Clone 制約と検証結果は移行前の記録であり、採用した契約は[Chain の設計](design/geometry.md)、今後の移行・検証は[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に従う。
+
 ## 1. 位置付けと実装範囲
 
 本書は、[実装計画](implementation-plan.md)の Step 4 に適用する合意済みの設計と受入条件をまとめる。実装と検証の状況は[実装計画の段階4](implementation-plan.md#44-段階4の実装検証状況)に記録する。数学的契約は[要件](requirements.md)、提供範囲は[初期版の設計](design/initial-release.md)に従う。

@@ -8,6 +8,8 @@
 
 **LocalStructure を廃止し、式に primitive 型 S・O を直接指定する。追加の定義ラベル・定義 ID は設けない。** primitive の意味・規則は S・O の型と各能力の実装で定める。保持と評価の分離を維持し、因子構造を扱う空間・Geometry／Chain から局所定義への依存を外す。
 
+その後、同日に Chain が Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と空間保持を廃止する方針を採用した。本書の Geometry／Chain の空間保持と検証結果は LocalStructure 廃止時点の実装記録である。Chain の新方針への移行は未実装であり、[Chain の設計](design/geometry.md)と[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に記録する。
+
 ### 1.1. 採用事項
 
 | 責任 | 採用した配置 |

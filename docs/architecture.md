@@ -6,6 +6,8 @@
 
 本書は、[要件](requirements.md)に基づく設計の概要と、合意済みの設計判断を記録する。各対象の詳細な契約は `docs/design/` 以下の文書に記録する。具体的な Rust の型、公開 API、および内部実装は、対応する設計を決めた時点で追記する。
 
+2026-10-26 に Chain の Index 列保持への移行方針を採用した。本書の Chain の構成は移行先を表し、Geometry・HilbertSpace を保持する製品コードからの移行は未着手である。
+
 ## 2. 責任分離
 
 | 対象 | 担当すること |
@@ -17,11 +19,14 @@
 | 状態式・演算子式 | core の共通構文、線型性・共役線型性による拡張、不変な部分構造の共有 |
 | 埋め込み・評価 | 局所式の配置と作用空間の確定、局所契約を保存する合成則、整合性検証、grading、必要な部分の評価 |
 | 基底・export | 局所基底と tensor product 基底、通常の式木への展開・再展開、順序・列挙・要素数の導出、座標取得、写像の表現行列、外部の数値表現への変換 |
-| 幾何・モデル構築 | Site 順序・関係、空間・Index の配置、Default による発行補助、状態や Hamiltonian の構築 |
+| 幾何 | Site 順序・Site ごとの Index 列・境界条件、関係の借用列挙、Default による Index 発行補助 |
+| モデル構築・利用側 | Index と Factor の対応、空間の構築・保持・因子順序・grouping、局所式の配置・束縛、状態や Hamiltonian の構築 |
 
 代数 core は幾何構造を必須とせず、自由度と式を直接構築できる。完全な密・疎行列を生成せずに代数オブジェクトを構築・合成・評価し、必要に応じて数値 backend に export する。
 
 ### 2.1. crate の構成
+
+以下の geometry から core への依存は現実装の構成であり、Chain の Index 列保持への移行に合わせて、空間 API の移動で不要になった依存を除く。
 
 代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得・写像の表現係数を同じ crate が所有する。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
@@ -45,7 +50,7 @@ Index は識別子のみを表し、局所構造や次元を持たない。局�
 
 Hilbert 空間自体を、基本自由度の Index と局所構造を持つ Factor、および ordinary / graded の種類と順序付きの子 Hilbert 空間を持つ Tensor の再帰構造として表す。Tensor の子に Tensor を含められる。Factor と Tensor は概念上の名前とする。基本因子の順序は子を左からたどった葉の Index 列で表し、Index の値の大小から決めない。基底は空間とは別に選ぶ。
 
-Grouping は空間の木の括り方で表し、そのための独立した Group 型は追加しない。Geometry が Site 順に部分空間を保持し、その grouping と因子順序で自由度を参照する。内部ラベルは初期版では導入しない。局所複合代数の数学的能力は、子の局所規則と共通の合成・評価機構から処理する。
+Grouping は空間の木の括り方で表し、そのための独立した Group 型は追加しない。Chain は Site ごとの Index 列を保持し、部分空間と grouping は利用側が管理する。Site 内の Index 順序と全空間の因子順序を区別し、接続側が対応を検証する。内部ラベルは初期版では導入しない。局所複合代数の数学的能力は、子の局所規則と共通の合成・評価機構から処理する。
 
 空間の互換性は、基本因子の Index・順序・局所構造と、空・単因子 tensor product の同一視および同種の積の結合則を適用した後の tensor 構造に基づく。保持する木構造と数学的な互換性を分け、括り方だけの違いでは互換性を変えない。構築時の平坦化は要求せず、不変な子空間を共有できるようにする。
 
@@ -111,13 +116,13 @@ Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 
 
 ## 8. 幾何・モデル構築
 
-Geometry は Site 順の `Vec<HilbertSpace<I>>` と全空間を保持する。Index 型だけを指定し、primitive 型はモデル構築側の式が持つ。既存の Site ごとの空間を受け取る経路と、Site 数・各 Site 共通の自由度数から `I: Default` で新規発行する経路を提供する。保持済み空間の取得・参照・Clone では再発行しない。
+Chain は Site ごとの `Vec<Vec<I>>` と境界条件を直接保持する。Geometry 構造体は廃止し、各 Site の部分空間と全 Hilbert 空間は利用側が構築・保持する。既存の所有 Index 列を受け取る経路と、Site 数・各 Site 共通の自由度数から `I: Default` で新規発行する経路を提供する。保持・借用列挙には Clone・Default を要求せず、複製や借用 Index から別の空間を構築する操作にだけ Clone を要求できる。
 
-Site は Vec の位置を表す usize とし、Geometry を跨ぐ同一性・所属チェックは行わない。範囲外、Site 間の Index 重複・未配置・必要数の不一致は検出する。Factor・入れ子 Tensor・空 Site を扱い、既存の Index・因子順序・grouping を保持する。全空間を新しく構成する場合は Site 順に tensor product を取る。内部ラベルは導入しない。
+Site は外側の Vec の位置を表す usize、内側の Vec は Site 内の自由度順序とする。Chain を跨ぐ同一性・所属チェックは行わない。構築時の Site 内・Site 間の Index 重複、範囲外、Site 数を指定した経路での数の不一致は Chain が検出する。外部空間との対応・未配置・過不足は接続側が検証する。空 Site・可変長・複数自由度を扱い、既存の Index を再発行しない。全空間の因子順序・grouping は Site 順序から独立に利用側が管理する。内部ラベルは導入しない。
 
 Chain は open / periodic を扱う。近接 Site ペアを正規化した辞書順で列挙し、長さ0・1で辺なし、長さ2では両境界条件とも一辺とする。関係ごとの trait を設け、NearestNeighborRelation は全 Index 組合せの `nn_pairs()` と同じ位置同士の `nn_pairs_by_pos()` を提供する。後者は短い方まで列挙する。関係の列挙と相互作用項の生成は区別し、Heisenberg・Neel utility は spin-half に置く。
 
-Geometry と配置は構築後に不変とする。公開 API と受入条件は [Step 4 の合意事項](step-4-decisions.md)、配置の詳細は [Geometry の設計](design/geometry.md)に従う。生成時は Index 型だけを指定し、空間の共有構造を利用する。管理方式全体の見直しは第10節の必須課題とする。
+Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移す。移行先の契約は [Chain の設計](design/geometry.md)、実装範囲と検証は [実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に従う。Step 4 の空間保持・共有に関する契約は移行前の記録とする。
 
 ## 9. 初期版の提供範囲と完成条件
 
@@ -137,9 +142,9 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 2. **LocalStructure の必要性（実装移行完了）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
 3. **Operator と State の整理（初期版実装後）**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。2026-10-26に、検討事項が多いため初期版実装後へ延期した。初期版では現行の分離を維持し、この整理の結論を実装の前提条件にしない。
 4. **HilbertSpace の最小構成（初期版の範囲は完了）**：LocalStructure 廃止により、Index と順序付き Tensor の構造だけを保持する構成へ移行した。primitive 型・次元・局所規則は式・取得時の入力・個別能力が担う。Grading の具体的な保持方法・API は、2026-10-26の判断により、fermion 系の実装時に具体化する。
-5. **Chain の内部表現**：実装済みの Index と Tensor による HilbertSpace の構造を、Chain の内部表現としてどう利用するかを整理する。現行の HilbertSpace を保持する構成との関係も含め、結論と根拠を記録する。Grading の設計完了を前提にしない。
+5. **Chain の内部表現（方針確定・実装未着手）**：Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する。空間の構築・保持・grouping・全体の因子順序・配置と束縛は利用側へ移す。理由と契約は[整理メモの3.5節](refactoring-notes.md#35-chain-の内部表現)に記録する。Grading の設計完了を前提にしない。
 
-初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Operator と State の統合、Grading の具体的な保持方法・API、Chain の追加の内部表現の見直しは未決であり、採否を含む設計上の結論を得る。
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持方針は確定し、実装移行を残す。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
 
 係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
 

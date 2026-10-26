@@ -1,81 +1,105 @@
-# Geometry・Site と自由度の配置
+# Chain・Site と自由度の配置
 
 更新日: 2026-10-26
 
 ## 1. 対象と責任分担
 
-本書は[要件](../requirements.md)と[Step 4 の合意事項](../step-4-decisions.md)に基づき、Geometry と Site への自由度の配置を定める。公開 API と受入条件は Step 4 の合意事項を参照する。
+本書は[要件](../requirements.md)に基づき、Chain と Site への自由度の配置を定める。2026-10-26 に、Chain が Site ごとの Index 列と境界条件だけを保持する方針を採用した。以下は移行先の設計であり、製品コード・テスト・利用例の移行は未着手である。[Step 4 の合意事項](../step-4-decisions.md)にある Geometry・HilbertSpace の保持は移行前の記録とする。
 
-`qmb-geometry` は Site の順序・幾何関係・配置・空間を保持し、局所式の配置・束縛・評価は `qmb-core` に委譲する。UUID の具体型 `Id128` は `qmb-basic`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・縦断例は `qmb` が担当する。
+`qmb-geometry` は Site の順序、Site ごとの自由度の Index 列、境界条件と幾何関係の列挙を担当する。Hilbert 空間の構築・保持・grouping・全体の因子順序は利用側が管理する。局所式の配置・束縛・評価は `qmb-core`、UUID の具体型 `Id128` は `qmb-basic`、XYZ・Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・縦断例は `qmb` が担当する。
 
-Geometry は局所代数に依存せず、Site 順の `Vec<HilbertSpace<I>>` と全空間を保持する。独立した Placement 型は設けない。空間の既存の Arc 共有を使い、Index や木全体を複製しない。core は Geometry を必須としない。異種局所構造の混在・graded は初期版の対象外とする。
+保持構成は次のとおりとする。Geometry 構造体は廃止し、Chain が直接データを所有する。代わりの配置用ラッパー構造体は設けない。`qmb-geometry` crate と関係ごとの能力 trait は維持する。
+
+```rust
+struct Chain<I> {
+    sites: Vec<Vec<I>>,
+    boundary: Boundary,
+}
+```
+
+Chain は局所代数・HilbertSpace・Grading の情報を保持しない。Grading の情報保持・API は fermion 系の実装時に具体化する。core は Chain を必須としない。
 
 ## 2. Site の指定と順序
 
-Site は保持する Vec の位置 `0,1,…,N−1` を表す `usize` で指定する。SiteId・共有識別トークンは設けず、Geometry を跨ぐ Site の同一性・混用を管理しない。範囲外は検出する。構築後の配置と順序は不変とする。
+Site は外側の Vec の位置 `0,1,…,N−1` を表す `usize` で指定し、内側の Vec は Site 内の自由度の順序を表す。SiteId・共有識別トークンは設けず、Chain を跨ぐ Site の同一性・混用を管理しない。範囲外は検出する。構築後の配置と順序は不変とする。
 
-Site ordering と tensor ordering は区別し、既存空間の順序を配置によって暗黙に変更しない。
+Site ordering と tensor ordering は区別する。Site 内の Index 順序は関係の列挙に使う順序であり、既存の全空間の因子順序や grouping を暗黙に変更する指定ではない。
 
 ## 3. Site と Hilbert 空間・Index の対応
 
-各 Site は Factor・Tensor のどちらも保持でき、その空間に属する全葉の Index を対応付ける。入れ子の順序・grouping と既存の Index を保持する。
+各 Site は0個以上の Index を持つ。既存の空間を利用する場合、利用側がその空間から必要な Index を読み取り、Site ごとの列として渡す。Tensor の grouping や Factor ハンドルそのものを Chain に保持させない。
 
-| 空間 | Site に属する Index |
+| 入力の例 | Site に属する Index |
 | --- | --- |
-| Factor | その Index 一つ |
-| Tensor | 葉を左からたどった Index 列 |
-| 空の Tensor | ゼロ個 |
+| 一つの自由度 | `[a]` |
+| 複数の自由度 | `[a, b]` |
+| 空 Site | `[]` |
 
-一つの配置では各 Index をちょうど一つの Site に割り当て、Site 間で重複する Index は拒否する。別の配置での再利用は認める。Index と Site の対応を全体で登録する機構は設けない。
+一つの Chain 内では各 Index をちょうど一つの位置に割り当て、Site 内・Site 間の重複を構築時に `I: Eq` で拒否する。別の Chain や空間で同じ Index を再利用することは認める。Index と Site の対応を全体で登録する機構は設けない。
 
 ## 4. 二つの構築経路と既定の配置規則
 
 | 経路 | 契約 |
 | --- | --- |
-| 既存空間からの配置 | Site ごとの HilbertSpace を Site 順に受け取り、既存の Index・順序・grouping を保持 |
-| 個数からの生成 | Site 数と各 Site 共通の自由度数を受け取り、生成時に指定した Index 型で空間を構築 |
+| 既存 Index からの配置 | Site ごとの所有 Index 列を Site 順に受け取り、その順序を保持。Index は移動して取り込める |
+| 個数からの生成 | Site 数と各 Site 共通の自由度数を受け取り、Site 順・Site 内の順に Index を発行 |
 
-新規 Index の発行が必要な箇所でのみ `I: Default` を要求し、`I::default()` を呼ぶ。この用途の Default は新しい独立した Index を発行する契約とする。UUID・乱数源は具体型側に閉じ、Geometry は basic に依存しない。専用の Index 生成 trait や発行関数の引数は設けない。既存空間の保持や列挙には Default・Clone を一律に要求しない。
+新規 Index の発行が必要な箇所でのみ `I: Default` を要求し、`I::default()` を呼ぶ。この用途の Default は新しい独立した Index を発行する契約とする。UUID・乱数源は具体型側に閉じ、Chain は basic に依存しない。専用の Index 生成 trait や発行関数の引数は設けない。保持・借用列挙には Default・Clone を要求しない。
 
-全空間の取得で Index を再発行したり空間を再構築したりしない。自由度数は葉の個数であり、Hilbert 空間の次元や Tensor 直下の子の個数とは区別する。
+所有 Index 列の複製や、借用した Index から別途 Factor を構築する操作では `I: Clone` を要求できる。Clone／Copy は同じ識別値の複製であり、新規発行ではない。標準の `Id128` は Copy を提供する。Clone できない Index を複数の所有対象で共有するための追加の仕組みは今回必須にしない。自由度数は Index の個数であり、Hilbert 空間の次元とは区別する。
 
 ### 4.1. 初期版の 1D Chain の配置規則
 
-標準の Geometry は open / periodic の Chain のみとする。Site ごとの空間を保持する Vec の外側が Site 順序、各要素の葉の順序が Site 内の自由度順序となる。
+標準の幾何は open / periodic の Chain のみとする。外側の Vec が Site 順序、各 Index 列が Site 内の自由度順序を表す。
 
 ```text
-入力: [Tensor(a,b), c]
+入力: [[a,b], [c]]
 site 0 → [a,b]
 site 1 → [c]
 ```
 
-個数からの経路では例えば Site 数2・各 Site の自由度数2から `[a,b]`, `[c,d]` の順に Index を発行する。新しい全空間の基本因子順序は `[a,b,c,d]` とする。既存全空間を受け取る場合は、その因子順序を変更しない。
+個数からの経路では例えば Site 数2・各 Site の自由度数2から `[a,b]`, `[c,d]` の順に Index を発行する。利用側がこの列順に全空間を新規構築すると基本因子順序は `[a,b,c,d]` となる。既存の全空間を利用する経路では、その因子順序を維持して配置との対応を検証する。
 
 ## 5. 配置の完全性と空の場合
 
-- 既存空間の全 Index を対応付け、重複・未配置を許さない。必要数を別途指定した経路では過不足をエラーとする。
-- 自由度数ゼロの Site を空の Tensor として保持し、Site や幾何関係を削除しない。
-- Site 数ゼロでは空の Geometry と単位空間を作る。
+- Chain は Index の重複、範囲外の Site、Site 数を別途指定した経路での入力数不一致を検出する。
+- 外部の全空間との対応・未配置・過不足は、その空間と Chain を接続するモデル構築側・利用側が検証する。
+- 自由度数ゼロの Site は空の Index 列として保持し、Site や幾何関係を削除しない。
+- Site 数ゼロでは Site 列が空の Chain を作る。単位空間は必要な利用側が構築する。
 - 入力不足を理由に空の Site を補わない。
 
 ## 6. Grouping と自由度の参照
 
-初期版は HilbertSpace をそのまま grouping に用い、構成要素・葉の順序と保持した Factor を参照する。内部ラベルの型・対応表・名前による指定は導入しない。
+HilbertSpace の grouping と全体の因子順序は利用側が保持する。Chain は Site と Site 内の位置から Index を参照できればよく、内部ラベルの型・名前による指定は導入しない。空間との接続は Index の等値比較で行い、同じ Arc 節点の共有を必須条件にしない。core の式・空間内部の不変な共有は維持する。
 
 ## 7. 関係の列挙とモデル構築の境界
 
-Geometry は `sites()` と `nn_site_pairs()` を公開する。近接 Site ペアは正規化した番号の辞書順とし、self-loop・重複辺を生成しない。長さ0・1では辺なし、長さ2では open / periodic とも `(0,1)` 一つとする。
+Chain は Site ごとの Index 列の借用と、`nn_site_pairs()` による近接 Site ペアの列挙を提供する。近接 Site ペアは正規化した番号の辞書順とし、self-loop・重複辺を生成しない。長さ0・1では辺なし、長さ2では open / periodic とも `(0,1)` 一つとする。
 
-関係ごとの trait を設け、`NearestNeighborRelation` の `nn_pairs()` は近接 Site 間の Index 全組合せ、`nn_pairs_by_pos()` は同じ位置同士を短い方まで列挙する。二つの空間を借用する共通関数 `index_pairs`・`index_pairs_by_pos` を利用し、Index の Clone・Default やペア全体の Vec は要求しない。片側が空ならペアなしとし、Site ペア順と葉の順序を保持する。
+関係ごとの trait を設け、`NearestNeighborRelation` の `nn_pairs()` は近接 Site 間の Index 全組合せ、`nn_pairs_by_pos()` は同じ位置同士を短い方まで列挙する。Index は Chain から借用し、Clone・Default やペア全体の Vec は要求しない。片側が空ならペアなしとし、Site ペア順と Site 内の Index 順序を保持する。共通関数も Index 列の組合せ・位置対応として整理し、HilbertSpace を引数とする契約を移行する。
 
-関係の列挙は Hamiltonian の項の生成とは区別する。演算子・係数の選択と状態の構築はモデル utility が担当する。次近接などの追加の関係 trait と追加 Geometry は、その機能を導入するときに設計する。
+演算子・係数の選択、Factor・全空間の構築または既存空間との接続、局所式の配置・束縛、状態の構築はモデル utility・利用側が担当する。既存空間との接続では必要な Factor の存在を検証する。Neel を全空間上に構築する経路では、Site ごとの Index が全因子に対応することを確認し、Up／Down は Site 順で決め、状態は全空間の因子順で構築する。
+
+XYZ・Heisenberg・Neel utility の一 Site 一 spin の制約、0-site の zero Hamiltonian・単位状態、解析的期待値は維持する。空間の構築や接続で新しい Index を発行し直さない。既存空間を明示する経路と Index から空間を構築する経路の具体的な関数シグネチャは、実装移行時に定める。
+
+次近接などの追加の関係 trait と追加の幾何型は、その機能を導入するときに設計する。Geometry 構造体の保持は拡張の前提条件にしない。
 
 ## 8. 構築後の不変性
 
-Geometry の Site 順序・関係・配置は構築後に変更しない。異なる幾何や配置が必要なら新しい対象を作り、既存の空間・式を変更しない。新規発行と既存 Index の再利用を区別し、参照や Clone だけで再発行しない。
+Chain の Site 順序・関係・配置は構築後に変更しない。異なる幾何や配置が必要なら新しい対象を作り、既存の空間・式を変更しない。新規発行と既存 Index の再利用を区別し、参照や Clone だけで再発行しない。
 
 ## 9. 検証対象
 
-Factor・入れ子・空・複数自由度の配置、全 Index の対応、重複・未配置・過不足・範囲外の拒否、発行と共有の保持を確認する。内部ラベルと Geometry を跨ぐ所属確認は対象外とする。
+以下は移行後に実施する検証であり、成功済みの記録ではない。
 
-Chain の小規模規約・順序、二つの Index ペア方式の可変長・空・入れ子の葉順、別 Geometry のテスト実装での関係 trait の再利用を検証する。モデル utility では一 Site 一 spin Factor の制約、Neel の norm、Hermiticity、解析的期待値を確認する。具体的な受入条件は [Step 4 の検証](../step-4-decisions.md#8-受入条件と検証)に従う。
+- Clone・Default のない Index の所有入力・借用列挙、Site 内・Site 間の重複拒否、範囲外・Site 数不一致、空・可変長・複数自由度の列。
+- 新規発行の回数と順序、参照・複製・空間接続による識別値の保持。
+- open／periodic の小規模規約、二つの Index ペア方式の順序と空の扱い、別の幾何型での関係 trait の再利用。
+- 利用側での空間との対応検証、Site 順と異なる全空間の因子順序、利用側で保持する grouping、既存 Index の再利用。
+- 一 Site 一 spin の制約、0-site、両精度の Neel の norm、XYZ・Heisenberg の Hermiticity と独立行列・解析的期待値との一致。
+
+## 10. 実装移行の境界
+
+Geometry とその再公開、`Chain::from_geometry`・`geometry()`・`space()`、HilbertSpace を受け渡す Site API は新しい責任分担へ移行する。空間の構築・参照・完全性検証を利用側へ移し、テスト・facade・実行例を追従させる。エラーは Chain の入力検証と空間接続側の検証に分け、具体名・constructor 名・借用 API の詳細は実装時に定める。
+
+移行前の「Chain の Clone に I: Clone は不要」「Site と全空間の Arc 節点を Chain が共有する」という保証は、所有 Index 列の契約へ置き換える。空間接続時にだけ必要な Clone を、Chain の保持・借用列挙へ波及させない。`qmb-geometry` の core 依存は空間 API の移動に合わせて棚卸しし、不要になった依存を除く。

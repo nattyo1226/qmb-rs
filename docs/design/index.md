@@ -45,7 +45,9 @@ Index の発行
 
 Index の付与は、spectator を含む全 Hilbert 空間への束縛とは別の操作である。付与だけでは全作用空間は確定せず、全作用空間への bind だけから各局所式の Index を推測しない。自由度の構築と局所式への付与のいずれも、新しい Index を暗黙に発行しない。
 
-個数からの Geometry 構築では、Index 型 I を指定し、新規発行時のみ `I: Default` を要求して `I::default()` を呼ぶ。この用途の Default は毎回新しい独立した Index を発行する契約とする。保持・参照・既存空間からの構築には Default を要求せず、専用の Index 生成 trait は追加しない。
+個数からの Chain 構築では、Index 型 I を指定し、新規発行時のみ `I: Default` を要求して `I::default()` を呼ぶ。この用途の Default は毎回新しい独立した Index を発行する契約とする。保持・参照・既存 Index 列からの構築には Default を要求せず、専用の Index 生成 trait は追加しない。
+
+2026-10-26に、Chain は Site ごとの所有 Index 列を直接保持する方針を採用した。実装移行は未着手である。所有入力は移動して取り込み、重複は Eq で検証する。保持・借用列挙には Clone を要求せず、所有列の複製や、借用 Index から別途 Factor を構築する操作にだけ要求できる。Index の Clone／Copy は同じ識別値を保持し、新規発行を意味しない。core の空間・式のハンドル共有に Index 本体の Clone を要求しない契約は維持する。詳細は[Chain の設計](geometry.md)に従う。
 
 ## 4. 一意性の前提
 

@@ -8,6 +8,8 @@
 
 2026-10-26 に LocalStructure の廃止と追加の定義ラベルを設けない方針を採用した。第2〜6節にある L を使う API は移行前の実装・設計記録であり、次の移行方針は第8節に記録する。全 crate の実装移行と検証を完了した。
 
+同日に Chain が Site ごとの Index 列と境界条件を直接保持する方針を採用した。Geometry 構造体と空間保持を廃止し、空間管理を利用側へ移す。第2〜6節の Geometry・HilbertSpace の保持に関する記述は移行前の記録であり、採用した移行範囲と検証は第9節に記録する。Chain の実装移行は未着手である。
+
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
 Step 2 の局所構造と演算能力の分離、共通パーツと項型、基底 trait、評価経路、所有権、反復的な評価・破棄の方針は採用済みであり、本書の実装内容と完了条件に含める。Step 3 の採用済みの型・共有・空間保持・エラー・評価方針は [Step 3 の実装方針](step-3-design.md)にまとめる。Step 4 の採用済み方針と受入条件は [Step 4 の合意事項](step-4-decisions.md)にまとめる。それ以降の API の詳細・数値 backend・追加依存は、各段階で設計する。数学的契約と初期版の提供範囲は既存文書に従う。
@@ -181,7 +183,7 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 2026-10-26に、Operator と State の整理は検討事項が多いため、設計の検討と、それに基づくリファクタリングを初期版実装後へ延期した。初期版は現行の State／Operator の分離を維持し、段階5〜6の実装はこの整理の結論を前提条件にしない。HilbertSpace・Chain の検討も現行の分離を前提に行える。論点と更新した着手順序は[整理メモの3.3節](refactoring-notes.md#33-operator-と-state-の整理)と[第4節](refactoring-notes.md#4-着手順序の提案)に記録する。
 
-HilbertSpace の最小構成のうち、ordinary の責任分離は第8節の LocalStructure 廃止で実装済みである。空間は Index と順序付き Tensor の構造だけを保持し、局所代数の情報は外部から得る。2026-10-26に、Grading の情報保持・API は fermion 系の実装時に具体化する方針とし、初期版向けの空間の整理を完了とした。Chain の追加の内部表現の見直しは、実装済みの因子構造を基礎に検討できる。
+HilbertSpace の最小構成のうち、ordinary の責任分離は第8節の LocalStructure 廃止で実装済みである。空間は Index と順序付き Tensor の構造だけを保持し、局所代数の情報は外部から得る。2026-10-26に、Grading の情報保持・API は fermion 系の実装時に具体化する方針とし、初期版向けの空間の整理を完了とした。Chain は同日に Index 列を直接保持する方針を採用し、第9節の実装移行を残す。
 
 係数型の残る推奨案は同日にすべて採用した。係数全体 C への型引数の移行、個別の共役・実数値取得・実係数の埋め込み・純虚係数生成、qmb-normalize の拡張 trait、標準 Complex の左スカラー倍の個別実装と任意の C の scaled(c)、正規化期待値の純実分母の処理の維持を実装する。追加 provider は導入しない。移行順序と検証基準は [係数型の採用方針](refactoring-coefficient-proposal.md)に従う。
 
@@ -204,3 +206,16 @@ LocalStructure・旧 Identity<C>・SpinHalf marker を削除し、core の primi
 旧ラベルの混在拒否テストは primitive 型の混在拒否へ変更し、同じ空間の構造を異なる primitive 型の式が共有できることを追加検証した。構築・共有の最小限の制約、作用に Product を要求しないこと、恒等元と trace、span の次元と基底要素数、overflow、既存 Index・因子順序・grouping、不変な共有、深い式の評価・破棄、両精度と独自代数の検証は成功した。
 
 **完了（2026-10-26）**。workspace の全 feature 有効108テスト・default 無効107テスト（doc test を含む）、format、Clippy、警告をエラーとするドキュメント生成、core 単独ビルド・依存 feature、両構成の実行例を確認した。[API と検証の詳細](refactoring-local-structure.md#8-実装した-api-と移行結果2026-10-26)に記録する。MSRV 1.85、専用 no_std target、性能ベンチマークは未確認である。State／Operator・Grading を含む空間・Chain の追加の設計判断は後続課題として残す。
+
+## 9. Chain の Index 列保持への移行（実装未着手）
+
+**方針確定（2026-10-26）**。Chain は `Vec<Vec<I>>` と境界条件を直接保持し、Geometry 構造体と、各 Site・全体の HilbertSpace の保持を廃止する。理由と採用事項は[整理メモの3.5節](refactoring-notes.md#35-chain-の内部表現)、移行先の契約は[Chain の設計](design/geometry.md)を正とする。以下は今後の作業であり、実装・検証の完了を表さない。
+
+1. `qmb-geometry` の保持・constructor・Site 参照・エラーを Index 列の契約へ移す。既存の所有 Index を移動して取り込む経路と、Default による新規発行経路を提供する。構築時に Eq で Site 内・Site 間の重複を拒否し、保持・借用列挙へ Clone・Default を要求しない。
+2. Geometry とその再公開、`from_geometry`・`geometry()`・`space()`、HilbertSpace を受け渡す Site API を廃止・移行する。`qmb-geometry` crate と関係 trait は維持し、Index 列から近接ペアを借用列挙する。空間 API の移動で不要になった core 依存を除く。
+3. XYZ・Heisenberg・Neel の Factor・空間の取得、空間構築・対応検証・配置・束縛をモデル utility・利用側へ移す。Site 順と既存全空間の因子順序を区別し、Index を再発行しない。所有データの複製や借用 Index からの Factor 構築にだけ Clone を要求できる。具体的な公開シグネチャはこの責任分担に沿って実装時に定める。
+4. facade・利用例・関連テストを移行する。移行前の「Chain が空間の Arc 節点を共有する」という検証を、識別値の保持と利用側での空間管理の検証へ置き換える。core の式・空間の共有は維持する。
+
+移行後は、Clone・Default のない Index の保持・借用列挙、重複・範囲外・Site 数不一致、発行回数と順序、空・可変長・複数自由度、open／periodic の長さ0・1・2と通常長、両 Index ペア方式を検証する。接続側では未配置・不足・不一致、Site 順と異なる全空間の因子順序、利用側で保持する grouping、既存 Index の再利用、一 Site 一 spin・0-site・XYZ／Heisenberg／Neel の両精度の独立行列・解析値との一致を確認する。
+
+対象テストの後に workspace の全 feature 有効／default 無効のテスト、format、Clippy、必要なドキュメント生成と実行例を確認し、依存・feature と qmb-geometry の no_std + alloc を検証する。結果を記録して実装移行を完了とする。State／Operator の統合や fermion・Grading の設計は今回の移行に追加しない。
