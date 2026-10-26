@@ -6,11 +6,11 @@
 
 本文書は、qmb-rs の目的、責任分離、機能要件、数学的・数値的規約、および検証方針を定め、開発計画の基準とする。
 
-2026-10-26 に LocalStructure の廃止方針を採用した。primitive の意味・規則は S・O の型と各能力の実装で定め、追加の定義ラベルは設けない。次元は primitive 型全体の span、恒等元は演算子 primitive O の値として提供する。本文の L による関連付け・一致判定の記述は移行前の仕様であり、[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)で置き換える。製品コードと各利用側の API は未移行である。
+2026-10-26 に LocalStructure の廃止方針を採用した。primitive の意味・規則は S・O の型と各能力の実装で定め、追加の定義ラベルは設けない。次元は primitive 型全体の span、恒等元は演算子 primitive O の値として提供する。L による関連付け・一致判定は廃止し、[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)で置き換える。製品コード・テスト・利用例を移行済みである。
 
 初期版の提供範囲と完成条件は、[初期版の設計](design/initial-release.md)に定め、9 節にその概要と制限をまとめる。本書には後続機能の数学的契約も含め、機能一覧全体を初期版の必須実装にはしない。公開 API、Rust の具体的な型や内部実装は、本文で採用済みの方針に従って各段階で具体化する。
 
-初期版では、一つの系を同じ局所構造型 `L` で表す一種類の局所構造から構成する。空間・状態・演算子式に含まれる全基本因子は同じ局所構造を持ち、異種局所構造の混在・合成は後続へ延期する。独自代数を別の系として単独利用する拡張性は維持する。同じ局所構造の複数因子、入れ子 Tensor、および一つの Site への複数自由度の配置は初期版に含める。
+初期版では、一つの系を同じ primitive 型 S・O で表す一種類の局所代数から構成する。空間・状態・演算子式に含まれる全基本因子は同じ局所構造を持ち、異種局所構造の混在・合成は後続へ延期する。独自代数を別の系として単独利用する拡張性は維持する。同じ局所構造の複数因子、入れ子 Tensor、および一つの Site への複数自由度の配置は初期版に含める。
 
 qmb-rs は、量子系の Hilbert 空間、状態、および演算子を代数的に構築・合成・評価し、必要に応じて数値計算 backend へ export する汎用ライブラリとする。
 
@@ -43,7 +43,7 @@ qmb-rs は、量子系の Hilbert 空間、状態、および演算子を代数�
 
 局所構造は空間の情報を保持し、状態・演算子 primitive が持つ数学的能力を関連付け、その整合性を要求する。状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供し、core の共通の式木が線型結合などへ拡張する。詳細は [局所構造の設計](design/local-structure.md)と[局所 primitive・式木の数学的能力](design/primitive-expression.md)に定める。
 
-Step 2 の Rust API では、係数型に依存しない `LocalStructure` に状態・演算子の関連型と次元だけを置き、恒等演算子の規則を `Identity<C>: LocalStructure` に分離する。各演算能力と入出力の対応は必要なメソッドで要求し、式の単なる保持・構築に全演算の数値制約を波及させない。
+Rust API は演算子式に O・C、状態式に S・O・C を指定する。恒等元は O の Identity、次元は S・O の SpanDimension とし、LocalStructure は公開しない。各演算能力と入出力の対応は必要なメソッドで要求し、式の単なる保持・構築に演算の数値制約を波及させない。
 
 局所構造は、同じ定義・定義パラメータを持つ場合に一致とする。別々に構築・復元した場合も一致し、選択基底・表示名・メモリ上の object identity は一致条件に含めない。次元や trait の種類の一致だけでは一致とみなさず、数学的同型の判定や primitive の自動対応付けは導入しない。詳細は[局所構造の一致条件](design/local-structure.md#4-局所構造の一致条件)に定める。数値精度の互換性は 4.1 節の規約に従って別途検証する。
 
@@ -648,9 +648,9 @@ operand および構築時に与えられた情報だけで判定できるエラ
 
 状態基底と演算子基底は、それぞれ指定した状態空間と演算子空間の順序付き座標系として扱う。局所基底要素は対応する primitive の部分集合とし、対象空間全体に線型独立かつ完全であることを要求する。primitive の一覧全体が独立な基底であるとは限らない。
 
-基底の定義を表す struct が対象の要素型を指定した `Basis<P, C>` を実装する。primitive の基底展開、基底要素である primitive の順序番号の取得、および基底順序での遅延列挙を提供する。状態 primitive の展開は `LinearCombination<L::State, T>`、演算子 primitive の展開は `LinearCombination<L::Operator, T>` を返し、要素は選択した基底の primitive に限る。式木側は `map` と共通 constructor で通常の式へ取り込む。基底要素でない primitive は展開できるが、それ自体を指す順序番号は持たない。局所基底と式木の接続は Step 2 に含める。数学的な契約は [基底の数学的能力](design/basis.md)に定める。
+基底の定義を表す struct が対象の要素型を指定した `Basis<P, C>` を実装する。primitive の基底展開、基底要素である primitive の順序番号の取得、および基底順序での遅延列挙を提供する。状態 primitive の展開は `LinearCombination<S, C>`、演算子 primitive の展開は `LinearCombination<O, C>` を返し、要素は選択した基底の primitive に限る。式木側は `map` と共通 constructor で通常の式へ取り込む。基底要素でない primitive は展開できるが、それ自体を指す順序番号は持たない。局所基底と式木の接続は Step 2 に含める。数学的な契約は [基底の数学的能力](design/basis.md)に定める。
 
-Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` は削除する。利用側は `L: LocalStructure` と、状態基底には `Basis<L::State, C>`、演算子基底には `Basis<L::Operator, C>` を直接要求する。`index() -> Option<usize>` と所有要素の遅延列挙を維持する。次元取得 API からは不要な型引数 `T` を外し、完全性・線型独立性・状態で `d`、全演算子空間で `d²` という要素数の契約と検証条件を維持する。
+Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` は削除する。利用側は状態基底には `Basis<S, C>`、演算子基底には `Basis<O, C>` を直接要求する。`index() -> Option<usize>` と所有要素の遅延列挙を維持する。次元取得 API からは不要な型引数 `T` を外し、完全性・線型独立性・状態で `d`、全演算子空間で `d²` という要素数の契約と検証条件を維持する。
 
 考えている演算子空間の基底を構成・列挙できることを必要とし、次の機能を設計に含める。
 
@@ -845,7 +845,7 @@ Periodic chain では、次の規約を採用する。
 
 ### 7.3. 自由度の配置とモデル構築
 
-Geometry は生成時に指定した局所構造型 `L: LocalStructure` を用い、Site 順の HilbertSpace と全空間を保持する。構築経路は Site ごとの既存 Factor・Tensor を渡すものと、Site 数・各 Site 共通の自由度数から生成するものの二つとする。新規発行時のみ `I: Default` を要求して `I::default()` を呼び、この用途の Default は新しい独立した Index を発行する契約とする。Geometry は UUID や具体的代数の規則に依存しない。
+Geometry は局所代数に依存せず、Site 順の HilbertSpace と全空間を保持する。構築経路は Site ごとの既存 Factor・Tensor を渡すものと、Site 数・各 Site 共通の自由度数から生成するものの二つとする。新規発行時のみ `I: Default` を要求して `I::default()` を呼び、この用途の Default は新しい独立した Index を発行する契約とする。Geometry は UUID や具体的代数の規則に依存しない。
 
 各 Site の全葉の Index をそのまま対応付け、同じ配置内の重複・未配置・必要数に対する過不足を拒否する。別の配置での Index の再利用は認める。既存空間の因子順序・grouping を変更せず、新しい全空間は Site 順・Site 内の葉の順に構成する。
 
@@ -936,7 +936,7 @@ H = -J \sum_{\langle i,j\rangle}
 
 標準の状態 primitive は `up, down`、演算子 primitive は `I, Sx, Sy, Sz, S+, S-`、状態基底は `{up,down}`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。Geometry は open / periodic な 1D Chain と Site ごとの入れ子入力の配置を扱う。標準提供する局所構造は spin-1/2 のみとし、非公開の別の局所代数・非正規直交基底で共通機構の拡張性を検証する。
 
-一つの系の全基本因子は同じ局所構造型 `L` とする。非公開の別の局所代数も独立した同種の系として検証し、spin と混在させない。
+一つの系の全基本因子は同じ primitive 型 S・O とする。非公開の別の局所代数も独立した同種の系として検証し、spin と混在させない。
 
 提供範囲と完成条件の詳細は [初期版の設計](design/initial-release.md)に定める。以下は初期版の対象外とする。
 

@@ -45,8 +45,8 @@
 //! ```
 //! use num_complex::Complex;
 //! use qmb_core::{LocalState, LocalOperator};
-//! use qmb_spin_half::{SpinHalf, SpinHalfState as State, SpinHalfOperator as Op};
-//! let up = LocalState::<SpinHalf, Complex<f64>>::primitive(State::Up);
+//! use qmb_spin_half::{SpinHalfState as State, SpinHalfOperator as Op};
+//! let up = LocalState::<State, Op, Complex<f64>>::primitive(State::Up);
 //! let sx = LocalOperator::primitive(Op::Sx);
 //! let down = LocalState::primitive(State::Down);
 //! let result = up.act(&sx).evaluate();
@@ -59,12 +59,12 @@
 //! ```
 //! use num_complex::Complex;
 //! use qmb_core::{HilbertSpace, LocalOperator, LocalState};
-//! use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket};
+//! use qmb_spin_half::{SpinHalfOperator as Op, SpinHalfState as Ket};
 //!
-//! let a = HilbertSpace::<_, SpinHalf>::factor("a");
+//! let a = HilbertSpace::<_>::factor("a");
 //! let b = HilbertSpace::factor("b");
 //! let h = a.tensor_product(&b)?;
-//! let up = LocalState::<SpinHalf, Complex<f64>>::primitive(Ket::Up).at(&a)?;
+//! let up = LocalState::<Ket, Op, Complex<f64>>::primitive(Ket::Up).at(&a)?;
 //! let down = LocalState::primitive(Ket::Down).at(&b)?;
 //! let state = up.tensor_product(&down)?;
 //! let sz = LocalOperator::primitive(Op::Sz);
@@ -81,7 +81,6 @@
 extern crate alloc;
 
 pub mod basis;
-pub mod local_structure;
 pub mod operator;
 pub mod state;
 pub mod utility;
@@ -89,6 +88,5 @@ pub mod utility;
 mod coefficient;
 
 pub use basis::{CartesianBasis, LadderBasis, SzBasis};
-pub use local_structure::SpinHalf;
 pub use operator::SpinHalfOperator;
 pub use state::SpinHalfState;

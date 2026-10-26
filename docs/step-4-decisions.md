@@ -4,6 +4,8 @@
 
 本書の num-complex 成分型 T・core の libm に関する記述は Step 4 実装時点の記録である。その後の[係数型のリファクタリング](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)で、係数全体 C と qmb-normalize の正規化用拡張 trait へ移行した。正規化期待値と NormalizationError も qmb-normalize に移し、core には内積・期待値・norm_squared・スカラー除算を残す。
 
+2026-10-26 の LocalStructure 廃止で、本文の L を用いる型は現在の API へ移行済みである。Geometry／Chain／HilbertSpace は I のみ、式は S・O を直接指定する。以下は Step 4 当時の判断の記録であり、現在の契約は[局所 primitive の設計](design/local-structure.md)と[実装計画](implementation-plan.md)を参照する。
+
 ## 1. 位置付けと実装範囲
 
 本書は、[実装計画](implementation-plan.md)の Step 4 に適用する合意済みの設計と受入条件をまとめる。実装と検証の状況は[実装計画の段階4](implementation-plan.md#44-段階4の実装検証状況)に記録する。数学的契約は[要件](requirements.md)、提供範囲は[初期版の設計](design/initial-release.md)に従う。

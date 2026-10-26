@@ -6,7 +6,7 @@
 
 本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜4は実装済み、段階5以降は未実装である。係数型のリファクタリングと qmb-normalize への分離は実装済みである。
 
-2026-10-26 に LocalStructure の廃止と追加の定義ラベルを設けない方針を採用した。第2〜6節にある L を使う API は移行前の実装・設計記録であり、次の移行方針は第8節に記録する。実装移行は未着手である。
+2026-10-26 に LocalStructure の廃止と追加の定義ラベルを設けない方針を採用した。第2〜6節にある L を使う API は移行前の実装・設計記録であり、次の移行方針は第8節に記録する。全 crate の実装移行と検証を完了した。
 
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
@@ -189,12 +189,14 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 norm・normalized・正規化期待値と NormalizationError は qmb-normalize に移した。core/expr の正規化 module は削除し、norm_squared は内積の実装側へ移した。Float は関連する実数型だけに課し、core には残さない。API・feature の移行と検証結果は [係数型の採用方針](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)に記録する。
 
-## 8. LocalStructure の廃止方針（実装未着手）
+## 8. LocalStructure の廃止
 
 2026-10-26 に、式へ S・O を直接指定し、追加の定義ラベルを設けない方針を採用した。次元は primitive 型全体が張る空間の次元として S が d、O が d² を提供し、恒等元は係数型に依存せず O の値として生成する。意味・規則は S・O の型と各能力の実装で定める。正式な契約は[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)、依存調査は[調査・採用方針](refactoring-local-structure.md)を参照する。
 
-移行対象は LocalStructure・Identity と次元取得、局所／複合式・節点・評価器・演算子構文・反復的な破棄、spin-half の primitive・基底、qmb-normalize、空間・Geometry／Chain・モデル utility・facade・例・関連テストとする。演算子式は O・C、状態式は S・O・C を指定し、複合式はさらに I を持つ。空間・幾何から L を外す具体的な移行は、State／Operator・空間・Chain の後続設計と合わせて行う。
+LocalStructure・旧 Identity<C>・SpinHalf marker を削除し、core の primitive module に Identity・SpanDimension を実装した。局所／複合式・節点・評価器・演算子構文・反復的な破棄、spin-half の primitive・基底、qmb-normalize、空間・Geometry／Chain・モデル utility・facade・例・関連テストを移行した。新しい production 依存は追加していない。
 
-同じ S・O を異なる L で区別する旧契約のテストは変更し、異なる S・O・C の不適切な式の合成を型で拒否する検証に置き換える。構築・共有に不要な数値能力や Clone を要求しないこと、作用に Product を要求しないこと、恒等元と trace、span の次元と基底要素数、overflow、既存 Index・因子順序・grouping、不変な共有、深い式の評価・破棄、両精度と独自代数を検証する。対象テストから workspace test・format・Clippy・ドキュメント生成・core 単独の依存と no_std + alloc の確認へ進む。
+型は `LocalState<S, O, C>`・`LocalOperator<O, C>`・`State<I, S, O, C>`・`Operator<I, O, C>` とし、空間・幾何は I のみを持つ。次元取得は `space.dimension::<P>()` と `dimension_with(local_dimension)`、基底要素数は S・O の SpanDimension に基づく Result とした。記号的な Identity 節点は、生成能力を要求しない遅延構築と単位元の直接処理のため維持した。
 
-設計判断の記録を完了した段階であり、製品コードの移行と新 API の検証は未実施である。trait 名・返却型、作用先の次元取得 API、記号的な Identity 節点の扱いは後続で決める。
+旧ラベルの混在拒否テストは primitive 型の混在拒否へ変更し、同じ空間の構造を異なる primitive 型の式が共有できることを追加検証した。構築・共有の最小限の制約、作用に Product を要求しないこと、恒等元と trace、span の次元と基底要素数、overflow、既存 Index・因子順序・grouping、不変な共有、深い式の評価・破棄、両精度と独自代数の検証は成功した。
+
+**完了（2026-10-26）**。workspace の全 feature 有効108テスト・default 無効107テスト（doc test を含む）、format、Clippy、警告をエラーとするドキュメント生成、core 単独ビルド・依存 feature、両構成の実行例を確認した。[API と検証の詳細](refactoring-local-structure.md#8-実装した-api-と移行結果2026-10-26)に記録する。MSRV 1.85、専用 no_std target、性能ベンチマークは未確認である。State／Operator・Grading を含む空間・Chain の追加の設計判断は後続課題として残す。

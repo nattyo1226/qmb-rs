@@ -7,8 +7,8 @@
 //! ```
 //! use num_complex::Complex;
 //! use qmb::prelude::*;
-//! use qmb::{Divide, SpinHalf, SpinHalfState};
-//! let state = LocalState::<SpinHalf, Complex<f64>>::primitive(SpinHalfState::Up);
+//! use qmb::{Divide, SpinHalfState, SpinHalfOperator};
+//! let state = LocalState::<SpinHalfState, SpinHalfOperator, Complex<f64>>::primitive(SpinHalfState::Up);
 //! let identity = LocalOperator::identity();
 //! assert_eq!(state.norm_squared(), 1.0);
 //! // This state has nonzero norm, so its scalar quotient is well-defined.
@@ -36,11 +36,11 @@ pub use qmb_spin_half as spin_half;
 
 pub use qmb_basic::Id128;
 pub use qmb_core::{
-    Conjugate, Divide, ExpressionError, HilbertSpace, ImaginaryUnit, LocalOperator, LocalState,
-    LocalStructure, Operator, RealPart, State,
+    Conjugate, Divide, ExpressionError, HilbertSpace, Identity, ImaginaryUnit, LocalOperator,
+    LocalState, Operator, RealPart, SpanDimension, State,
 };
 pub use qmb_geometry::{Boundary, Chain, Geometry, GeometryError, NearestNeighborRelation};
-pub use qmb_spin_half::{SpinHalf, SpinHalfOperator, SpinHalfState};
+pub use qmb_spin_half::{SpinHalfOperator, SpinHalfState};
 
 /// Norm, normalization and normalized expectation extensions (uses std).
 #[cfg(feature = "normalize")]

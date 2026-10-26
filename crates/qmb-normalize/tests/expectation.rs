@@ -1,24 +1,16 @@
 //! Checked expectations use only contraction and scalar division.
-use core::{
-    num::NonZeroUsize,
-    ops::{Add, Mul},
-};
+use core::ops::{Add, Mul};
 use num_complex::Complex;
 use num_traits::{One, Zero};
 use qmb_core::{
     Act, Adjoint, Conjugate, Divide, HilbertSpace, InnerProduct, LinearCombination, LocalOperator,
-    LocalState, LocalStructure,
+    LocalState,
 };
 
 use qmb_normalize::{NormalizationError, NormalizedExpectation, NormalizedExpectationIn};
 
-struct Point;
 struct Primitive;
-impl LocalStructure for Point {
-    type State = Primitive;
-    type Operator = Primitive;
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-}
+
 impl<C: One> Act<C> for Primitive {
     type Operator = Self;
     type Term = Self;
@@ -82,10 +74,11 @@ impl Divide for Weight {
 
 #[test]
 fn normalized_expectations_require_neither_real_part_nor_float_or_general_comparison() {
-    let state = LocalState::<Point, Weight>::primitive(Primitive).scaled(Weight(2.0));
+    let state =
+        LocalState::<Primitive, Primitive, Weight>::primitive(Primitive).scaled(Weight(2.0));
     let op = LocalOperator::primitive(Primitive).scaled(Weight(3.0));
     assert_eq!(state.normalized_expectation(&op).unwrap().0, 3.0);
-    let zero = LocalState::<Point, Weight>::zero();
+    let zero = LocalState::<Primitive, Primitive, Weight>::zero();
     assert_eq!(
         zero.normalized_expectation(&op).err(),
         Some(NormalizationError::ZeroNorm)
@@ -108,8 +101,9 @@ macro_rules! complex_regressions {
             // These self-inner-products are representable, but squaring them
             // during complex division would overflow or underflow.
             for scale in [$large, $small] {
-                let state = LocalState::<Point, Complex<$real>>::primitive(Primitive)
-                    .scaled(Complex::new(scale, 0.0));
+                let state =
+                    LocalState::<Primitive, Primitive, Complex<$real>>::primitive(Primitive)
+                        .scaled(Complex::new(scale, 0.0));
                 let op = LocalOperator::primitive(Primitive);
                 let value = state.normalized_expectation(&op).unwrap();
                 assert!((value.re - 1.0).abs() < $tol && value.im == 0.0);

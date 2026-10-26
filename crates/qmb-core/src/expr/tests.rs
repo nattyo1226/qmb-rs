@@ -1,5 +1,5 @@
 use alloc::{vec, vec::Vec};
-use core::{cell::Cell, num::NonZeroUsize};
+use core::cell::Cell;
 use std::{sync::Arc, thread};
 
 use super::{
@@ -7,7 +7,7 @@ use super::{
     local::{OperatorNode, StateNode},
     parts::*,
 };
-use crate::{Act, Adjoint, LinearCombination, LocalStructure};
+use crate::{Act, Adjoint, LinearCombination};
 use num_complex::Complex;
 
 #[derive(Default)]
@@ -24,12 +24,7 @@ impl Drop for State<'_> {
     }
 }
 struct Operator<'a>(u8, &'a Counts);
-struct Structure<'a>(core::marker::PhantomData<&'a Counts>);
-impl<'a> LocalStructure for Structure<'a> {
-    type State = State<'a>;
-    type Operator = Operator<'a>;
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
-}
+
 // This fixture tests traversal, not algebraic laws. There is deliberately no
 // Product or Identity implementation. Matrix-oracle integration tests check laws.
 impl<'a> Act<Complex<f64>> for State<'a> {
@@ -52,8 +47,8 @@ impl<'a> Adjoint<Complex<f64>> for Operator<'a> {
         LinearCombination::primitive(Operator(self.0, self.1))
     }
 }
-type S<'a, T = f64> = LocalState<Structure<'a>, Complex<T>>;
-type O<'a, T = f64> = LocalOperator<Structure<'a>, Complex<T>>;
+type S<'a, T = f64> = LocalState<State<'a>, Operator<'a>, Complex<T>>;
+type O<'a, T = f64> = LocalOperator<Operator<'a>, Complex<T>>;
 fn coefficients(state: &S<'_>) -> Vec<(u8, Complex<f64>)> {
     let mut stack = vec![(state, Complex::new(1.0, 0.0))];
     let mut result = Vec::new();
@@ -317,18 +312,10 @@ fn deep_action_product_scale_sum_and_adjoint_chains_use_work_stacks() {
 }
 
 #[test]
-fn send_and_sync_follow_stored_types_without_metadata_bounds() {
-    struct Metadata {
-        _not_send: std::rc::Rc<()>,
-    }
-    impl LocalStructure for Metadata {
-        type State = u8;
-        type Operator = u8;
-        const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-    }
+fn send_and_sync_follow_stored_primitive_types() {
     fn send_sync<T: Send + Sync>() {}
-    send_sync::<LocalState<Metadata, Complex<f64>>>();
-    send_sync::<LocalOperator<Metadata, Complex<f64>>>();
+    send_sync::<LocalState<u8, u8, Complex<f64>>>();
+    send_sync::<LocalOperator<u8, Complex<f64>>>();
 }
 
 #[test]
@@ -355,8 +342,8 @@ fn delayed_evaluation_needs_no_coefficient_arithmetic() {
         }
     }
     let counts = Counts::default();
-    let state = LocalState::<Structure<'_>, Scalar>::primitive(State(1, &counts));
-    let op = LocalOperator::<Structure<'_>, Scalar>::primitive(Operator(0, &counts));
+    let state = LocalState::<State<'_>, Operator<'_>, Scalar>::primitive(State(1, &counts));
+    let op = LocalOperator::<Operator<'_>, Scalar>::primitive(Operator(0, &counts));
     let result = state.act(&op).evaluate();
     let StateNode::Scale(s) = result.node() else {
         panic!("rule scale")
@@ -407,18 +394,13 @@ fn scalar_reductions_need_no_num_division_remainder_one_or_copy() {
         }
     }
     struct Primitive;
-    struct RingStructure;
-    impl LocalStructure for RingStructure {
-        type State = Primitive;
-        type Operator = Primitive;
-        const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-    }
+
     fn one() -> LinearCombination<Primitive, MinimalComplex<Ring>> {
         LinearCombination::term(MinimalComplex::new(Ring(1), Ring(0)), Primitive)
     }
-    impl Identity<MinimalComplex<Ring>> for RingStructure {
-        fn identity() -> LinearCombination<Primitive, MinimalComplex<Ring>> {
-            one()
+    impl Identity for Primitive {
+        fn identity() -> Self {
+            Self
         }
     }
     impl Adjoint<MinimalComplex<Ring>> for Primitive {
@@ -450,14 +432,14 @@ fn scalar_reductions_need_no_num_division_remainder_one_or_copy() {
             MinimalComplex::new(Ring(1), Ring(0))
         }
     }
-    let op = LocalOperator::<RingStructure, MinimalComplex<Ring>>::identity()
+    let op = LocalOperator::<Primitive, MinimalComplex<Ring>>::identity()
         .scaled(MinimalComplex::new(Ring(3), Ring(4)));
     let trace = op
         .adjoint()
         .product(&LocalOperator::primitive(Primitive))
         .trace();
     assert_eq!((trace.re.0, trace.im.0), (3, -4));
-    let state = LocalState::<RingStructure, MinimalComplex<Ring>>::primitive(Primitive);
+    let state = LocalState::<Primitive, Primitive, MinimalComplex<Ring>>::primitive(Primitive);
     assert_eq!(state.norm_squared().0, 1);
     let expectation = state.expectation(&op);
     assert_eq!((expectation.re.0, expectation.im.0), (3, 4));

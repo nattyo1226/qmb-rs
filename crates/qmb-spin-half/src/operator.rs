@@ -3,7 +3,10 @@
 use core::ops::{Add, Div, Neg};
 
 use num_traits::{One, Zero};
-use qmb_core::{Adjoint, ImaginaryUnit, LinearCombination, Product, Trace};
+use qmb_core::{
+    Adjoint, DimensionOverflow, Identity, ImaginaryUnit, LinearCombination, Product, SpanDimension,
+    Trace,
+};
 
 use crate::coefficient::{half, imaginary, quarter};
 
@@ -88,5 +91,16 @@ impl<C: Zero + One> Trace<C> for SpinHalfOperator {
         } else {
             C::zero()
         }
+    }
+}
+
+impl Identity for SpinHalfOperator {
+    fn identity() -> Self {
+        Self::I
+    }
+}
+impl SpanDimension for SpinHalfOperator {
+    fn span_dimension() -> Result<core::num::NonZeroUsize, DimensionOverflow> {
+        Ok(core::num::NonZeroUsize::new(4).unwrap())
     }
 }

@@ -1,6 +1,6 @@
 //! Local basis expansion, indexing, and lazy enumeration.
 
-use crate::{DimensionOverflow, LinearCombination, LocalStructure};
+use crate::{DimensionOverflow, LinearCombination, SpanDimension};
 
 /// Expansion, indexing and enumeration of a complete, ordered basis.
 ///
@@ -25,23 +25,14 @@ pub trait Basis<P, C> {
     fn elements(&self) -> impl Iterator<Item = P> + '_;
 }
 
-/// Returns the number of elements in any complete state basis for `L`.
-pub fn state_basis_len<L>() -> usize
-where
-    L: LocalStructure,
-{
-    L::DIMENSION.get()
+/// Returns the state basis size from the span of state primitive S.
+pub fn state_basis_len<S: SpanDimension>() -> Result<usize, DimensionOverflow> {
+    Ok(S::span_dimension()?.get())
 }
 
-/// Returns the squared state dimension, the size of a complete operator basis.
+/// Returns the operator basis size from the span of operator primitive O.
 ///
-/// # Errors
-///
-/// Returns [`DimensionOverflow`] if the square does not fit in `usize`.
-pub fn operator_basis_len<L>() -> Result<usize, DimensionOverflow>
-where
-    L: LocalStructure,
-{
-    let dimension = L::DIMENSION.get();
-    dimension.checked_mul(dimension).ok_or(DimensionOverflow)
+/// This is already the operator-space dimension, not a value to square again.
+pub fn operator_basis_len<O: SpanDimension>() -> Result<usize, DimensionOverflow> {
+    Ok(O::span_dimension()?.get())
 }

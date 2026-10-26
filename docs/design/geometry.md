@@ -1,6 +1,6 @@
 # Geometry・Site と自由度の配置
 
-更新日: 2026-10-25
+更新日: 2026-10-26
 
 ## 1. 対象と責任分担
 
@@ -8,7 +8,7 @@
 
 `qmb-geometry` は Site の順序・幾何関係・配置・空間を保持し、局所式の配置・束縛・評価は `qmb-core` に委譲する。UUID の具体型 `Id128` は `qmb-basic`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・縦断例は `qmb` が担当する。
 
-Geometry は生成時に利用者が指定した `L: LocalStructure` を用い、Site 順の `Vec<HilbertSpace<I, L>>` と全空間を保持する。独立した Placement 型は設けない。空間の既存の Arc 共有を使い、Index や木全体を複製しない。core は Geometry を必須としない。異種局所構造の混在・graded は初期版の対象外とする。
+Geometry は局所代数に依存せず、Site 順の `Vec<HilbertSpace<I>>` と全空間を保持する。独立した Placement 型は設けない。空間の既存の Arc 共有を使い、Index や木全体を複製しない。core は Geometry を必須としない。異種局所構造の混在・graded は初期版の対象外とする。
 
 ## 2. Site の指定と順序
 
@@ -33,7 +33,7 @@ Site ordering と tensor ordering は区別し、既存空間の順序を配置�
 | 経路 | 契約 |
 | --- | --- |
 | 既存空間からの配置 | Site ごとの HilbertSpace を Site 順に受け取り、既存の Index・順序・grouping を保持 |
-| 個数からの生成 | Site 数と各 Site 共通の自由度数を受け取り、生成時に指定した Index 型と局所構造型で空間を構築 |
+| 個数からの生成 | Site 数と各 Site 共通の自由度数を受け取り、生成時に指定した Index 型で空間を構築 |
 
 新規 Index の発行が必要な箇所でのみ `I: Default` を要求し、`I::default()` を呼ぶ。この用途の Default は新しい独立した Index を発行する契約とする。UUID・乱数源は具体型側に閉じ、Geometry は basic に依存しない。専用の Index 生成 trait や発行関数の引数は設けない。既存空間の保持や列挙には Default・Clone を一律に要求しない。
 

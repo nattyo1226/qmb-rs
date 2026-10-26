@@ -1,22 +1,14 @@
 //! Coefficient capabilities are independent of storage and of each other.
-use core::{
-    num::NonZeroUsize,
-    ops::{Add, Mul},
-};
+use core::ops::{Add, Mul};
 use num_complex::Complex;
 use num_traits::{One, Zero};
 use qmb_core::{
     Act, Adjoint, Conjugate, Divide, HilbertSpace, InnerProduct, LinearCombination, LocalOperator,
-    LocalState, LocalStructure,
+    LocalState,
 };
 
-struct Point;
 struct Primitive;
-impl LocalStructure for Point {
-    type State = Primitive;
-    type Operator = Primitive;
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-}
+
 impl<C: One> Act<C> for Primitive {
     type Operator = Self;
     type Term = Self;
@@ -42,7 +34,7 @@ fn opaque_whole_coefficients_move_through_map_and_shared_local_and_composite_syn
     let terms = LinearCombination::term(Opaque(7), Primitive).map(|_| 9);
     let term = terms.into_iter().next().unwrap();
     assert_eq!((term.coefficient.0, term.operand), (7, 9));
-    let state = LocalState::<Point, Opaque>::primitive(Primitive).scaled(Opaque(2));
+    let state = LocalState::<Primitive, Primitive, Opaque>::primitive(Primitive).scaled(Opaque(2));
     let operator = LocalOperator::primitive(Primitive).scaled(Opaque(3));
     let _ = state.clone().act(&operator.adjoint());
     let space = HilbertSpace::factor(0u8);
@@ -95,7 +87,8 @@ impl Divide for Weight {
 
 #[test]
 fn expectation_quotients_require_neither_real_part_nor_float_or_general_comparison() {
-    let state = LocalState::<Point, Weight>::primitive(Primitive).scaled(Weight(2.0));
+    let state =
+        LocalState::<Primitive, Primitive, Weight>::primitive(Primitive).scaled(Weight(2.0));
     let op = LocalOperator::primitive(Primitive).scaled(Weight(3.0));
     assert_eq!(
         state.expectation(&op).divide(state.inner_product(&state)).0,
@@ -121,8 +114,9 @@ macro_rules! complex_regressions {
             // These self-inner-products are representable, but squaring them
             // during complex division would overflow or underflow.
             for scale in [$large, $small] {
-                let state = LocalState::<Point, Complex<$real>>::primitive(Primitive)
-                    .scaled(Complex::new(scale, 0.0));
+                let state =
+                    LocalState::<Primitive, Primitive, Complex<$real>>::primitive(Primitive)
+                        .scaled(Complex::new(scale, 0.0));
                 let op = LocalOperator::primitive(Primitive);
                 let value = state.expectation(&op).divide(state.inner_product(&state));
                 assert!((value.re - 1.0).abs() < $tol && value.im == 0.0);

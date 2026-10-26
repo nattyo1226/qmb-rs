@@ -4,8 +4,8 @@ use num_traits::Float;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb::spin_half::utility::{UtilityError, heisenberg, neel, xyz};
 use qmb::{
-    Boundary, Chain, Divide, Geometry, HilbertSpace, Id128, LocalState, Operator, SpinHalf,
-    SpinHalfState, State,
+    Boundary, Chain, Divide, Geometry, HilbertSpace, Id128, LocalState, Operator, SpinHalfState,
+    State,
 };
 #[cfg(feature = "normalize")]
 use qmb::{Norm, Normalize, NormalizedExpectation};
@@ -39,9 +39,9 @@ fn close<T: Real>(actual: Complex<T>, expected: Complex<T>) {
     }
 }
 fn basis<T: Real>(
-    chain: &Chain<Id128, SpinHalf>,
+    chain: &Chain<Id128>,
     bits: usize,
-) -> State<Id128, SpinHalf, Complex<T>> {
+) -> State<Id128, qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<T>> {
     State::tensor(chain.sites().iter().enumerate().map(|(i, site)| {
         // from_sites below supplies factors directly.
         LocalState::primitive(if (bits >> (chain.sites().len() - 1 - i)) & 1 == 0 {
@@ -54,7 +54,7 @@ fn basis<T: Real>(
     }))
     .unwrap()
 }
-fn explicit_chain(n: usize, boundary: Boundary) -> Chain<Id128, SpinHalf> {
+fn explicit_chain(n: usize, boundary: Boundary) -> Chain<Id128> {
     Chain::from_sites((0..n).map(|_| HilbertSpace::factor(Id128::new())), boundary).unwrap()
 }
 
@@ -106,7 +106,7 @@ fn matrix_element<T: Real>(
 fn check<T: Real>() {
     for n in 0..=6 {
         for boundary in [Boundary::Open, Boundary::Periodic] {
-            let chain = Chain::<Id128, SpinHalf>::new(n, 1, boundary).unwrap();
+            let chain = Chain::<Id128>::new(n, 1, boundary).unwrap();
             assert!(chain.sites().iter().all(|s| s.factor_index().is_some()));
             let j = real::<T>(1.3);
             let h = heisenberg(&chain, j).unwrap();
@@ -198,7 +198,7 @@ fn models_match_analytic_energies_and_independent_matrices_both_precisions() {
 fn check_norms<T: Real + Float>() {
     for n in 0..=6 {
         for first in [SpinHalfState::Up, SpinHalfState::Down] {
-            let chain = Chain::<Id128, SpinHalf>::new(n, 1, Boundary::Open).unwrap();
+            let chain = Chain::<Id128>::new(n, 1, Boundary::Open).unwrap();
             let psi = neel::<_, Complex<T>>(&chain, first).unwrap();
             close(Complex::new(psi.norm().unwrap(), T::zero()), c(1.0, 0.0));
             let normalized = psi.scaled(c(2.0, -3.0)).normalized().unwrap();
@@ -219,7 +219,7 @@ fn default_facade_enables_norms_at_both_precisions() {
 #[test]
 fn utilities_reject_empty_and_multiple_factors_but_accept_nested_single_factors() {
     for k in [0, 2] {
-        let chain = Chain::<Id128, SpinHalf>::new(2, k, Boundary::Open).unwrap();
+        let chain = Chain::<Id128>::new(2, k, Boundary::Open).unwrap();
         assert_eq!(
             neel::<_, Complex<f64>>(&chain, SpinHalfState::Up).err(),
             Some(UtilityError::InvalidSite(0))
@@ -233,7 +233,7 @@ fn utilities_reject_empty_and_multiple_factors_but_accept_nested_single_factors(
             Some(UtilityError::InvalidSite(0))
         );
     }
-    let a = HilbertSpace::<_, SpinHalf>::factor(Id128::new());
+    let a = HilbertSpace::<_>::factor(Id128::new());
     let b = HilbertSpace::factor(Id128::new());
     let nested = HilbertSpace::tensor([
         HilbertSpace::unit(),
@@ -257,7 +257,7 @@ fn utilities_reject_empty_and_multiple_factors_but_accept_nested_single_factors(
     )
     .unwrap();
     close(psi.inner_product(&expected).unwrap(), c(1.0, 0.0));
-    let zero = Operator::<_, SpinHalf, Complex<f64>>::zero()
+    let zero = Operator::<_, qmb_spin_half::SpinHalfOperator, Complex<f64>>::zero()
         .bind(&full)
         .unwrap();
     close(psi.expectation(&zero).unwrap(), c(0.0, 0.0));

@@ -5,11 +5,11 @@ use std::{fmt::Debug, hash::Hash, ops::Neg};
 use num_complex::Complex;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb_core::{
-    Act, Adjoint, Basis, Identity, InnerProduct, LinearCombination as Lc, LocalStructure, Product,
+    Act, Adjoint, Basis, Identity, InnerProduct, LinearCombination as Lc, Product, SpanDimension,
     Trace, operator_basis_len, state_basis_len,
 };
 use qmb_spin_half::{
-    CartesianBasis, LadderBasis, SpinHalf, SpinHalfOperator as Op, SpinHalfState as State, SzBasis,
+    CartesianBasis, LadderBasis, SpinHalfOperator as Op, SpinHalfState as State, SzBasis,
 };
 
 use Op::{I, SMinus, SPlus, Sx, Sy, Sz};
@@ -199,7 +199,7 @@ fn check_all_local_rules<T: Real>() {
         [&[Down], &[]],
     ];
     let adjoints = [I, Sx, Sy, Sz, SMinus, SPlus];
-    let identity = <SpinHalf as Identity<Complex<T>>>::identity();
+    let identity = Lc::<_, Complex<T>>::primitive(Op::identity());
     assert_eq!(identity, Lc::primitive(I));
     for (i, a) in OPS.into_iter().enumerate() {
         for (j, b) in OPS.into_iter().enumerate() {
@@ -242,7 +242,7 @@ fn check_all_local_rules<T: Real>() {
 }
 
 fn check_algebra_laws<T: Real>() {
-    let identity = <SpinHalf as Identity<Complex<T>>>::identity();
+    let identity = Lc::<_, Complex<T>>::primitive(Op::identity());
     for a in OPS {
         let pa = Lc::<_, Complex<T>>::primitive(a);
         assert_matrix::<T>(operator_value(&product(&identity, &pa)), matrix(a));
@@ -359,7 +359,7 @@ fn check_spin_relations<T: Real>() {
 fn check_operator_basis<T: Real, B: Basis<Op, Complex<T>>>(basis: &B, expected: [Op; 4]) {
     let elements: Vec<_> = basis.elements().collect();
     assert_eq!(elements, expected);
-    assert_eq!(elements.len(), operator_basis_len::<SpinHalf>().unwrap());
+    assert_eq!(elements.len(), operator_basis_len::<Op>().unwrap());
     for op in OPS {
         assert_eq!(basis.index(&op), expected.iter().position(|&p| p == op));
         let expanded = basis.expand(&op);
@@ -384,7 +384,7 @@ fn check_bases<T: Real>() {
     fn state_basis<T: Real, B: Basis<State, Complex<T>>>(basis: &B) {
         let elements: Vec<_> = basis.elements().collect();
         assert_eq!(elements, STATES);
-        assert_eq!(elements.len(), state_basis_len::<SpinHalf>());
+        assert_eq!(elements.len(), state_basis_len::<State>().unwrap());
         for (i, state) in STATES.into_iter().enumerate() {
             assert_eq!(basis.index(&state), Some(i));
             assert_eq!(basis.expand(&state), Lc::primitive(state));
@@ -445,18 +445,15 @@ fn basis_contracts_and_round_trips_at_both_precisions() {
 }
 #[test]
 fn precision_independent_primitives_and_public_type_contracts() {
-    fn metadata<L: LocalStructure<State = State, Operator = Op>>() {}
-    metadata::<SpinHalf>();
-    assert_eq!(<SpinHalf as LocalStructure>::DIMENSION.get(), 2);
+    assert_eq!(State::span_dimension().unwrap().get(), 2);
+    assert_eq!(Op::span_dimension().unwrap().get(), 4);
     fn discrete<T: Clone + Copy + Debug + Eq + Hash>() {}
     fn parameter_free<T: Default + Clone + Copy + Debug + Eq + Hash>() {}
     discrete::<State>();
     discrete::<Op>();
-    parameter_free::<SpinHalf>();
     parameter_free::<SzBasis>();
     parameter_free::<CartesianBasis>();
     parameter_free::<LadderBasis>();
-    let _: qmb_spin_half::local_structure::SpinHalf = SpinHalf;
     let _: qmb_spin_half::state::SpinHalfState = Up;
     let _: qmb_spin_half::operator::SpinHalfOperator = I;
     let _: qmb_spin_half::basis::CartesianBasis = CartesianBasis;
@@ -464,13 +461,21 @@ fn precision_independent_primitives_and_public_type_contracts() {
 
 // Expression evaluation is checked against the literal matrices above, not the
 // primitive lifting helpers. Projections also exercise inner-product evaluation.
-fn expression_vector<T: Real>(state: &qmb_core::LocalState<SpinHalf, Complex<T>>) -> Vector {
+fn expression_vector<T: Real>(
+    state: &qmb_core::LocalState<
+        qmb_spin_half::SpinHalfState,
+        qmb_spin_half::SpinHalfOperator,
+        Complex<T>,
+    >,
+) -> Vector {
     use qmb_core::LocalState;
     STATES.map(|basis| {
-        complex64(LocalState::<SpinHalf, Complex<T>>::primitive(basis).inner_product(state))
+        complex64(LocalState::<qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<T>>::primitive(basis).inner_product(state))
     })
 }
-fn expression_matrix<T: Real>(op: &qmb_core::LocalOperator<SpinHalf, Complex<T>>) -> Matrix {
+fn expression_matrix<T: Real>(
+    op: &qmb_core::LocalOperator<qmb_spin_half::SpinHalfOperator, Complex<T>>,
+) -> Matrix {
     use qmb_core::LocalState;
     let columns = STATES.map(|basis| expression_vector(&LocalState::primitive(basis).act(op)));
     std::array::from_fn(|i| std::array::from_fn(|j| columns[j][i]))
@@ -481,8 +486,9 @@ fn matrix_trace(matrix: Matrix) -> Complex<f64> {
 
 fn check_local_expressions<T: Real>() {
     use qmb_core::{LocalOperator, LocalState};
-    type O<T> = LocalOperator<SpinHalf, Complex<T>>;
-    type S<T> = LocalState<SpinHalf, Complex<T>>;
+    type O<T> = LocalOperator<qmb_spin_half::SpinHalfOperator, Complex<T>>;
+    type S<T> =
+        LocalState<qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<T>>;
     let up = S::<T>::primitive(Up);
     let down = S::<T>::primitive(Down);
     let state = up.scaled(c(0.7, 0.2)) + down.scaled(c(-0.3, 0.5));
@@ -599,8 +605,9 @@ fn local_expressions_match_independent_matrices_at_both_precisions() {
 )]
 fn all_expression_operator_ownership_forms_agree() {
     use qmb_core::{LocalOperator, LocalState};
-    type O = LocalOperator<SpinHalf, Complex<f64>>;
-    type S = LocalState<SpinHalf, Complex<f64>>;
+    type O = LocalOperator<qmb_spin_half::SpinHalfOperator, Complex<f64>>;
+    type S =
+        LocalState<qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<f64>>;
     let a = O::primitive(SPlus);
     let b = O::primitive(SMinus);
     let x = S::primitive(Up);
@@ -707,7 +714,7 @@ fn long_operator_trace_and_destruction_fit_a_small_stack() {
         .stack_size(128 * 1024)
         .spawn(|| {
             use qmb_core::LocalOperator;
-            type O = LocalOperator<SpinHalf, Complex<f64>>;
+            type O = LocalOperator<qmb_spin_half::SpinHalfOperator, Complex<f64>>;
             let mut expression = O::primitive(Sz);
             for _ in 0..20_000 {
                 expression = expression
@@ -735,9 +742,10 @@ fn long_operator_trace_and_destruction_fit_a_small_stack() {
         .unwrap();
 }
 
-type GlobalState<T> = qmb_core::State<u8, SpinHalf, Complex<T>>;
-type GlobalOperator<T> = qmb_core::Operator<u8, SpinHalf, Complex<T>>;
-type GlobalSpace = qmb_core::HilbertSpace<u8, SpinHalf>;
+type GlobalState<T> =
+    qmb_core::State<u8, qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<T>>;
+type GlobalOperator<T> = qmb_core::Operator<u8, qmb_spin_half::SpinHalfOperator, Complex<T>>;
+type GlobalSpace = qmb_core::HilbertSpace<u8>;
 type Dense = Vec<Vec<Complex<f64>>>;
 
 fn placed_matrix(operator: Op, site: usize) -> Dense {
@@ -829,8 +837,12 @@ fn check_composite_expressions<T: Real>() {
         .tensor_product(&factors[2])
         .unwrap();
     let [a, b, d] = &factors;
-    let local = LS::<SpinHalf, Complex<T>>::primitive(Up).scaled(c(0.7, 0.2))
-        + LS::primitive(Down).scaled(c(-0.3, 0.5));
+    let local =
+        LS::<qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<T>>::primitive(
+            Up,
+        )
+        .scaled(c(0.7, 0.2))
+            + LS::primitive(Down).scaled(c(-0.3, 0.5));
     let s0 = local.at(a).unwrap();
     let s1 = LS::primitive(Down).at(b).unwrap();
     let s2 = LS::primitive(Up).at(d).unwrap();
@@ -855,7 +867,7 @@ fn check_composite_expressions<T: Real>() {
     );
     for oa in OPS {
         for ob in OPS {
-            let a = LO::<SpinHalf, Complex<T>>::primitive(oa)
+            let a = LO::<qmb_spin_half::SpinHalfOperator, Complex<T>>::primitive(oa)
                 .at(d)
                 .unwrap()
                 .scaled(c(0.4, -0.2))
@@ -942,7 +954,7 @@ fn check_subsystem_contractions<T: Real>() {
     use qmb_core::{LocalOperator, LocalState};
     let factors = [9, 2, 7].map(GlobalSpace::factor);
     let ket = |site: usize, state| {
-        LocalState::<SpinHalf, Complex<T>>::primitive(state)
+        LocalState::<qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<T>>::primitive(state)
             .at(&factors[site])
             .unwrap()
     };
@@ -1019,8 +1031,8 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
     use qmb_core::{
         ExpressionError as E, LocalOperator as LO, LocalState as LS, Operator as O, State as S,
     };
-    type Op = O<u32, SpinHalf, Complex<f64>>;
-    type Ket = S<u32, SpinHalf, Complex<f64>>;
+    type Op = O<u32, qmb_spin_half::SpinHalfOperator, Complex<f64>>;
+    type Ket = S<u32, qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<f64>>;
     let unit = Ket::unit();
     let identity = Op::identity();
     assert_eq!(identity.trace_in(unit.space()).unwrap(), c(1.0, 0.0));
@@ -1035,11 +1047,11 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
     );
     assert!(matches!(identity.trace(), Err(E::UnboundOperator)));
     let factors: Vec<_> = (0..usize::BITS + 1)
-        .map(qmb_core::HilbertSpace::<_, SpinHalf>::factor)
+        .map(qmb_core::HilbertSpace::<_>::factor)
         .collect();
     let space = qmb_core::HilbertSpace::tensor(factors.iter().cloned()).unwrap();
     let state = Ket::tensor(factors.iter().map(|f| LS::primitive(Up).at(f).unwrap())).unwrap();
-    assert!(space.dimension().is_err());
+    assert!(space.dimension::<State>().is_err());
     assert_eq!(
         identity.trace_in(&space).unwrap(),
         c(2f64.powi(factors.len() as i32), 0.0)
@@ -1063,7 +1075,7 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
     );
     assert!(nested.space().unwrap().is_compatible_with(&factors[0]));
 
-    let placed_identity = LO::<SpinHalf, Complex<f64>>::primitive(I)
+    let placed_identity = LO::<qmb_spin_half::SpinHalfOperator, Complex<f64>>::primitive(I)
         .at(&factors[0])
         .unwrap()
         .bind(&factors[0])

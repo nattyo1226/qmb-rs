@@ -6,20 +6,20 @@ use num_traits::{One, Zero};
 
 use super::composite::{StateExpr, StateNode};
 use crate::{
-    Conjugate, InnerProduct, LocalStructure,
+    Conjugate, InnerProduct,
     coefficient::{add, conjugate, multiply, zero},
 };
 
-type Factors<'a, I, L, C> = Vec<&'a StateExpr<I, L, C>>;
-type Pair<'a, I, L, C> = (Factors<'a, I, L, C>, Factors<'a, I, L, C>);
+type Factors<'a, I, S, O, C> = Vec<&'a StateExpr<I, S, O, C>>;
+type Pair<'a, I, S, O, C> = (Factors<'a, I, S, O, C>, Factors<'a, I, S, O, C>);
 
 // Per-call structural information, not a persistent support or numeric cache.
 // None denotes an empty sum, including tensors annihilated by an empty sum.
 // Some(0) denotes a scalar state on the unit space, which is different from zero.
-struct FactorCounts<I, L: LocalStructure, C>(BTreeMap<*const StateNode<I, L, C>, Option<usize>>);
+struct FactorCounts<I, S, O, C>(BTreeMap<*const StateNode<I, S, O, C>, Option<usize>>);
 
-impl<I, L: LocalStructure, C> FactorCounts<I, L, C> {
-    fn new(lhs: &StateExpr<I, L, C>, rhs: &StateExpr<I, L, C>) -> Self {
+impl<I, S, O, C> FactorCounts<I, S, O, C> {
+    fn new(lhs: &StateExpr<I, S, O, C>, rhs: &StateExpr<I, S, O, C>) -> Self {
         let mut counts = Self(BTreeMap::new());
         let mut pending = vec![(lhs, false), (rhs, false)];
         while let Some((state, visited)) = pending.pop() {
@@ -55,24 +55,24 @@ impl<I, L: LocalStructure, C> FactorCounts<I, L, C> {
         counts
     }
 
-    fn get(&self, state: &StateExpr<I, L, C>) -> Option<usize> {
+    fn get(&self, state: &StateExpr<I, S, O, C>) -> Option<usize> {
         self.0[&ptr::from_ref(state.node())]
     }
 }
 
-enum Task<'a, I, L: LocalStructure, C> {
-    Contract(Pair<'a, I, L, C>),
+enum Task<'a, I, S, O, C> {
+    Contract(Pair<'a, I, S, O, C>),
     Scale(&'a C, bool),
     Sum(usize),
     Product(usize),
 }
 
 // Flatten tensor grouping only. Sums stay intact until a contraction needs them.
-fn tensor_factors<'a, I, L: LocalStructure, C>(
-    mut pending: Factors<'a, I, L, C>,
-    tasks: &mut Vec<Task<'a, I, L, C>>,
+fn tensor_factors<'a, I, S, O, C>(
+    mut pending: Factors<'a, I, S, O, C>,
+    tasks: &mut Vec<Task<'a, I, S, O, C>>,
     conjugated: bool,
-) -> Factors<'a, I, L, C> {
+) -> Factors<'a, I, S, O, C> {
     pending.reverse();
     let mut factors = Vec::new();
     while let Some(state) = pending.pop() {
@@ -93,11 +93,11 @@ fn tensor_factors<'a, I, L: LocalStructure, C>(
 // Root-space compatibility already verifies every Index and its order. Within
 // that order, equal prefix lengths identify the same contiguous subsystem.
 // Find all common boundaries, even when the two tensor groupings differ.
-fn matching_groups<'a, I, L: LocalStructure, C>(
-    mut lhs: Factors<'a, I, L, C>,
-    mut rhs: Factors<'a, I, L, C>,
-    counts: &FactorCounts<I, L, C>,
-) -> Vec<Pair<'a, I, L, C>> {
+fn matching_groups<'a, I, S, O, C>(
+    mut lhs: Factors<'a, I, S, O, C>,
+    mut rhs: Factors<'a, I, S, O, C>,
+    counts: &FactorCounts<I, S, O, C>,
+) -> Vec<Pair<'a, I, S, O, C>> {
     let mut groups = Vec::new();
     // Scalar sums do not cover any indexed factor. Separate them wherever
     // they occur, so they cannot obscure an otherwise shared tensor boundary.
@@ -142,13 +142,10 @@ fn matching_groups<'a, I, L: LocalStructure, C>(
     groups
 }
 
-pub(super) fn contract<I, L: LocalStructure, C>(
-    lhs: &StateExpr<I, L, C>,
-    rhs: &StateExpr<I, L, C>,
-) -> C
+pub(super) fn contract<I, S, O, C>(lhs: &StateExpr<I, S, O, C>, rhs: &StateExpr<I, S, O, C>) -> C
 where
     C: Clone + Zero + One + Conjugate<Output = C>,
-    L::State: InnerProduct<C>,
+    S: InnerProduct<C>,
 {
     let counts = FactorCounts::new(lhs, rhs);
     let mut tasks = vec![Task::Contract((vec![lhs], vec![rhs]))];

@@ -6,8 +6,8 @@ use std::{fmt::Debug, num::NonZeroUsize, ops::Neg};
 use num_complex::Complex;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb_core::{
-    Act, Adjoint, Basis, DimensionOverflow, Identity, InnerProduct, LinearCombination,
-    LocalStructure, Product, Term, Trace, operator_basis_len, state_basis_len,
+    Act, Adjoint, Basis, DimensionOverflow, Identity, InnerProduct, LinearCombination, Product,
+    SpanDimension, Term, Trace, operator_basis_len, state_basis_len,
 };
 
 pub(super) trait Real:
@@ -133,19 +133,9 @@ impl<T: Real> Trace<Complex<T>> for Operator {
     }
 }
 
-pub(super) struct ThreeLevel;
-impl LocalStructure for ThreeLevel {
-    type State = Ket;
-    type Operator = Operator;
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(3).unwrap();
-}
-
-impl<T: Real> Identity<Complex<T>> for ThreeLevel {
-    fn identity() -> LinearCombination<Operator, Complex<T>> {
-        LinearCombination::from_terms(AXES.map(|i| Term {
-            coefficient: c(1.0, 0.0),
-            operand: Operator::Unit(i, i),
-        }))
+impl Identity for Operator {
+    fn identity() -> Self {
+        Self::Identity
     }
 }
 
@@ -206,7 +196,10 @@ pub(super) struct MatrixUnits;
 impl<T: Real> Basis<Operator, Complex<T>> for MatrixUnits {
     fn expand(&self, primitive: &Operator) -> LinearCombination<Operator, Complex<T>> {
         match primitive {
-            Operator::Identity => ThreeLevel::identity(),
+            Operator::Identity => LinearCombination::from_terms(AXES.map(|i| Term {
+                coefficient: c(1.0, 0.0),
+                operand: Operator::Unit(i, i),
+            })),
             _ => LinearCombination::primitive(*primitive),
         }
     }
@@ -308,13 +301,9 @@ pub(super) fn action<T: Real>(
 }
 
 // Evaluation requests action explicitly, independently of metadata.
-pub(super) fn act_primitive<L, T>(
-    state: &L::State,
-    operator: &L::Operator,
-) -> LinearCombination<L::State, Complex<T>>
+pub(super) fn act_primitive<S, O, T>(state: &S, operator: &O) -> LinearCombination<S, Complex<T>>
 where
-    L: LocalStructure,
-    L::State: Act<Complex<T>, Operator = L::Operator, Term = L::State>,
+    S: Act<Complex<T>, Operator = O, Term = S>,
 {
     state.act(operator)
 }
@@ -351,5 +340,16 @@ pub(super) fn assert_vector<T: Real>(actual: Vector<T>, expected: Vector<T>) {
 pub(super) fn assert_matrix<T: Real>(actual: Matrix<T>, expected: Matrix<T>) {
     for (a, b) in actual.into_iter().zip(expected) {
         assert_vector(a, b);
+    }
+}
+
+impl SpanDimension for Ket {
+    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+        Ok(NonZeroUsize::new(3).unwrap())
+    }
+}
+impl SpanDimension for Operator {
+    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+        Ok(NonZeroUsize::new(9).unwrap())
     }
 }

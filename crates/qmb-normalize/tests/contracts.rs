@@ -1,23 +1,16 @@
 use core::{
     cell::Cell,
-    num::NonZeroUsize,
     ops::{Add, Mul},
 };
 use num_complex::Complex;
 use num_traits::Zero;
 use qmb_core::{
     Act, Adjoint, Conjugate, HilbertSpace, InnerProduct, LinearCombination, LocalOperator,
-    LocalState, LocalStructure, RealPart,
+    LocalState, RealPart,
 };
 use qmb_normalize::{Norm, Normalize, NormalizedExpectation};
 
-struct Point;
 struct Primitive<'a>(&'a Cell<usize>);
-impl LocalStructure for Point {
-    type State = ();
-    type Operator = ();
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-}
 
 // A coefficient with a floating real projection, but without One, From<f64>,
 // division, Copy, PartialEq or Float. Norm alone must not need normalization's
@@ -77,19 +70,14 @@ impl Adjoint<NormOnly> for () {
 
 #[test]
 fn norm_does_not_require_inverse_real_embedding_or_coefficient_float() {
-    let state = LocalState::<Point, NormOnly>::primitive(()).scaled(NormOnly(3.0));
+    let state = LocalState::<(), (), NormOnly>::primitive(()).scaled(NormOnly(3.0));
     let norm: f64 = state.norm();
     assert_eq!(norm, 3.0);
-    assert_eq!(LocalState::<Point, NormOnly>::zero().norm(), 0.0);
+    assert_eq!(LocalState::<(), (), NormOnly>::zero().norm(), 0.0);
 }
 
 struct Op;
-struct Counted<'a>(core::marker::PhantomData<&'a Cell<usize>>);
-impl<'a> LocalStructure for Counted<'a> {
-    type State = Primitive<'a>;
-    type Operator = Op;
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-}
+
 impl InnerProduct<Complex<f64>> for Primitive<'_> {
     fn inner_product(&self, _: &Self) -> Complex<f64> {
         self.0.set(self.0.get() + 1);
@@ -113,7 +101,7 @@ impl Adjoint<Complex<f64>> for Op {
 #[test]
 fn normalization_preserves_phase_and_contracts_once() {
     let calls = Cell::new(0);
-    let basis = LocalState::<Counted<'_>, Complex<f64>>::primitive(Primitive(&calls));
+    let basis = LocalState::<Primitive<'_>, Op, Complex<f64>>::primitive(Primitive(&calls));
     let state = basis.scaled(Complex::new(3.0, 4.0));
     let normalized = state.normalized().unwrap();
     assert_eq!(calls.get(), 1);

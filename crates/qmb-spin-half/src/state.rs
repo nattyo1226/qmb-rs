@@ -3,7 +3,9 @@
 use core::ops::{Add, Div, Neg};
 
 use num_traits::{One, Zero};
-use qmb_core::{Act, ImaginaryUnit, InnerProduct, LinearCombination};
+use qmb_core::{
+    Act, DimensionOverflow, ImaginaryUnit, InnerProduct, LinearCombination, SpanDimension,
+};
 
 use crate::{
     SpinHalfOperator,
@@ -49,5 +51,11 @@ where
             (SPlus, Down) => Lc::primitive(Up),
             (SMinus, Up) => Lc::primitive(Down),
         }
+    }
+}
+
+impl SpanDimension for SpinHalfState {
+    fn span_dimension() -> Result<core::num::NonZeroUsize, DimensionOverflow> {
+        Ok(core::num::NonZeroUsize::new(2).unwrap())
     }
 }

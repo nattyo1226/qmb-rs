@@ -1,4 +1,4 @@
-use qmb_core::{HilbertSpace, LocalStructure, SpaceError};
+use qmb_core::{HilbertSpace, SpaceError};
 use qmb_geometry::{
     Boundary::*, Chain, Geometry, GeometryError, NearestNeighborRelation, index_pairs,
     index_pairs_by_pos,
@@ -8,16 +8,10 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-struct L;
-impl LocalStructure for L {
-    type State = ();
-    type Operator = ();
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
-}
 // Neither Clone nor Default; holding and enumerating existing spaces need neither.
 #[derive(Debug, PartialEq, Eq)]
 struct Id(usize);
-type H = HilbertSpace<Id, L>;
+type H = HilbertSpace<Id>;
 fn factor(n: usize) -> H {
     H::factor(Id(n))
 }
@@ -142,7 +136,7 @@ impl Default for Generated {
 #[test]
 fn generation_is_exact_ordered_and_never_repeated_by_access_or_clone() {
     let start = ISSUED.load(Ordering::SeqCst);
-    let chain = Chain::<Generated, L>::new(3, 2, Open).unwrap();
+    let chain = Chain::<Generated>::new(3, 2, Open).unwrap();
     assert_eq!(ISSUED.load(Ordering::SeqCst), start + 6);
     assert_eq!(
         chain.space().indices().map(|i| i.0).collect::<Vec<_>>(),
@@ -151,19 +145,25 @@ fn generation_is_exact_ordered_and_never_repeated_by_access_or_clone() {
     let copy = chain.clone();
     assert!(copy.space().shares_node_with(chain.space()));
     assert_eq!(chain.nn_pairs().count(), 8);
-    let empty = Chain::<Generated, L>::new(0, 3, Open).unwrap();
+    let empty = Chain::<Generated>::new(0, 3, Open).unwrap();
     assert!(empty.sites().is_empty());
-    assert_eq!(empty.space().dimension(), Ok(1));
-    let units = Chain::<Generated, L>::new(4, 0, Periodic).unwrap();
+    assert_eq!(
+        empty.space().dimension_with(NonZeroUsize::new(2).unwrap()),
+        Ok(1)
+    );
+    let units = Chain::<Generated>::new(4, 0, Periodic).unwrap();
     assert_eq!(units.sites().len(), 4);
-    assert_eq!(units.space().dimension(), Ok(1));
+    assert_eq!(
+        units.space().dimension_with(NonZeroUsize::new(2).unwrap()),
+        Ok(1)
+    );
     assert!(units.sites().iter().all(|s| s.indices().next().is_none()));
     assert_eq!(units.nn_pairs().count(), 0);
     assert_eq!(ISSUED.load(Ordering::SeqCst), start + 6);
     // A Default implementation that reuses identity violates the issuance
     // contract and is caught by ordinary space validation.
     assert_eq!(
-        Chain::<usize, L>::new(2, 1, Open).err(),
+        Chain::<usize>::new(2, 1, Open).err(),
         Some(GeometryError::Space(SpaceError::DuplicateIndex))
     );
 }

@@ -10,7 +10,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use qmb_core::{HilbertSpace, LocalStructure, SpaceError};
+use qmb_core::{HilbertSpace, SpaceError};
 
 /// Invalid site assignments or spaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -30,12 +30,12 @@ pub enum GeometryError {
 }
 
 /// Immutable site order and its full Hilbert space.
-pub struct Geometry<I, L: LocalStructure> {
-    sites: Vec<HilbertSpace<I, L>>,
-    space: HilbertSpace<I, L>,
+pub struct Geometry<I> {
+    sites: Vec<HilbertSpace<I>>,
+    space: HilbertSpace<I>,
 }
 
-impl<I, L: LocalStructure> Clone for Geometry<I, L> {
+impl<I> Clone for Geometry<I> {
     fn clone(&self) -> Self {
         Self {
             sites: self.sites.clone(),
@@ -44,27 +44,27 @@ impl<I, L: LocalStructure> Clone for Geometry<I, L> {
     }
 }
 
-impl<I, L: LocalStructure> Geometry<I, L> {
+impl<I> Geometry<I> {
     /// Site-ordered factor or tensor spaces, including empty sites.
-    pub fn sites(&self) -> &[HilbertSpace<I, L>] {
+    pub fn sites(&self) -> &[HilbertSpace<I>] {
         &self.sites
     }
 
     /// Borrows the stored full space without issuing indices or rebuilding it.
-    pub fn space(&self) -> &HilbertSpace<I, L> {
+    pub fn space(&self) -> &HilbertSpace<I> {
         &self.space
     }
 
     /// Looks up a site with an explicit out-of-bounds error.
-    pub fn site(&self, site: usize) -> Result<&HilbertSpace<I, L>, GeometryError> {
+    pub fn site(&self, site: usize) -> Result<&HilbertSpace<I>, GeometryError> {
         self.sites.get(site).ok_or(GeometryError::SiteOutOfBounds)
     }
 }
 
-impl<I: Eq, L: LocalStructure> Geometry<I, L> {
+impl<I: Eq> Geometry<I> {
     /// Tensors existing site spaces in site order, preserving their grouping.
     pub fn from_sites(
-        sites: impl IntoIterator<Item = HilbertSpace<I, L>>,
+        sites: impl IntoIterator<Item = HilbertSpace<I>>,
     ) -> Result<Self, GeometryError> {
         let sites: Vec<_> = sites.into_iter().collect();
         let space = HilbertSpace::tensor(sites.iter().cloned())?;
@@ -76,8 +76,8 @@ impl<I: Eq, L: LocalStructure> Geometry<I, L> {
     /// Sites must partition its indices, and each site's internal leaf order
     /// must be a subsequence of the full order. Site order itself is independent.
     pub fn with_space(
-        sites: impl IntoIterator<Item = HilbertSpace<I, L>>,
-        space: &HilbertSpace<I, L>,
+        sites: impl IntoIterator<Item = HilbertSpace<I>>,
+        space: &HilbertSpace<I>,
     ) -> Result<Self, GeometryError> {
         let mut geometry = Self::from_sites(sites)?;
         if geometry.space.indices().count() != space.indices().count()
@@ -93,7 +93,7 @@ impl<I: Eq, L: LocalStructure> Geometry<I, L> {
     }
 }
 
-impl<I: Default + Eq, L: LocalStructure> Geometry<I, L> {
+impl<I: Default + Eq> Geometry<I> {
     /// Issues one index per local degree, in site order and then leaf order.
     ///
     /// `I::default()` must generate a fresh independent index on each call.
@@ -122,12 +122,12 @@ pub enum Boundary {
 }
 
 /// A chain with an immutable site assignment.
-pub struct Chain<I, L: LocalStructure> {
-    geometry: Geometry<I, L>,
+pub struct Chain<I> {
+    geometry: Geometry<I>,
     boundary: Boundary,
 }
 
-impl<I, L: LocalStructure> Clone for Chain<I, L> {
+impl<I> Clone for Chain<I> {
     fn clone(&self) -> Self {
         Self {
             geometry: self.geometry.clone(),
@@ -136,21 +136,21 @@ impl<I, L: LocalStructure> Clone for Chain<I, L> {
     }
 }
 
-impl<I, L: LocalStructure> Chain<I, L> {
+impl<I> Chain<I> {
     /// Assigns chain adjacency to an existing geometry.
-    pub fn from_geometry(geometry: Geometry<I, L>, boundary: Boundary) -> Self {
+    pub fn from_geometry(geometry: Geometry<I>, boundary: Boundary) -> Self {
         Self { geometry, boundary }
     }
     /// Borrows the site assignment.
-    pub fn geometry(&self) -> &Geometry<I, L> {
+    pub fn geometry(&self) -> &Geometry<I> {
         &self.geometry
     }
     /// Borrows site spaces in site order.
-    pub fn sites(&self) -> &[HilbertSpace<I, L>] {
+    pub fn sites(&self) -> &[HilbertSpace<I>] {
         self.geometry.sites()
     }
     /// Borrows the stored full space.
-    pub fn space(&self) -> &HilbertSpace<I, L> {
+    pub fn space(&self) -> &HilbertSpace<I> {
         self.geometry.space()
     }
     /// Returns the boundary condition.
@@ -167,10 +167,10 @@ impl<I, L: LocalStructure> Chain<I, L> {
     }
 }
 
-impl<I: Eq, L: LocalStructure> Chain<I, L> {
+impl<I: Eq> Chain<I> {
     /// Constructs a chain from existing site spaces.
     pub fn from_sites(
-        sites: impl IntoIterator<Item = HilbertSpace<I, L>>,
+        sites: impl IntoIterator<Item = HilbertSpace<I>>,
         boundary: Boundary,
     ) -> Result<Self, GeometryError> {
         Ok(Self::from_geometry(Geometry::from_sites(sites)?, boundary))
@@ -178,7 +178,7 @@ impl<I: Eq, L: LocalStructure> Chain<I, L> {
     /// Constructs a chain, rejecting a mismatch with the declared site count.
     pub fn with_sites(
         site_count: usize,
-        sites: impl IntoIterator<Item = HilbertSpace<I, L>>,
+        sites: impl IntoIterator<Item = HilbertSpace<I>>,
         boundary: Boundary,
     ) -> Result<Self, GeometryError> {
         let geometry = Geometry::from_sites(sites)?;
@@ -189,7 +189,7 @@ impl<I: Eq, L: LocalStructure> Chain<I, L> {
     }
 }
 
-impl<I: Default + Eq, L: LocalStructure> Chain<I, L> {
+impl<I: Default + Eq> Chain<I> {
     /// Constructs uniform sites; `I::default()` must issue fresh indices.
     pub fn new(
         site_count: usize,
@@ -214,23 +214,23 @@ pub trait NearestNeighborRelation {
 }
 
 /// Cartesian leaf-index pairs, left outer and right inner, borrowing both spaces.
-pub fn index_pairs<'a, I, L: LocalStructure>(
-    left: &'a HilbertSpace<I, L>,
-    right: &'a HilbertSpace<I, L>,
+pub fn index_pairs<'a, I>(
+    left: &'a HilbertSpace<I>,
+    right: &'a HilbertSpace<I>,
 ) -> impl Iterator<Item = (&'a I, &'a I)> + 'a {
     left.indices()
         .flat_map(move |a| right.indices().map(move |b| (a, b)))
 }
 
 /// Zips leaf-index positions, stopping at the shorter side.
-pub fn index_pairs_by_pos<'a, I, L: LocalStructure>(
-    left: &'a HilbertSpace<I, L>,
-    right: &'a HilbertSpace<I, L>,
+pub fn index_pairs_by_pos<'a, I>(
+    left: &'a HilbertSpace<I>,
+    right: &'a HilbertSpace<I>,
 ) -> impl Iterator<Item = (&'a I, &'a I)> + 'a {
     left.indices().zip(right.indices())
 }
 
-impl<I, L: LocalStructure> NearestNeighborRelation for Chain<I, L> {
+impl<I> NearestNeighborRelation for Chain<I> {
     type Index = I;
     fn nn_pairs(&self) -> impl Iterator<Item = (&I, &I)> + '_ {
         self.nn_site_pairs()

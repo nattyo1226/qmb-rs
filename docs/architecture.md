@@ -37,11 +37,11 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 Index は識別子のみを表し、局所構造や次元を持たない。局所構造は、局所 Hilbert 空間と、その上で実現される代数・表現を定める。基本自由度は Index と局所構造を持つ `HilbertSpace` の葉（Factor）として表し、独立した `Dof` 型は設けない。葉も複合空間も同じ空間型で保持・合成する。同じ局所構造を持つ複数の因子を Index で区別する。
 
-初期版では一つの系の全基本因子を同じ局所構造型 `L` で表す一種類の局所構造に揃える。異種局所構造の混在・合成は後続へ延期し、そのための型消去を初期版の要件にしない。ユーザ定義の局所構造は、別の系で単独利用できる。同種因子の入れ子や一つの Site への複数自由度の配置は維持する。
+初期版では一つの系の全基本因子を同じ primitive 型 S・O で表す一種類の局所代数に揃える。異種局所構造の混在・合成は後続へ延期し、そのための型消去を初期版の要件にしない。ユーザ定義の局所構造は、別の系で単独利用できる。同種因子の入れ子や一つの Site への複数自由度の配置は維持する。
 
 局所状態・演算子に Index を付与することで、所属先・作用先の因子を識別する。元の局所構造は局所状態・演算子が保持する。この付与は、spectator を含む全 Hilbert 空間への束縛とは別の操作である。
 
-局所構造が保持する情報と数学的能力の整合性は、[局所構造の設計](design/local-structure.md)に定める。局所構造は、同じ定義・定義パラメータを持つ場合に一致とする。別々に構築・復元した場合もこの条件を用い、数学的同型の判定や primitive の自動対応付けは導入しない。初期版では一つの型 `L` が一つの定義・固定パラメータの組を表す契約を採用する。独立した定義 ID、異なる実装型間の定義照合、実行時パラメータは後続へ延期する。
+局所 primitive の意味・能力と数学的な整合性は、[局所 primitive の設計](design/local-structure.md)に定める。S・O の型と能力実装で定義を表し、追加の定義ラベル・定義 ID は導入しない。異なる規則や表現は primitive の型と実装に反映する。型消去による異種代数の合成と実行時パラメータは後続へ延期する。
 
 Hilbert 空間自体を、基本自由度の Index と局所構造を持つ Factor、および ordinary / graded の種類と順序付きの子 Hilbert 空間を持つ Tensor の再帰構造として表す。Tensor の子に Tensor を含められる。Factor と Tensor は概念上の名前とする。基本因子の順序は子を左からたどった葉の Index 列で表し、Index の値の大小から決めない。基底は空間とは別に選ぶ。
 
@@ -73,9 +73,9 @@ core は Index 型をジェネリックに扱い、同じ Index であること�
 
 状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供する。Product・Act・随伴の trait は係数全体 `C` を型引数、返却要素を関連型 `Term` とし、`LinearCombination<Self::Term, C>` を返す。Act の演算子型は関連型 `Operator` で指定する。局所規則と恒等演算子は、同じ局所構造の primitive の有限線型結合を返す。数値制約は各実装に置き、演算 trait は局所式や局所構造に依存させない。内積・trace は従来どおり複素 scalar を返す。局所構造はこれらの能力を関連付け、次元、所属、表現パラメータ、恒等演算子と、結合則・作用・内積・随伴などの整合性を定める。
 
-Rust の契約では、`LocalStructure` を係数型に依存しない状態・演算子の関連型と次元に限定し、恒等演算子の規則を `Identity<C>: LocalStructure` に分離する。演算能力は利用するメソッドで要求する。保持・係数計算を伴わない遅延構築・map に数値制約を付けず、全能力をまとめた係数 trait は導入しない。状態への作用評価に Product を要求せず、局所積を必要とする trace などで要求する。
+Rust の契約では、LocalStructure と追加の定義ラベルを廃止し、S・O と個別の能力実装で局所規則を定める。恒等元は `O: Identity` の値、次元は `SpanDimension` が返す primitive 型全体の span の次元とする。能力は利用するメソッドで要求し、保持・係数計算を伴わない遅延構築・map に数値制約を付けない。全能力をまとめた係数・primitive trait は導入しない。状態への作用評価に Product を要求せず、局所積を必要とする trace などで要求する。
 
-Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。局所式は `LocalState<L, C>`・`LocalOperator<L, C>` のハンドルが `Arc` で節点 enum を共有し、和・スカラー倍・積・作用・随伴の variant は対応する共通パーツを保持する。zero は空の和で表す。同じ式ハンドルを再利用した箇所で不変な部分式を共有し、別々に構築した同形の式を自動検出して共有する機構は設けない。
+Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。局所式は `LocalState<S, O, C>`・`LocalOperator<O, C>` のハンドルが `Arc` で節点 enum を共有し、和・スカラー倍・積・作用・随伴の variant は対応する共通パーツを保持する。zero は空の和で表す。同じ式ハンドルを再利用した箇所で不変な部分式を共有し、別々に構築した同形の式を自動検出して共有する機構は設けない。
 
 必要な評価時に線型性・半双線型性・共役線型性を用いて primitive の規則へ委譲し、構築時には式全体を展開しない。状態式の `act` は `Act` 節点による遅延した作用を構築し、`evaluate` は基底を指定せず局所規則に基づいて状態式を評価する。`ψ.act(&b).act(&a)` は `A(Bψ)` を表す。Norm、正規化、期待値、正規化期待値、commutator、Hilbert–Schmidt 内積などは共通機構から導出する。bra 型は初期版では導入せず、braket は内積で計算する。
 
@@ -85,11 +85,11 @@ Primitive の線型独立性は要求せず、数学的に同じ対象を表す�
 
 ## 6. 基底の数学的能力
 
-基底の定義を表す struct が対象の要素型を指定した `Basis<P, C>` を実装し、primitive の基底展開、基底要素の順序番号の取得、および順序付きの遅延列挙を提供する。状態基底の展開は `LinearCombination<L::State, T>`、演算子基底の展開は `LinearCombination<L::Operator, T>` を返す。各要素は選択した基底の primitive に限り、式木側で `map` して通常の式へ取り込む。結果に基底情報を付随させない。局所基底要素は primitive の部分集合とし、対象空間全体に線型独立かつ完全であることを要求する。
+基底の定義を表す struct が対象の要素型を指定した `Basis<P, C>` を実装し、primitive の基底展開、基底要素の順序番号の取得、および順序付きの遅延列挙を提供する。状態基底の展開は `LinearCombination<S, C>`、演算子基底の展開は `LinearCombination<O, C>` を返す。各要素は選択した基底の primitive に限り、式木側で `map` して通常の式へ取り込む。結果に基底情報を付随させない。局所基底要素は primitive の部分集合とし、対象空間全体に線型独立かつ完全であることを要求する。
 
 基底要素数は、対応する局所構造と対象種別から導出する。局所 Hilbert 空間の次元が `d` なら状態基底は `d`、全演算子基底は `d²` 要素となる。Basis に独立した要素数の提供を要求しない。
 
-Core の共通機構が展開を線型に式全体へ拡張し、順序番号から座標を得る。内積・Gram 行列・双対基底は展開の実装に利用できるが、Basis の必須の独立能力とはしない。Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` を削除する。利用側で `L: LocalStructure` と、状態には `Basis<L::State, C>`、演算子には `Basis<L::Operator, C>` を直接要求する。次元からの要素数取得と基底の数学的契約は維持する。詳細は [基底の数学的能力](design/basis.md)に定める。式全体・複合基底の具体的な API は後続で設計する。
+Core の共通機構が展開を線型に式全体へ拡張し、順序番号から座標を得る。内積・Gram 行列・双対基底は展開の実装に利用できるが、Basis の必須の独立能力とはしない。Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` を削除する。利用側で状態には `Basis<S, C>`、演算子には `Basis<O, C>` を直接要求する。次元からの要素数取得と基底の数学的契約は維持する。詳細は [基底の数学的能力](design/basis.md)に定める。式全体・複合基底の具体的な API は後続で設計する。
 
 初期版では局所規則に基づく `evaluate` に加え、指定基底への展開と係数取得を提供する。分配だけ、局所積だけなど、特定の簡約ルールのみを選択して適用する独立した操作は future work とする。必要な分配・局所積・係数の結合は、基底展開や作用・内積・trace の内部処理として維持する。入力の式は変更せず、通常の評価に基底展開を必須としない。
 
@@ -111,13 +111,13 @@ Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 
 
 ## 8. 幾何・モデル構築
 
-Geometry は Site 順の `Vec<HilbertSpace<I, L>>` と全空間を保持する。生成時に利用者が `L: LocalStructure` を指定し、既存空間からの構築ではその型から L が定まる。既存の Site ごとの空間を受け取る経路と、Site 数・各 Site 共通の自由度数から `I: Default` で新規発行する経路を提供する。保持済み空間の取得・参照・Clone では再発行しない。
+Geometry は Site 順の `Vec<HilbertSpace<I>>` と全空間を保持する。Index 型だけを指定し、primitive 型はモデル構築側の式が持つ。既存の Site ごとの空間を受け取る経路と、Site 数・各 Site 共通の自由度数から `I: Default` で新規発行する経路を提供する。保持済み空間の取得・参照・Clone では再発行しない。
 
 Site は Vec の位置を表す usize とし、Geometry を跨ぐ同一性・所属チェックは行わない。範囲外、Site 間の Index 重複・未配置・必要数の不一致は検出する。Factor・入れ子 Tensor・空 Site を扱い、既存の Index・因子順序・grouping を保持する。全空間を新しく構成する場合は Site 順に tensor product を取る。内部ラベルは導入しない。
 
 Chain は open / periodic を扱う。近接 Site ペアを正規化した辞書順で列挙し、長さ0・1で辺なし、長さ2では両境界条件とも一辺とする。関係ごとの trait を設け、NearestNeighborRelation は全 Index 組合せの `nn_pairs()` と同じ位置同士の `nn_pairs_by_pos()` を提供する。後者は短い方まで列挙する。関係の列挙と相互作用項の生成は区別し、Heisenberg・Neel utility は spin-half に置く。
 
-Geometry と配置は構築後に不変とする。公開 API と受入条件は [Step 4 の合意事項](step-4-decisions.md)、配置の詳細は [Geometry の設計](design/geometry.md)に従う。当面は生成時に局所構造型を指定し、空間の共有構造を利用する。管理方式全体の見直しは第10節の必須課題とする。
+Geometry と配置は構築後に不変とする。公開 API と受入条件は [Step 4 の合意事項](step-4-decisions.md)、配置の詳細は [Geometry の設計](design/geometry.md)に従う。生成時は Index 型だけを指定し、空間の共有構造を利用する。管理方式全体の見直しは第10節の必須課題とする。
 
 ## 9. 初期版の提供範囲と完成条件
 
@@ -134,7 +134,7 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 このリファクタリングと併せて、以下を必須課題として扱う。
 
 1. **core の係数型・数値能力の整理**：`qmb-core` に `num-complex`・`num-traits` を含め、係数型には必要な操作で必要な trait bound を課す。零・単位元には `num_traits::Zero`・`One` をそのまま使い、付随する能力も受け入れる。不足する能力 trait は core で定義し、`Complex<f32>`・`Complex<f64>` に直接実装できる構成にする。保持・構築へ不要な数値能力を要求せず、係数表現・演算・norm・正規化の責任を整理する。
-2. **LocalStructure の必要性（廃止方針を採用、実装未移行）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
+2. **LocalStructure の必要性（実装移行完了）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
 3. **Operator と State の整理**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。
 4. **HilbertSpace の最小構成**：HilbertSpace を Index と Grading だけで議論・表現できるかを検討し、解決する。局所構造などの追加情報を空間自体に保持する必要性と、その情報の責任の置き場所を明らかにする。
 5. **Chain の内部表現**：前項で検討する Index と Grading による HilbertSpace の構成から Grading を除いた構造で、Chain の内部表現を作れるかを議論し、解決する。現行の HilbertSpace を保持する構成との関係も含め、結論と根拠を記録する。
@@ -143,6 +143,6 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
 
-LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を直接指定する。次元は primitive 型全体の span の次元（S は d、O は d²）、恒等元は係数型に依存せず生成する O の値とする。空間・Geometry／Chain から L を外し、因子構造と局所規則を分離する。採用した契約と移行前の仕様の扱いは[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。本文の L を使う API の説明は移行前の実装を表し、新方針の実装移行は未実施である。
+LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を直接指定する。次元は primitive 型全体の span の次元（S は d、O は d²）、恒等元は係数型に依存せず生成する O の値とする。空間・Geometry／Chain から L を外し、因子構造と局所規則を分離する。採用した契約と移行前の仕様の扱いは[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。全 crate の製品コード・テスト・利用例を移行済みである。
 
-この見直しは Step 4 の完了条件には追加しない。具体的な移行範囲と検証は[実装計画第8節](implementation-plan.md#8-localstructure-の廃止方針実装未着手)に記録する。
+この見直しは Step 4 の完了条件には追加しない。具体的な移行範囲と検証は[実装計画第8節](implementation-plan.md#8-localstructure-の廃止)に記録する。

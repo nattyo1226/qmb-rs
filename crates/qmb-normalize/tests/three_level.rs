@@ -7,12 +7,12 @@ use qmb_normalize::{
 #[path = "../../qmb-core/tests/support/three_level.rs"]
 mod fixture;
 use fixture::*;
-type CompositeSpace = HilbertSpace<u8, ThreeLevel>;
-type CompositeOperator<T> = qmb_core::Operator<u8, ThreeLevel, Complex<T>>;
+type CompositeSpace = HilbertSpace<u8>;
+type CompositeOperator<T> = qmb_core::Operator<u8, Operator, Complex<T>>;
 
 fn check_three_level_normalization<T: Real + Float>() {
     use qmb_core::LocalState as S;
-    let x = S::<ThreeLevel, Complex<T>>::primitive(Ket::Sum).scaled(c(2.0, -1.0));
+    let x = S::<Ket, Operator, Complex<T>>::primitive(Ket::Sum).scaled(c(2.0, -1.0));
     let normalized = x.normalized().unwrap();
     assert_complex(Complex::new(normalized.norm(), T::zero()), c(1.0, 0.0));
     let a = CompositeSpace::factor(1);
@@ -37,9 +37,9 @@ fn three_level_normalization_and_zero_norm_rejection_both_precisions() {
 
 fn check_derived_state_operations<T: Real>() {
     use qmb_core::{ExpressionError, LocalOperator as O, LocalState as S};
-    let x = S::<ThreeLevel, Complex<T>>::primitive(Ket::Sum);
-    let y = S::<ThreeLevel, Complex<T>>::primitive(Ket::Phase);
-    let z = S::<ThreeLevel, Complex<T>>::primitive(Ket::Unit(Axis::A));
+    let x = S::<Ket, Operator, Complex<T>>::primitive(Ket::Sum);
+    let y = S::<Ket, Operator, Complex<T>>::primitive(Ket::Phase);
+    let z = S::<Ket, Operator, Complex<T>>::primitive(Ket::Unit(Axis::A));
     let alpha = c::<T>(2.0, 1.0);
     let beta = c::<T>(-1.0, 2.0);
     let conjugate = |v: Complex<T>| Complex::new(v.re, -v.im);
@@ -56,7 +56,7 @@ fn check_derived_state_operations<T: Real>() {
         Complex::new(overlapping.norm_squared(), T::zero()),
         c(6.0, 0.0),
     );
-    let imported = S::<ThreeLevel, Complex<T>>::from_linear_combination(
+    let imported = S::<Ket, Operator, Complex<T>>::from_linear_combination(
         <NonOrthogonal as Basis<Ket, Complex<T>>>::expand(&NonOrthogonal, &Ket::Unit(Axis::B))
             .map(S::primitive),
     );

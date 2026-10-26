@@ -4,22 +4,22 @@ use num_traits::{One, Zero};
 
 use super::composite::{ExpressionError, OpExpr, OpNode, Operator, State, StateExpr, StateNode};
 use crate::{
-    Act, Adjoint, Conjugate, HilbertSpace, Identity, InnerProduct, LocalOperator, LocalStructure,
-    Product, RealPart, Trace,
+    Act, Adjoint, Conjugate, HilbertSpace, Identity, InnerProduct, LocalOperator, Product,
+    RealPart, Trace,
     coefficient::{add, conjugate, multiply, zero},
 };
 
-enum Task<I, L: LocalStructure, C> {
-    Evaluate(StateExpr<I, L, C>),
-    Apply(StateExpr<I, L, C>, OpExpr<I, L, C>, bool),
-    ThenApply(OpExpr<I, L, C>, bool),
-    Local(StateExpr<I, L, C>, HilbertSpace<I, L>, LocalOperator<L, C>),
+enum Task<I, S, O, C> {
+    Evaluate(StateExpr<I, S, O, C>),
+    Apply(StateExpr<I, S, O, C>, OpExpr<I, O, C>, bool),
+    ThenApply(OpExpr<I, O, C>, bool),
+    Local(StateExpr<I, S, O, C>, HilbertSpace<I>, LocalOperator<O, C>),
     Scale(C),
     Sum(usize),
-    Rebuild(StateExpr<I, L, C>, usize),
+    Rebuild(StateExpr<I, S, O, C>, usize),
 }
 
-impl<I: Eq, L: LocalStructure, C> State<I, L, C> {
+impl<I: Eq, S, O, C> State<I, S, O, C> {
     /// Evaluates delayed actions using local rules, without a basis or matrix.
     ///
     /// An operator product applies its right operand first; primitive `Product`
@@ -27,11 +27,11 @@ impl<I: Eq, L: LocalStructure, C> State<I, L, C> {
     pub fn evaluate(&self) -> Result<Self, ExpressionError>
     where
         C: Clone + Conjugate<Output = C>,
-        L::State: Act<C, Operator = L::Operator, Term = L::State>,
-        L::Operator: Adjoint<C, Term = L::Operator>,
+        S: Act<C, Operator = O, Term = S>,
+        O: Adjoint<C, Term = O>,
     {
         let mut tasks = vec![Task::Evaluate(self.expression.clone())];
-        let mut values: Vec<StateExpr<I, L, C>> = Vec::new();
+        let mut values: Vec<StateExpr<I, S, O, C>> = Vec::new();
         while let Some(task) = tasks.pop() {
             match task {
                 Task::Evaluate(state) => {
@@ -181,8 +181,8 @@ impl<I: Eq, L: LocalStructure, C> State<I, L, C> {
     pub fn inner_product(&self, rhs: &Self) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-        L::Operator: Adjoint<C, Term = L::Operator>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
     {
         if !self.space.is_compatible_with(&rhs.space) {
             return Err(ExpressionError::IncompatibleSpaces);
@@ -199,18 +199,18 @@ impl<I: Eq, L: LocalStructure, C> State<I, L, C> {
     pub fn norm_squared(&self) -> Result<C::Real, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C> + RealPart,
-        L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-        L::Operator: Adjoint<C, Term = L::Operator>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
     {
         Ok(self.inner_product(self)?.real_part())
     }
 
     /// Computes the unnormalized expectation without requiring prior evaluation.
-    pub fn expectation(&self, operator: &Operator<I, L, C>) -> Result<C, ExpressionError>
+    pub fn expectation(&self, operator: &Operator<I, O, C>) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-        L::Operator: Adjoint<C, Term = L::Operator>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
     {
         self.inner_product(&self.act(operator)?)
     }
@@ -218,13 +218,13 @@ impl<I: Eq, L: LocalStructure, C> State<I, L, C> {
     /// Computes an expectation using an explicit ambient space over any binding.
     pub fn expectation_in(
         &self,
-        operator: &Operator<I, L, C>,
-        ambient: &HilbertSpace<I, L>,
+        operator: &Operator<I, O, C>,
+        ambient: &HilbertSpace<I>,
     ) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-        L::Operator: Adjoint<C, Term = L::Operator>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
     {
         self.inner_product(&self.act_in(operator, ambient)?)
     }
@@ -234,13 +234,13 @@ fn one<C: One>() -> C {
     C::one()
 }
 
-type OperatorFactors<'a, I, L, C> = Vec<(&'a HilbertSpace<I, L>, LocalOperator<L, C>)>;
-struct OpBranch<'a, I, L: LocalStructure, C> {
-    pending: Vec<(&'a OpExpr<I, L, C>, bool)>,
+type OperatorFactors<'a, I, O, C> = Vec<(&'a HilbertSpace<I>, LocalOperator<O, C>)>;
+struct OpBranch<'a, I, O, C> {
+    pending: Vec<(&'a OpExpr<I, O, C>, bool)>,
     coefficient: Option<C>,
-    factors: OperatorFactors<'a, I, L, C>,
+    factors: OperatorFactors<'a, I, O, C>,
 }
-impl<I, L: LocalStructure, C: Clone> Clone for OpBranch<'_, I, L, C> {
+impl<I, O, C: Clone> Clone for OpBranch<'_, I, O, C> {
     fn clone(&self) -> Self {
         Self {
             pending: self.pending.clone(),
@@ -249,11 +249,11 @@ impl<I, L: LocalStructure, C: Clone> Clone for OpBranch<'_, I, L, C> {
         }
     }
 }
-struct OpTerms<'a, I, L: LocalStructure, C> {
-    branches: Vec<OpBranch<'a, I, L, C>>,
+struct OpTerms<'a, I, O, C> {
+    branches: Vec<OpBranch<'a, I, O, C>>,
 }
-impl<'a, I, L: LocalStructure, C> OpTerms<'a, I, L, C> {
-    fn new(root: &'a OpExpr<I, L, C>) -> Self {
+impl<'a, I, O, C> OpTerms<'a, I, O, C> {
+    fn new(root: &'a OpExpr<I, O, C>) -> Self {
         Self {
             branches: vec![OpBranch {
                 pending: vec![(root, false)],
@@ -263,11 +263,11 @@ impl<'a, I, L: LocalStructure, C> OpTerms<'a, I, L, C> {
         }
     }
 }
-impl<'a, I: Eq, L: LocalStructure, C> Iterator for OpTerms<'a, I, L, C>
+impl<'a, I: Eq, O, C> Iterator for OpTerms<'a, I, O, C>
 where
     C: Clone + Mul<Output = C> + Conjugate<Output = C>,
 {
-    type Item = (Option<C>, OperatorFactors<'a, I, L, C>);
+    type Item = (Option<C>, OperatorFactors<'a, I, O, C>);
     fn next(&mut self) -> Option<Self::Item> {
         'branch: while let Some(mut branch) = self.branches.pop() {
             while let Some((op, adjoint)) = branch.pending.pop() {
@@ -327,34 +327,34 @@ where
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Operator<I, L, C> {
+impl<I: Eq, O, C> Operator<I, O, C> {
     /// Computes the ordinary full trace using the existing binding.
     pub fn trace(&self) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L: Identity<C>,
-        L::Operator: Product<C, Term = L::Operator> + Adjoint<C, Term = L::Operator> + Trace<C>,
+        O: Identity,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         let ambient = self.select_space(None, None)?;
         self.trace_on(ambient)
     }
 
     /// Computes full trace on an explicit space, overriding an old binding.
-    pub fn trace_in(&self, ambient: &HilbertSpace<I, L>) -> Result<C, ExpressionError>
+    pub fn trace_in(&self, ambient: &HilbertSpace<I>) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L: Identity<C>,
-        L::Operator: Product<C, Term = L::Operator> + Adjoint<C, Term = L::Operator> + Trace<C>,
+        O: Identity,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         let ambient = self.select_space(Some(ambient), None)?;
         self.trace_on(ambient)
     }
 
-    fn trace_on(&self, ambient: &HilbertSpace<I, L>) -> Result<C, ExpressionError>
+    fn trace_on(&self, ambient: &HilbertSpace<I>) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L: Identity<C>,
-        L::Operator: Product<C, Term = L::Operator> + Adjoint<C, Term = L::Operator> + Trace<C>,
+        O: Identity,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         let mut result = zero();
         for (coefficient, factors) in OpTerms::new(&self.expression) {
@@ -365,7 +365,7 @@ impl<I: Eq, L: LocalStructure, C> Operator<I, L, C> {
                     .find(|(factor, _)| factor.factor_index() == Some(index))
                 {
                     Some((_, local)) => local.trace(),
-                    None => LocalOperator::<L, C>::identity().trace(),
+                    None => LocalOperator::<O, C>::identity().trace(),
                 };
                 value = multiply(value, local_trace);
             }
@@ -381,8 +381,8 @@ impl<I: Eq, L: LocalStructure, C> Operator<I, L, C> {
     pub fn hilbert_schmidt_inner_product(&self, rhs: &Self) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L: Identity<C>,
-        L::Operator: Product<C, Term = L::Operator> + Adjoint<C, Term = L::Operator> + Trace<C>,
+        O: Identity,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         self.adjoint().product(rhs)?.trace()
     }
@@ -391,12 +391,12 @@ impl<I: Eq, L: LocalStructure, C> Operator<I, L, C> {
     pub fn hilbert_schmidt_inner_product_in(
         &self,
         rhs: &Self,
-        ambient: &HilbertSpace<I, L>,
+        ambient: &HilbertSpace<I>,
     ) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        L: Identity<C>,
-        L::Operator: Product<C, Term = L::Operator> + Adjoint<C, Term = L::Operator> + Trace<C>,
+        O: Identity,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         self.bind(ambient)?
             .adjoint()
@@ -409,7 +409,6 @@ impl<I: Eq, L: LocalStructure, C> Operator<I, L, C> {
 mod tests {
     use super::*;
     use crate::test_coefficient::MinimalComplex;
-    use core::num::NonZeroUsize;
     use core::ops::Neg;
 
     #[derive(Clone)]
@@ -431,21 +430,13 @@ mod tests {
             Self(-self.0)
         }
     }
-    struct Metadata;
-    impl LocalStructure for Metadata {
-        type State = ();
-        type Operator = ();
-        const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-    }
 
     #[test]
     fn operator_term_traversal_needs_no_zero_or_one() {
         // Term traversal only combines stored coefficients and lazy local
         // operators. Generating numeric identities belongs to trace reduction.
-        let lhs = Operator::<u8, Metadata, MinimalComplex<Ring>>::scalar(MinimalComplex::new(
-            Ring(3),
-            Ring(4),
-        ));
+        let lhs =
+            Operator::<u8, (), MinimalComplex<Ring>>::scalar(MinimalComplex::new(Ring(3), Ring(4)));
         let rhs = Operator::scalar(MinimalComplex::new(Ring(2), Ring(-1)));
         let operator = lhs.product(&rhs).unwrap().adjoint();
         let mut terms = OpTerms::new(&operator.expression);

@@ -4,8 +4,8 @@ use std::num::NonZeroUsize;
 
 use num_complex::Complex;
 use qmb_core::{
-    Act, Adjoint, Basis, DimensionOverflow, Identity, InnerProduct, LinearCombination,
-    LocalStructure, Product, Trace, operator_basis_len, state_basis_len,
+    Act, Adjoint, Basis, DimensionOverflow, Identity, InnerProduct, LinearCombination, Product,
+    SpanDimension, Trace, operator_basis_len, state_basis_len,
 };
 
 #[path = "support/three_level.rs"]
@@ -16,8 +16,8 @@ fn check_rules<T: Real>() {
     let operators: Vec<_> = <MatrixUnits as Basis<Operator, Complex<T>>>::elements(&MatrixUnits)
         .chain([Operator::Identity])
         .collect();
-    let identity = <ThreeLevel as Identity<Complex<T>>>::identity();
-    assert_eq!(identity.len(), 3);
+    let identity = LinearCombination::<_, Complex<T>>::primitive(Operator::identity());
+    assert_eq!(identity.len(), 1);
     assert_matrix(operator_value(&identity), matrix(Operator::Identity));
     for &a in &operators {
         let a_sum = LinearCombination::<_, Complex<T>>::primitive(a);
@@ -31,7 +31,7 @@ fn check_rules<T: Real>() {
         let expected_trace = (0..3).fold(c(0.0, 0.0), |sum, i| sum + a_matrix[i][i]);
         assert_complex(<Operator as Trace<Complex<T>>>::trace(&a), expected_trace);
         for state in KETS {
-            let applied = act_primitive::<ThreeLevel, T>(&state, &a);
+            let applied = act_primitive::<Ket, Operator, T>(&state, &a);
             assert_vector(state_value(&applied), matvec(a_matrix, state.coordinates()));
             assert_vector(action(&identity, &state), state.coordinates());
             for x in KETS {
@@ -92,7 +92,7 @@ fn check_rules<T: Real>() {
 
 fn check_state_basis<T: Real, B: Basis<Ket, Complex<T>>>(basis: &B) {
     let elements: Vec<_> = basis.elements().collect();
-    assert_eq!(elements.len(), state_basis_len::<ThreeLevel>());
+    assert_eq!(elements.len(), state_basis_len::<Ket>().unwrap());
     for (i, p) in elements.iter().enumerate() {
         assert_eq!(basis.index(p), Some(i));
     }
@@ -128,7 +128,7 @@ fn check_bases<T: Real>() {
     require_operator_basis::<T, _>(&MatrixUnits);
     let elements: Vec<_> =
         <MatrixUnits as Basis<Operator, Complex<T>>>::elements(&MatrixUnits).collect();
-    assert_eq!(elements.len(), operator_basis_len::<ThreeLevel>().unwrap());
+    assert_eq!(elements.len(), operator_basis_len::<Operator>().unwrap());
     for (i, p) in elements.iter().enumerate() {
         assert_eq!(
             <MatrixUnits as Basis<Operator, Complex<T>>>::index(&MatrixUnits, p),
@@ -161,32 +161,46 @@ fn three_level_rules_and_bases_work_at_both_precisions() {
     check_rules::<f64>();
     check_bases::<f32>();
     check_bases::<f64>();
-    assert_eq!(<ThreeLevel as LocalStructure>::DIMENSION.get(), 3);
+    assert_eq!(Ket::span_dimension().unwrap().get(), 3);
 }
 
 struct Dimension<const D: usize>;
-impl<const D: usize> LocalStructure for Dimension<D> {
-    type State = Ket;
-    type Operator = Operator;
-    const DIMENSION: NonZeroUsize = NonZeroUsize::new(D).unwrap();
+struct SquaredDimension<const D: usize>;
+impl<const D: usize> SpanDimension for Dimension<D> {
+    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+        Ok(NonZeroUsize::new(D).unwrap())
+    }
+}
+impl<const D: usize> SpanDimension for SquaredDimension<D> {
+    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+        D.checked_mul(D)
+            .and_then(NonZeroUsize::new)
+            .ok_or(DimensionOverflow)
+    }
 }
 
 #[test]
 fn basis_dimensions_handle_unit_large_and_overflow_cases() {
-    assert_eq!(state_basis_len::<Dimension<1>>(), 1);
-    assert_eq!(operator_basis_len::<Dimension<1>>(), Ok(1));
-    assert_eq!(state_basis_len::<ThreeLevel>(), 3);
-    assert_eq!(operator_basis_len::<ThreeLevel>(), Ok(9));
+    assert_eq!(state_basis_len::<Dimension<1>>().unwrap(), 1);
+    assert_eq!(operator_basis_len::<SquaredDimension<1>>(), Ok(1));
+    assert_eq!(state_basis_len::<Ket>().unwrap(), 3);
+    assert_eq!(operator_basis_len::<Operator>(), Ok(9));
     const FITS: usize = 1 << (usize::BITS / 2 - 1);
     const OVERFLOWS: usize = 1 << (usize::BITS / 2);
-    assert_eq!(operator_basis_len::<Dimension<FITS>>(), Ok(FITS * FITS));
     assert_eq!(
-        operator_basis_len::<Dimension<OVERFLOWS>>(),
+        operator_basis_len::<SquaredDimension<FITS>>(),
+        Ok(FITS * FITS)
+    );
+    assert_eq!(
+        operator_basis_len::<SquaredDimension<OVERFLOWS>>(),
         Err(DimensionOverflow)
     );
-    assert_eq!(state_basis_len::<Dimension<{ usize::MAX }>>(), usize::MAX);
     assert_eq!(
-        operator_basis_len::<Dimension<{ usize::MAX }>>(),
+        state_basis_len::<Dimension<{ usize::MAX }>>().unwrap(),
+        usize::MAX
+    );
+    assert_eq!(
+        operator_basis_len::<SquaredDimension<{ usize::MAX }>>(),
         Err(DimensionOverflow)
     );
     let error: &dyn core::error::Error = &DimensionOverflow;
@@ -195,15 +209,15 @@ fn basis_dimensions_handle_unit_large_and_overflow_cases() {
 }
 
 fn expression_coordinates<T: Real>(
-    state: &qmb_core::LocalState<ThreeLevel, Complex<T>>,
+    state: &qmb_core::LocalState<Ket, Operator, Complex<T>>,
 ) -> Vector<T> {
     AXES.map(|axis| {
-        qmb_core::LocalState::<ThreeLevel, Complex<T>>::primitive(Ket::Unit(axis))
+        qmb_core::LocalState::<Ket, Operator, Complex<T>>::primitive(Ket::Unit(axis))
             .inner_product(state)
     })
 }
 fn expression_operator_matrix<T: Real>(
-    operator: &qmb_core::LocalOperator<ThreeLevel, Complex<T>>,
+    operator: &qmb_core::LocalOperator<Operator, Complex<T>>,
 ) -> Matrix<T> {
     let columns = AXES.map(|axis| {
         expression_coordinates(&qmb_core::LocalState::primitive(Ket::Unit(axis)).act(operator))
@@ -212,8 +226,8 @@ fn expression_operator_matrix<T: Real>(
 }
 fn check_three_level_expressions<T: Real>() {
     use qmb_core::{LocalOperator, LocalState};
-    type S<T> = LocalState<ThreeLevel, Complex<T>>;
-    type O<T> = LocalOperator<ThreeLevel, Complex<T>>;
+    type S<T> = LocalState<Ket, Operator, Complex<T>>;
+    type O<T> = LocalOperator<Operator, Complex<T>>;
     let state = S::<T>::primitive(Ket::Sum).scaled(c(0.2, 0.3))
         + S::primitive(Ket::Phase).scaled(c(-0.4, 0.1));
     let reference = state_value(
@@ -274,9 +288,7 @@ fn check_three_level_expressions<T: Real>() {
             dot(primitive.coordinates(), primitive.coordinates()),
         );
     }
-    let identity = O::<T>::from_linear_combination(
-        <ThreeLevel as Identity<Complex<T>>>::identity().map(O::primitive),
-    );
+    let identity = O::<T>::primitive(Operator::identity());
     assert_matrix(
         expression_operator_matrix(&identity),
         matrix(Operator::Identity),
@@ -300,9 +312,9 @@ fn three_level_expressions_and_nonorthogonal_basis_match_matrices() {
     check_three_level_expressions::<f64>();
 }
 
-type CompositeState<T> = qmb_core::State<u8, ThreeLevel, Complex<T>>;
-type CompositeOperator<T> = qmb_core::Operator<u8, ThreeLevel, Complex<T>>;
-type CompositeSpace = qmb_core::HilbertSpace<u8, ThreeLevel>;
+type CompositeState<T> = qmb_core::State<u8, Ket, Operator, Complex<T>>;
+type CompositeOperator<T> = qmb_core::Operator<u8, Operator, Complex<T>>;
+type CompositeSpace = qmb_core::HilbertSpace<u8>;
 type PairVector<T> = [Complex<T>; 9];
 type PairMatrix<T> = [[Complex<T>; 9]; 9];
 
@@ -380,7 +392,7 @@ fn check_three_level_composites<T: Real>() {
 
     // Import a nonorthogonal expansion, then place the whole local expression.
     // The reference uses literal ket coordinates, not basis expansion or Act.
-    let local = S::<ThreeLevel, Complex<T>>::from_linear_combination(
+    let local = S::<Ket, Operator, Complex<T>>::from_linear_combination(
         <NonOrthogonal as Basis<Ket, Complex<T>>>::expand(&NonOrthogonal, &Ket::Phase)
             .map(S::primitive),
     );
@@ -409,7 +421,7 @@ fn check_three_level_composites<T: Real>() {
         .collect();
     let identity = matrix(Operator::Identity);
     for &oa in &primitives {
-        let alpha = O::<ThreeLevel, Complex<T>>::primitive(oa)
+        let alpha = O::<Operator, Complex<T>>::primitive(oa)
             .at(a)
             .unwrap()
             .scaled(c(0.3, -0.4))
@@ -483,9 +495,9 @@ fn three_level_composites_and_nonorthogonal_imports_match_kronecker_matrices() {
 
 fn check_inner_products_and_squared_norms<T: Real>() {
     use qmb_core::{LocalOperator as O, LocalState as S};
-    let x = S::<ThreeLevel, Complex<T>>::primitive(Ket::Sum);
-    let y = S::<ThreeLevel, Complex<T>>::primitive(Ket::Phase);
-    let z = S::<ThreeLevel, Complex<T>>::primitive(Ket::Unit(Axis::A));
+    let x = S::<Ket, Operator, Complex<T>>::primitive(Ket::Sum);
+    let y = S::<Ket, Operator, Complex<T>>::primitive(Ket::Phase);
+    let z = S::<Ket, Operator, Complex<T>>::primitive(Ket::Unit(Axis::A));
     let alpha = c::<T>(2.0, 1.0);
     let beta = c::<T>(-1.0, 2.0);
     let conjugate = |v: Complex<T>| Complex::new(v.re, -v.im);
@@ -498,7 +510,7 @@ fn check_inner_products_and_squared_norms<T: Real>() {
         Complex::new(overlapping.norm_squared(), T::zero()),
         c(6.0, 0.0),
     );
-    let imported = S::<ThreeLevel, Complex<T>>::from_linear_combination(
+    let imported = S::<Ket, Operator, Complex<T>>::from_linear_combination(
         <NonOrthogonal as Basis<Ket, Complex<T>>>::expand(&NonOrthogonal, &Ket::Unit(Axis::B))
             .map(S::primitive),
     );

@@ -12,7 +12,7 @@ use core::ops::Mul;
 use num_traits::{Float, One, Zero};
 use qmb_core::{
     Act, Adjoint, Conjugate, Divide, ExpressionError, HilbertSpace, InnerProduct, LocalOperator,
-    LocalState, LocalStructure, Operator, RealPart, State,
+    LocalState, Operator, RealPart, State,
 };
 
 /// Failure to normalize a state or an expectation value.
@@ -52,12 +52,12 @@ pub trait Normalize: Sized {
     fn normalized(&self) -> Result<Self, NormalizationError>;
 }
 
-impl<L: LocalStructure, C> Norm for LocalState<L, C>
+impl<S, O, C> Norm for LocalState<S, O, C>
 where
     C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C> + RealPart,
     C::Real: Float,
-    L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-    L::Operator: Adjoint<C, Term = L::Operator>,
+    S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+    O: Adjoint<C, Term = O>,
 {
     type Output = C::Real;
     fn norm(&self) -> Self::Output {
@@ -65,12 +65,12 @@ where
     }
 }
 
-impl<L: LocalStructure, C> Normalize for LocalState<L, C>
+impl<S, O, C> Normalize for LocalState<S, O, C>
 where
     C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C> + RealPart + From<C::Real>,
     C::Real: Float,
-    L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-    L::Operator: Adjoint<C, Term = L::Operator>,
+    S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+    O: Adjoint<C, Term = O>,
 {
     fn normalized(&self) -> Result<Self, NormalizationError> {
         let denominator = self.inner_product(self);
@@ -79,12 +79,12 @@ where
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Norm for State<I, L, C>
+impl<I: Eq, S, O, C> Norm for State<I, S, O, C>
 where
     C: Clone + Zero + One + Conjugate<Output = C> + RealPart,
     C::Real: Float,
-    L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-    L::Operator: Adjoint<C, Term = L::Operator>,
+    S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+    O: Adjoint<C, Term = O>,
 {
     type Output = Result<C::Real, ExpressionError>;
     fn norm(&self) -> Self::Output {
@@ -92,12 +92,12 @@ where
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Normalize for State<I, L, C>
+impl<I: Eq, S, O, C> Normalize for State<I, S, O, C>
 where
     C: Clone + Zero + One + Conjugate<Output = C> + RealPart + From<C::Real>,
     C::Real: Float,
-    L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-    L::Operator: Adjoint<C, Term = L::Operator>,
+    S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+    O: Adjoint<C, Term = O>,
 {
     fn normalized(&self) -> Result<Self, NormalizationError> {
         let denominator = self.inner_product(self)?;
@@ -129,16 +129,16 @@ pub trait NormalizedExpectationIn<O, H> {
     ) -> Result<Self::Output, NormalizationError>;
 }
 
-impl<L: LocalStructure, C> NormalizedExpectation<LocalOperator<L, C>> for LocalState<L, C>
+impl<S, O, C> NormalizedExpectation<LocalOperator<O, C>> for LocalState<S, O, C>
 where
     C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C> + Divide<Output = C>,
-    L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-    L::Operator: Adjoint<C, Term = L::Operator>,
+    S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+    O: Adjoint<C, Term = O>,
 {
     type Output = C;
     fn normalized_expectation(
         &self,
-        operator: &LocalOperator<L, C>,
+        operator: &LocalOperator<O, C>,
     ) -> Result<C, NormalizationError> {
         let denominator = self.inner_product(self);
         nonzero(&denominator)?;
@@ -146,16 +146,16 @@ where
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> NormalizedExpectation<Operator<I, L, C>> for State<I, L, C>
+impl<I: Eq, S, O, C> NormalizedExpectation<Operator<I, O, C>> for State<I, S, O, C>
 where
     C: Clone + Zero + One + Conjugate<Output = C> + Divide<Output = C>,
-    L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-    L::Operator: Adjoint<C, Term = L::Operator>,
+    S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+    O: Adjoint<C, Term = O>,
 {
     type Output = C;
     fn normalized_expectation(
         &self,
-        operator: &Operator<I, L, C>,
+        operator: &Operator<I, O, C>,
     ) -> Result<C, NormalizationError> {
         let numerator = self.expectation(operator)?;
         let denominator = self.inner_product(self)?;
@@ -164,18 +164,18 @@ where
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> NormalizedExpectationIn<Operator<I, L, C>, HilbertSpace<I, L>>
-    for State<I, L, C>
+impl<I: Eq, S, O, C> NormalizedExpectationIn<Operator<I, O, C>, HilbertSpace<I>>
+    for State<I, S, O, C>
 where
     C: Clone + Zero + One + Conjugate<Output = C> + Divide<Output = C>,
-    L::State: Act<C, Operator = L::Operator, Term = L::State> + InnerProduct<C>,
-    L::Operator: Adjoint<C, Term = L::Operator>,
+    S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+    O: Adjoint<C, Term = O>,
 {
     type Output = C;
     fn normalized_expectation_in(
         &self,
-        operator: &Operator<I, L, C>,
-        ambient: &HilbertSpace<I, L>,
+        operator: &Operator<I, O, C>,
+        ambient: &HilbertSpace<I>,
     ) -> Result<C, NormalizationError> {
         let numerator = self.expectation_in(operator, ambient)?;
         let denominator = self.inner_product(self)?;

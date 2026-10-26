@@ -17,7 +17,7 @@ Step 4 までの機能を実装済みである。Partial trace、式全体の基
 | 対象 | 現在の構成 | 主な実装 |
 | --- | --- | --- |
 | 数値 | 係数は `num_complex::Complex<T>`。`Zero`・`One` と、平方根を使う操作の `Float` は num-traits を利用する。両ライブラリを core から再公開していた | [core の公開 API](../crates/qmb-core/src/lib.rs)、[係数演算](../crates/qmb-core/src/coefficient.rs)、[正規化の移行先](../crates/qmb-normalize/src/lib.rs) |
-| 局所構造 | `LocalStructure` が状態・演算子 primitive の関連型と固定次元を定義する。恒等元は `Identity<T>`、他の演算能力は primitive 側の trait に分離する | [局所構造](../crates/qmb-core/src/local_structure.rs)、[演算能力](../crates/qmb-core/src/ops.rs) |
+| 局所構造 | `LocalStructure` が状態・演算子 primitive の関連型と固定次元を定義する。恒等元は `Identity<T>`、他の演算能力は primitive 側の trait に分離する | [局所構造](../crates/qmb-core/src/primitive.rs)、[演算能力](../crates/qmb-core/src/ops.rs) |
 | 局所式 | `LocalState<L, T>`・`LocalOperator<L, T>` が別々の節点を `Arc` で共有する。和・スカラー倍などの内容を共通パーツで保持する | [局所式](../crates/qmb-core/src/expr/local.rs)、[共通パーツ](../crates/qmb-core/src/expr/parts.rs) |
 | 複合式 | `State<I, L, T>` は常に所属空間を持つ。`Operator<I, L, T>` は外側のハンドルに任意の束縛先を持ち、子節点に旧束縛を残さない | [複合式](../crates/qmb-core/src/expr/composite.rs) |
 | Hilbert 空間 | `HilbertSpace<I, L>` は Factor(Index) と順序付きの入れ子 Tensor を共有する。`L` の値は保持せず、型によって局所定義を関連付ける。実装は ordinary のみ | [空間](../crates/qmb-core/src/space.rs) |
@@ -81,7 +81,7 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 
 **目的**：維持・変更・廃止のいずれかを決め、理由を記録する。
 
-**現状**：関連型 State・Operator と `DIMENSION` を提供し、一つの型 `L` が一つの固定定義・固定パラメータを表す。異なる局所定義の接続は型で拒否する。式・空間・Geometry にこの型が渡るが、局所構造の実行時の値を共有・照合する仕組みではない。
+**移行前**：関連型 State・Operator と `DIMENSION` を提供し、一つの型 `L` が一つの固定定義・固定パラメータを表す。異なる局所定義の接続は型で拒否する。式・空間・Geometry にこの型が渡るが、局所構造の実行時の値を共有・照合する仕組みではない。
 
 **採用した結論（2026-10-26）**：LocalStructure を廃止し、追加の定義ラベルを設けない。primitive の意味・規則は S・O の型と各能力の実装で定める。詳細な依存調査と採用理由は[別紙](refactoring-local-structure.md)、数学的契約は[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。
 
@@ -95,7 +95,7 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 
 **理由**：S・O を直接指定すれば、保持・遅延構築に演算能力を要求せず、型の対応を利用箇所で要求できる。異種の式の混在拒否も式側の型制約で維持できる。現在も積・作用・内積等は S・O・C で決まり、L はそれらの規則を切り替える引数ではない。次元と恒等元を移した後に名目的なラベルを残す必要はない。
 
-**状態と後続作業**：設計上の採否は決定した。製品コードへの移行は未実施であり、[実装計画第8節](implementation-plan.md#8-localstructure-の廃止方針実装未着手)に範囲・検証を記録する。trait 名と返却型、作用先の次元取得 API、式木の記号的な Identity 節点の扱いは未決である。3.3〜3.5との境界の具体化を経て実装する。
+**完了（2026-10-26）**：全6 crate の製品コード・テスト・利用例を移行した。Identity・SpanDimension と次元取得 API を実装し、記号的な Identity 節点は遅延構築と単位元の直接処理のため維持した。[実装記録と検証結果](refactoring-local-structure.md#8-実装した-api-と移行結果2026-10-26)に公開 API の移行、108／107テスト、Clippy・format・ドキュメント生成・core 単独ビルド・実行例の結果を記録する。3.3〜3.5の追加の設計判断は後続とする。
 
 ### 3.3. Operator と State の整理
 
@@ -118,7 +118,7 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 
 **目的**：Index と Grading だけで空間を議論・表現できるかを決め、追加情報の責任の置き場所を明らかにする。
 
-**現状**：木の実体には Index と子空間があり、局所定義は型 `L` が担う。次元取得は `L::DIMENSION` に依存する。ordinary の互換性は葉の Index 列、部分系判定は順序を保存する部分列の照合で行う。局所定義の一致は同じ型 `L` であることを前提とする。
+**現状**：LocalStructure 廃止により空間は Index と子空間を保持し、primitive 型は式側が持つ。次元は取得時の primitive 型または明示的な局所次元から得る。ordinary の互換性は葉の Index 列、部分系判定は順序を保存する部分列の照合で行う。Grading を含む最小構成の詳細は未決である。
 
 **決めること**：
 
@@ -136,7 +136,7 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 
 **目的**：3.4で検討する構成から Grading を除いた構造を、Chain の内部表現として利用できるかを決める。
 
-**現状**：Chain は Geometry を介して局所構造型と HilbertSpace に依存する。近接関係の列挙は Site 順序・境界条件・葉の Index を使う。一方、spin-half の utility は Factor への配置と全空間への束縛に現在の空間 API を利用する。
+**現状**：Chain と Geometry から局所構造型への依存は除去済みであり、Index 型だけを指定して HilbertSpace の因子構造を保持する。近接関係の列挙は Site 順序・境界条件・葉の Index を使う。一方、spin-half の utility は Factor への配置と全空間への束縛に現在の空間 API を利用する。
 
 **決めること**：
 
@@ -188,7 +188,7 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 | 項目 | 現在の状態 |
 | --- | --- |
 | 1. 係数型・数値能力 | **完了（2026-10-26）**。実装を採用方針と照合し、完了条件と検証の成功を確認。範囲・結果・未検証事項は3.1.1節に記録 |
-| 2. LocalStructure | **廃止方針を採用（2026-10-26）**。S・O を直接指定し、次元・恒等元を primitive 側へ移す。追加の定義ラベルは設けない。実装移行は未実施 |
+| 2. LocalStructure | **完了（2026-10-26）**。S・O の直接指定、Identity・SpanDimension、空間・幾何からの L 除去を実装・検証。追加の定義ラベルは設けない |
 | 3. Operator／State | 現状と論点を整理済み。数学的対象・共通化範囲は未決 |
 | 4. HilbertSpace | 現状と論点を整理済み。最小構成と責任分担は未決 |
 | 5. Chain | 現状と論点を整理済み。内部表現と接続方法は未決 |

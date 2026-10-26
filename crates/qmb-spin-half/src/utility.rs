@@ -1,6 +1,6 @@
 //! Spin model and product-state builders on immutable chain assignments.
 
-use crate::{SpinHalf, SpinHalfOperator, SpinHalfState};
+use crate::{SpinHalfOperator, SpinHalfState};
 use alloc::vec::Vec;
 use core::ops::Neg;
 use qmb_core::{ExpressionError, HilbertSpace, LocalOperator, LocalState, Operator, State};
@@ -19,7 +19,7 @@ pub enum UtilityError {
 
 // Borrow the leaf itself, preserving existing identity and Arc sharing, including
 // a single factor wrapped in nested or unit-containing tensors.
-fn factors<I>(chain: &Chain<I, SpinHalf>) -> Result<Vec<&HilbertSpace<I, SpinHalf>>, UtilityError> {
+fn factors<I>(chain: &Chain<I>) -> Result<Vec<&HilbertSpace<I>>, UtilityError> {
     chain
         .sites()
         .iter()
@@ -45,11 +45,11 @@ fn factors<I>(chain: &Chain<I, SpinHalf>) -> Result<Vec<&HilbertSpace<I, SpinHal
 /// Couplings are real. Each site must contain exactly one factor. The result is
 /// bound to the chain's full space, and no indices are issued.
 pub fn xyz<I: Eq, R, C: Clone + From<R> + Neg<Output = C>>(
-    chain: &Chain<I, SpinHalf>,
+    chain: &Chain<I>,
     jx: R,
     jy: R,
     jz: R,
-) -> Result<Operator<I, SpinHalf, C>, UtilityError> {
+) -> Result<Operator<I, SpinHalfOperator, C>, UtilityError> {
     let factors = factors(chain)?;
     let axes = [
         (SpinHalfOperator::Sx, -C::from(jx)),
@@ -84,9 +84,9 @@ pub fn xyz<I: Eq, R, C: Clone + From<R> + Neg<Output = C>>(
 /// Delegates to [`xyz`] with `Jx = Jy = Jz = coupling`; positive coupling is
 /// ferromagnetic. The same site validation and full-space binding apply.
 pub fn heisenberg<I: Eq, R: Clone, C: Clone + From<R> + Neg<Output = C>>(
-    chain: &Chain<I, SpinHalf>,
+    chain: &Chain<I>,
     coupling: R,
-) -> Result<Operator<I, SpinHalf, C>, UtilityError> {
+) -> Result<Operator<I, SpinHalfOperator, C>, UtilityError> {
     xyz(chain, coupling.clone(), coupling.clone(), coupling)
 }
 
@@ -95,9 +95,9 @@ pub fn heisenberg<I: Eq, R: Clone, C: Clone + From<R> + Neg<Output = C>>(
 /// Odd periodic chains are allowed. An empty chain yields the unit state.
 /// The full-space factor order is preserved even if it differs from site order.
 pub fn neel<I: Eq, C>(
-    chain: &Chain<I, SpinHalf>,
+    chain: &Chain<I>,
     first: SpinHalfState,
-) -> Result<State<I, SpinHalf, C>, UtilityError> {
+) -> Result<State<I, SpinHalfState, SpinHalfOperator, C>, UtilityError> {
     let factors = factors(chain)?;
     let states = chain
         .space()

@@ -2,7 +2,7 @@ use core::ops::{Add, Mul, Neg, Sub};
 use num_traits::One;
 
 use super::{LocalOperator, LocalState, Operator, State};
-use crate::{ExpressionError, LocalStructure};
+use crate::ExpressionError;
 use num_complex::Complex;
 
 // Forward the three borrowed forms to the owned implementation. Only borrowed
@@ -47,21 +47,21 @@ macro_rules! borrowed_binary {
     };
 }
 
-impl<L: LocalStructure, C> Add for LocalState<L, C> {
+impl<S, O, C> Add for LocalState<S, O, C> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         Self::sum([self, rhs])
     }
 }
 
-impl<L: LocalStructure, C> Add for LocalOperator<L, C> {
+impl<O, C> Add for LocalOperator<O, C> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         Self::sum([self, rhs])
     }
 }
 
-impl<L: LocalStructure, C> Sub for LocalState<L, C>
+impl<S, O, C> Sub for LocalState<S, O, C>
 where
     C: One + Neg<Output = C>,
 {
@@ -71,7 +71,7 @@ where
     }
 }
 
-impl<L: LocalStructure, C> Sub for LocalOperator<L, C>
+impl<O, C> Sub for LocalOperator<O, C>
 where
     C: One + Neg<Output = C>,
 {
@@ -81,35 +81,35 @@ where
     }
 }
 
-impl<L: LocalStructure, C> Mul for LocalOperator<L, C> {
+impl<O, C> Mul for LocalOperator<O, C> {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
         self.into_product(rhs)
     }
 }
 
-impl<L: LocalStructure, C> Mul<LocalState<L, C>> for LocalOperator<L, C> {
-    type Output = LocalState<L, C>;
-    fn mul(self, rhs: LocalState<L, C>) -> Self::Output {
+impl<S, O, C> Mul<LocalState<S, O, C>> for LocalOperator<O, C> {
+    type Output = LocalState<S, O, C>;
+    fn mul(self, rhs: LocalState<S, O, C>) -> Self::Output {
         rhs.into_act(self)
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Add for State<I, L, C> {
+impl<I: Eq, S, O, C> Add for State<I, S, O, C> {
     type Output = Result<Self, ExpressionError>;
     fn add(self, rhs: Self) -> Self::Output {
         self.into_add(rhs)
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Add for Operator<I, L, C> {
+impl<I: Eq, O, C> Add for Operator<I, O, C> {
     type Output = Result<Self, ExpressionError>;
     fn add(self, rhs: Self) -> Self::Output {
         self.into_add(rhs)
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Sub for State<I, L, C>
+impl<I: Eq, S, O, C> Sub for State<I, S, O, C>
 where
     C: One + Neg<Output = C>,
 {
@@ -119,7 +119,7 @@ where
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Sub for Operator<I, L, C>
+impl<I: Eq, O, C> Sub for Operator<I, O, C>
 where
     C: One + Neg<Output = C>,
 {
@@ -129,32 +129,32 @@ where
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Mul for Operator<I, L, C> {
+impl<I: Eq, O, C> Mul for Operator<I, O, C> {
     type Output = Result<Self, ExpressionError>;
     fn mul(self, rhs: Self) -> Self::Output {
         self.into_product(rhs)
     }
 }
 
-impl<I: Eq, L: LocalStructure, C> Mul<State<I, L, C>> for Operator<I, L, C> {
-    type Output = Result<State<I, L, C>, ExpressionError>;
-    fn mul(self, rhs: State<I, L, C>) -> Self::Output {
+impl<I: Eq, S, O, C> Mul<State<I, S, O, C>> for Operator<I, O, C> {
+    type Output = Result<State<I, S, O, C>, ExpressionError>;
+    fn mul(self, rhs: State<I, S, O, C>) -> Self::Output {
         rhs.into_act(self)
     }
 }
 
-borrowed_binary!([L, C], Add, add, LocalState<L, C>, LocalState<L, C>, [L: LocalStructure,]);
-borrowed_binary!([L, C], Add, add, LocalOperator<L, C>, LocalOperator<L, C>, [L: LocalStructure,]);
-borrowed_binary!([L, C], Sub, sub, LocalState<L, C>, LocalState<L, C>, [L: LocalStructure,]);
-borrowed_binary!([L, C], Sub, sub, LocalOperator<L, C>, LocalOperator<L, C>, [L: LocalStructure,]);
-borrowed_binary!([L, C], Mul, mul, LocalOperator<L, C>, LocalOperator<L, C>, [L: LocalStructure,]);
-borrowed_binary!([L, C], Mul, mul, LocalOperator<L, C>, LocalState<L, C>, [L: LocalStructure,]);
-borrowed_binary!([I, L, C], Add, add, State<I, L, C>, State<I, L, C>, [L: LocalStructure,]);
-borrowed_binary!([I, L, C], Add, add, Operator<I, L, C>, Operator<I, L, C>, [L: LocalStructure,]);
-borrowed_binary!([I, L, C], Sub, sub, State<I, L, C>, State<I, L, C>, [L: LocalStructure,]);
-borrowed_binary!([I, L, C], Sub, sub, Operator<I, L, C>, Operator<I, L, C>, [L: LocalStructure,]);
-borrowed_binary!([I, L, C], Mul, mul, Operator<I, L, C>, Operator<I, L, C>, [L: LocalStructure,]);
-borrowed_binary!([I, L, C], Mul, mul, Operator<I, L, C>, State<I, L, C>, [L: LocalStructure,]);
+borrowed_binary!([S, O, C], Add, add, LocalState<S, O, C>, LocalState<S, O, C>, []);
+borrowed_binary!([O, C], Add, add, LocalOperator<O, C>, LocalOperator<O, C>, []);
+borrowed_binary!([S, O, C], Sub, sub, LocalState<S, O, C>, LocalState<S, O, C>, []);
+borrowed_binary!([O, C], Sub, sub, LocalOperator<O, C>, LocalOperator<O, C>, []);
+borrowed_binary!([O, C], Mul, mul, LocalOperator<O, C>, LocalOperator<O, C>, []);
+borrowed_binary!([S, O, C], Mul, mul, LocalOperator<O, C>, LocalState<S, O, C>, []);
+borrowed_binary!([I, S, O, C], Add, add, State<I, S, O, C>, State<I, S, O, C>, []);
+borrowed_binary!([I, O, C], Add, add, Operator<I, O, C>, Operator<I, O, C>, []);
+borrowed_binary!([I, S, O, C], Sub, sub, State<I, S, O, C>, State<I, S, O, C>, []);
+borrowed_binary!([I, O, C], Sub, sub, Operator<I, O, C>, Operator<I, O, C>, []);
+borrowed_binary!([I, O, C], Mul, mul, Operator<I, O, C>, Operator<I, O, C>, []);
+borrowed_binary!([I, S, O, C], Mul, mul, Operator<I, O, C>, State<I, S, O, C>, []);
 
 // Only scalar construction lives here. Borrowed multiplication uses the same
 // forwarding macro as expression arithmetic, without a separate ownership policy.
@@ -190,19 +190,19 @@ macro_rules! scalar {
     };
 }
 
-scalar!([L, C], LocalState<L, C>, C, [L: LocalStructure,]);
-scalar!([L, C], LocalOperator<L, C>, C, [L: LocalStructure,]);
-scalar!([I, L, C], State<I, L, C>, C, [L: LocalStructure,]);
-scalar!([I, L, C], Operator<I, L, C>, C, [L: LocalStructure,]);
+scalar!([S, O, C], LocalState<S, O, C>, C, []);
+scalar!([O, C], LocalOperator<O, C>, C, []);
+scalar!([I, S, O, C], State<I, S, O, C>, C, []);
+scalar!([I, O, C], Operator<I, O, C>, C, []);
 
-impl<L: LocalStructure, C: One + Neg<Output = C>> LocalOperator<L, C> {
+impl<O, C: One + Neg<Output = C>> LocalOperator<O, C> {
     /// Constructs the commutator `self * rhs - rhs * self`.
     pub fn commutator(&self, rhs: &Self) -> Self {
         self.product(rhs) - rhs.product(self)
     }
 }
 
-impl<I: Eq, L: LocalStructure, C: One + Neg<Output = C>> Operator<I, L, C> {
+impl<I: Eq, O, C: One + Neg<Output = C>> Operator<I, O, C> {
     /// Constructs the commutator `self * rhs - rhs * self` without evaluation.
     pub fn commutator(&self, rhs: &Self) -> Result<Self, ExpressionError> {
         self.product(rhs)?.into_add(-rhs.product(self)?)
@@ -214,20 +214,19 @@ impl<I: Eq, L: LocalStructure, C: One + Neg<Output = C>> Operator<I, L, C> {
 macro_rules! left_scalar {
     ($real:ty, [$($generic:ident),+], $expression:ty) => {
         impl<$($generic),+> Mul<$expression> for Complex<$real>
-        where L: LocalStructure,
         {
             type Output = $expression;
             fn mul(self, rhs: $expression) -> Self::Output { rhs.into_scaled(self) }
         }
-        borrowed_binary!([$($generic),+], Mul, mul, Complex<$real>, $expression, [L: LocalStructure,]);
+        borrowed_binary!([$($generic),+], Mul, mul, Complex<$real>, $expression, []);
     };
 }
 macro_rules! complex_left {
     ($real:ty) => {
-        left_scalar!($real, [L], LocalState<L, Complex<$real>>);
-        left_scalar!($real, [L], LocalOperator<L, Complex<$real>>);
-        left_scalar!($real, [I, L], State<I, L, Complex<$real>>);
-        left_scalar!($real, [I, L], Operator<I, L, Complex<$real>>);
+        left_scalar!($real, [S, O], LocalState<S, O, Complex<$real>>);
+        left_scalar!($real, [O], LocalOperator<O, Complex<$real>>);
+        left_scalar!($real, [I, S, O], State<I, S, O, Complex<$real>>);
+        left_scalar!($real, [I, O], Operator<I, O, Complex<$real>>);
     };
 }
 complex_left!(f32);
