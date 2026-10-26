@@ -179,6 +179,10 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 同じリファクタリングで、core の係数型と数値能力を整理する。2026-10-25 の方針変更により `num-complex`・`num-traits` は core に含め、不足する能力 trait を `Complex<f32>`・`Complex<f64>` に直接実装し、必要な操作で必要な trait bound を課す。零・単位元には num-traits の Zero・One をそのまま使い、付随する能力も受け入れる。また、LocalStructure の必要性、操作的量子論に基づく Operator・State の一般の演算子の特別な形としての整理、Index と Grading だけによる HilbertSpace の構成、その構成から Grading を除いた Chain の内部表現について、議論して設計上の結論と根拠を記録する。これら五つの課題を必須課題とし、Step 4 の完了条件には追加しない。
 
+2026-10-26に、Operator と State の整理は検討事項が多いため、設計の検討と、それに基づくリファクタリングを初期版実装後へ延期した。初期版は現行の State／Operator の分離を維持し、段階5〜6の実装はこの整理の結論を前提条件にしない。HilbertSpace・Chain の検討も現行の分離を前提に行える。論点と更新した着手順序は[整理メモの3.3節](refactoring-notes.md#33-operator-と-state-の整理)と[第4節](refactoring-notes.md#4-着手順序の提案)に記録する。
+
+HilbertSpace の最小構成のうち、ordinary の責任分離は第8節の LocalStructure 廃止で実装済みである。空間は Index と順序付き Tensor の構造だけを保持し、局所代数の情報は外部から得る。2026-10-26に、Grading の情報保持・API は fermion 系の実装時に具体化する方針とし、初期版向けの空間の整理を完了とした。Chain の追加の内部表現の見直しは、実装済みの因子構造を基礎に検討できる。
+
 係数型の残る推奨案は同日にすべて採用した。係数全体 C への型引数の移行、個別の共役・実数値取得・実係数の埋め込み・純虚係数生成、qmb-normalize の拡張 trait、標準 Complex の左スカラー倍の個別実装と任意の C の scaled(c)、正規化期待値の純実分母の処理の維持を実装する。追加 provider は導入しない。移行順序と検証基準は [係数型の採用方針](refactoring-coefficient-proposal.md)に従う。
 
 ## 7. 係数型のリファクタリング
