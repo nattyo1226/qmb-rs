@@ -1,11 +1,14 @@
 use std::{cell::Cell, iter::FusedIterator, ops, rc::Rc};
 
-use qmb_core::{
-    Complex, LinearCombination, Term,
-    num_traits::{One, Zero},
-};
+#[path = "support/coefficient.rs"]
+mod coefficient;
+use coefficient::MinimalComplex;
 
-fn term(primitive: u8, re: f64, im: f64) -> Term<u8, f64> {
+use num_complex::Complex;
+use num_traits::One;
+use qmb_core::{LinearCombination, Term};
+
+fn term(primitive: u8, re: f64, im: f64) -> Term<u8, Complex<f64>> {
     Term {
         coefficient: Complex::new(re, im),
         operand: primitive,
@@ -23,13 +26,13 @@ fn construction_keeps_order_duplicates_and_zero_coefficients() {
         assert_eq!(sum.clone().into_terms().collect::<Vec<_>>(), terms);
         assert_eq!(sum, terms.into_iter().collect());
     }
-    let primitive = LinearCombination::<_, f64>::primitive(7);
+    let primitive = LinearCombination::<_, Complex<f64>>::primitive(7);
     assert_eq!(
         primitive,
         LinearCombination::term(Complex::new(1.0, 0.0), 7)
     );
     assert_eq!(
-        LinearCombination::<u8, f64>::default(),
+        LinearCombination::<u8, Complex<f64>>::default(),
         LinearCombination::zero()
     );
     let zero_term = LinearCombination::term(Complex::new(0.0, 0.0), 0);
@@ -112,8 +115,9 @@ where
 fn borrowed_and_owned_iterators_support_mixed_ends_and_exhaustion() {
     for n in 0..=6 {
         let expected: Vec<_> = (0..n).collect();
-        let sum =
-            LinearCombination::<_, f64>::from_terms(expected.iter().map(|&p| term(p, 0.0, 0.0)));
+        let sum = LinearCombination::<_, Complex<f64>>::from_terms(
+            expected.iter().map(|&p| term(p, 0.0, 0.0)),
+        );
         check_iterator(sum.terms().map(|t| t.operand), &expected);
         check_iterator((&sum).into_iter().map(|t| t.operand), &expected);
         check_iterator(sum.clone().into_terms().map(|t| t.operand), &expected);
@@ -129,12 +133,12 @@ fn concatenation_and_owned_operations_require_no_scalar_or_primitive_traits() {
     assert!(empty.is_empty());
     fn combination(start: u8, len: u8) -> LinearCombination<Primitive, Scalar> {
         LinearCombination::from_terms((start..start + len).map(|p| Term {
-            coefficient: Complex::new(Scalar, Scalar),
+            coefficient: Scalar,
             operand: Primitive(p),
         }))
     }
     let _: LinearCombination<Primitive, Scalar> = LinearCombination::default();
-    let one = LinearCombination::term(Complex::new(Scalar, Scalar), Primitive(9));
+    let one = LinearCombination::term(Scalar, Primitive(9));
     assert_eq!(one.into_terms().next().unwrap().operand.0, 9);
     // Covers all nine Zero / Term / Sum pairs with non-Clone, non-Debug,
     // non-PartialEq primitives and scalars that have no numeric capabilities.
@@ -168,26 +172,12 @@ fn equality_is_structural_and_follows_scalar_partial_eq() {
 }
 
 #[test]
-fn coefficient_one_only_needs_zero_and_one_without_clone_or_num() {
+fn coefficient_one_needs_no_zero_clone_or_num() {
     struct MinimalScalar(u8);
-    impl ops::Add for MinimalScalar {
-        type Output = Self;
-        fn add(self, rhs: Self) -> Self {
-            Self(self.0 + rhs.0)
-        }
-    }
     impl ops::Mul for MinimalScalar {
         type Output = Self;
         fn mul(self, rhs: Self) -> Self {
             Self(self.0 * rhs.0)
-        }
-    }
-    impl Zero for MinimalScalar {
-        fn zero() -> Self {
-            Self(0)
-        }
-        fn is_zero(&self) -> bool {
-            self.0 == 0
         }
     }
     impl One for MinimalScalar {
@@ -198,8 +188,7 @@ fn coefficient_one_only_needs_zero_and_one_without_clone_or_num() {
     struct Primitive;
     let sum = LinearCombination::<_, MinimalScalar>::primitive(Primitive);
     let term = sum.into_terms().next().unwrap();
-    assert_eq!(term.coefficient.re.0, 1);
-    assert_eq!(term.coefficient.im.0, 0);
+    assert_eq!(term.coefficient.0, 1);
 }
 
 #[derive(Clone)]
@@ -224,14 +213,14 @@ arithmetic!(Sub, sub, -);
 arithmetic!(Mul, mul, *);
 
 #[test]
-fn scaling_only_needs_clone_add_sub_mul_without_numeric_identities_or_comparison() {
+fn scaling_only_needs_clone_mul_without_numeric_identities_or_comparison() {
     struct Primitive(u8);
     for n in 0..=3 {
         let sum = LinearCombination::from_terms((0..n).map(|p| Term {
-            coefficient: Complex::new(HeapReal::new(f64::from(p)), HeapReal::new(2.0)),
+            coefficient: MinimalComplex::new(HeapReal::new(f64::from(p)), HeapReal::new(2.0)),
             operand: Primitive(p),
         }));
-        let scaled = sum.scaled(Complex::new(HeapReal::new(3.0), HeapReal::new(-1.0)));
+        let scaled = sum.scaled(MinimalComplex::new(HeapReal::new(3.0), HeapReal::new(-1.0)));
         assert_eq!(scaled.len(), usize::from(n));
         for (p, t) in scaled.into_iter().enumerate() {
             assert_eq!(usize::from(t.operand.0), p);
@@ -240,11 +229,11 @@ fn scaling_only_needs_clone_add_sub_mul_without_numeric_identities_or_comparison
         }
     }
     let primitive = LinearCombination::term(
-        Complex::new(HeapReal::new(1.0), HeapReal::new(0.0)),
+        MinimalComplex::new(HeapReal::new(1.0), HeapReal::new(0.0)),
         Primitive(8),
     );
     assert_eq!(*primitive.terms().next().unwrap().coefficient.re.0, 1.0);
-    let scaled = primitive.scaled(Complex::new(HeapReal::new(0.0), HeapReal::new(0.0)));
+    let scaled = primitive.scaled(MinimalComplex::new(HeapReal::new(0.0), HeapReal::new(0.0)));
     assert_eq!(scaled.len(), 1);
     let term = scaled.into_iter().next().unwrap();
     assert_eq!(*term.coefficient.re.0, 0.0);
@@ -263,7 +252,7 @@ fn borrowed_non_send_primitives_and_partial_iterator_drop_are_supported() {
     let drops = Rc::new(Cell::new(0));
     for n in 0..=4 {
         drops.set(0);
-        let sum = LinearCombination::<_, f64>::from_terms((0..n).map(|_| Term {
+        let sum = LinearCombination::<_, Complex<f64>>::from_terms((0..n).map(|_| Term {
             coefficient: Complex::new(0.0, 0.0),
             operand: Primitive(&drops),
         }));

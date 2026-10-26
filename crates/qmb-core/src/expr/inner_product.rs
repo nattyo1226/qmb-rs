@@ -1,28 +1,25 @@
 //! Contraction of evaluated states without distributing independent factors.
 
 use alloc::{collections::BTreeMap, vec, vec::Vec};
-use core::{
-    ops::{Neg, Sub},
-    ptr,
-};
+use core::ptr;
 use num_traits::{One, Zero};
 
 use super::composite::{StateExpr, StateNode};
 use crate::{
-    Complex, InnerProduct, LocalStructure,
+    Conjugate, InnerProduct,
     coefficient::{add, conjugate, multiply, zero},
 };
 
-type Factors<'a, I, L, T> = Vec<&'a StateExpr<I, L, T>>;
-type Pair<'a, I, L, T> = (Factors<'a, I, L, T>, Factors<'a, I, L, T>);
+type Factors<'a, I, S, O, C> = Vec<&'a StateExpr<I, S, O, C>>;
+type Pair<'a, I, S, O, C> = (Factors<'a, I, S, O, C>, Factors<'a, I, S, O, C>);
 
 // Per-call structural information, not a persistent support or numeric cache.
 // None denotes an empty sum, including tensors annihilated by an empty sum.
 // Some(0) denotes a scalar state on the unit space, which is different from zero.
-struct FactorCounts<I, L: LocalStructure, T>(BTreeMap<*const StateNode<I, L, T>, Option<usize>>);
+struct FactorCounts<I, S, O, C>(BTreeMap<*const StateNode<I, S, O, C>, Option<usize>>);
 
-impl<I, L: LocalStructure, T> FactorCounts<I, L, T> {
-    fn new(lhs: &StateExpr<I, L, T>, rhs: &StateExpr<I, L, T>) -> Self {
+impl<I, S, O, C> FactorCounts<I, S, O, C> {
+    fn new(lhs: &StateExpr<I, S, O, C>, rhs: &StateExpr<I, S, O, C>) -> Self {
         let mut counts = Self(BTreeMap::new());
         let mut pending = vec![(lhs, false), (rhs, false)];
         while let Some((state, visited)) = pending.pop() {
@@ -58,24 +55,24 @@ impl<I, L: LocalStructure, T> FactorCounts<I, L, T> {
         counts
     }
 
-    fn get(&self, state: &StateExpr<I, L, T>) -> Option<usize> {
+    fn get(&self, state: &StateExpr<I, S, O, C>) -> Option<usize> {
         self.0[&ptr::from_ref(state.node())]
     }
 }
 
-enum Task<'a, I, L: LocalStructure, T> {
-    Contract(Pair<'a, I, L, T>),
-    Scale(&'a Complex<T>, bool),
+enum Task<'a, I, S, O, C> {
+    Contract(Pair<'a, I, S, O, C>),
+    Scale(&'a C, bool),
     Sum(usize),
     Product(usize),
 }
 
 // Flatten tensor grouping only. Sums stay intact until a contraction needs them.
-fn tensor_factors<'a, I, L: LocalStructure, T>(
-    mut pending: Factors<'a, I, L, T>,
-    tasks: &mut Vec<Task<'a, I, L, T>>,
+fn tensor_factors<'a, I, S, O, C>(
+    mut pending: Factors<'a, I, S, O, C>,
+    tasks: &mut Vec<Task<'a, I, S, O, C>>,
     conjugated: bool,
-) -> Factors<'a, I, L, T> {
+) -> Factors<'a, I, S, O, C> {
     pending.reverse();
     let mut factors = Vec::new();
     while let Some(state) = pending.pop() {
@@ -96,11 +93,11 @@ fn tensor_factors<'a, I, L: LocalStructure, T>(
 // Root-space compatibility already verifies every Index and its order. Within
 // that order, equal prefix lengths identify the same contiguous subsystem.
 // Find all common boundaries, even when the two tensor groupings differ.
-fn matching_groups<'a, I, L: LocalStructure, T>(
-    mut lhs: Factors<'a, I, L, T>,
-    mut rhs: Factors<'a, I, L, T>,
-    counts: &FactorCounts<I, L, T>,
-) -> Vec<Pair<'a, I, L, T>> {
+fn matching_groups<'a, I, S, O, C>(
+    mut lhs: Factors<'a, I, S, O, C>,
+    mut rhs: Factors<'a, I, S, O, C>,
+    counts: &FactorCounts<I, S, O, C>,
+) -> Vec<Pair<'a, I, S, O, C>> {
     let mut groups = Vec::new();
     // Scalar sums do not cover any indexed factor. Separate them wherever
     // they occur, so they cannot obscure an otherwise shared tensor boundary.
@@ -145,13 +142,10 @@ fn matching_groups<'a, I, L: LocalStructure, T>(
     groups
 }
 
-pub(super) fn contract<I, L: LocalStructure, T>(
-    lhs: &StateExpr<I, L, T>,
-    rhs: &StateExpr<I, L, T>,
-) -> Complex<T>
+pub(super) fn contract<I, S, O, C>(lhs: &StateExpr<I, S, O, C>, rhs: &StateExpr<I, S, O, C>) -> C
 where
-    T: Clone + Zero + One + Sub<Output = T> + Neg<Output = T>,
-    L::State: InnerProduct<T>,
+    C: Clone + Zero + One + Conjugate<Output = C>,
+    S: InnerProduct<C>,
 {
     let counts = FactorCounts::new(lhs, rhs);
     let mut tasks = vec![Task::Contract((vec![lhs], vec![rhs]))];
@@ -167,7 +161,7 @@ where
                 let rhs = tensor_factors(rhs, &mut tasks, false);
                 let mut groups = matching_groups(lhs, rhs, &counts);
                 match groups.len() {
-                    0 => values.push(Complex::new(T::one(), T::zero())),
+                    0 => values.push(C::one()),
                     1 => {
                         let (lhs, rhs) = groups.pop().expect("one subsystem");
                         if let ([a], [b]) = (lhs.as_slice(), rhs.as_slice()) {
@@ -224,9 +218,7 @@ where
                 let value = if matches!(task, Task::Sum(_)) {
                     parts.into_iter().fold(zero(), add)
                 } else {
-                    parts
-                        .into_iter()
-                        .fold(Complex::new(T::one(), T::zero()), multiply)
+                    parts.into_iter().fold(C::one(), multiply)
                 };
                 values.push(value);
             }

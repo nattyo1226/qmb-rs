@@ -1,5 +1,5 @@
 use alloc::{vec, vec::Vec};
-use core::ops::{Add, Mul, Neg, Sub};
+use core::ops::Mul;
 use num_traits::Zero;
 
 use super::{
@@ -7,28 +7,28 @@ use super::{
     parts::SumExpr,
 };
 use crate::{
-    Act, Adjoint, Complex, Identity, InnerProduct, LocalStructure, Product, Trace,
+    Act, Adjoint, Conjugate, Identity, InnerProduct, Product, RealPart, Trace,
     coefficient::{add, conjugate, multiply, zero},
 };
 
-enum StateTask<L: LocalStructure, T> {
-    Evaluate(LocalState<L, T>),
-    Apply(LocalState<L, T>, LocalOperator<L, T>, bool),
-    ThenApply(LocalOperator<L, T>, bool),
-    Scale(Complex<T>),
+enum StateTask<S, O, C> {
+    Evaluate(LocalState<S, O, C>),
+    Apply(LocalState<S, O, C>, LocalOperator<O, C>, bool),
+    ThenApply(LocalOperator<O, C>, bool),
+    Scale(C),
     Sum(usize),
 }
 
-impl<L: LocalStructure, T> LocalState<L, T> {
+impl<S, O, C> LocalState<S, O, C> {
     /// Evaluates actions using local rules and linearity, without choosing a basis.
     ///
     /// No operator `Product` capability is required: `(AB) psi` applies `B`,
     /// then `A`. Ready subtrees are shared; duplicate and zero terms remain.
     pub fn evaluate(&self) -> Self
     where
-        T: Clone + Neg<Output = T>,
-        L::State: Act<T, Operator = L::Operator, Term = L::State>,
-        L::Operator: Adjoint<T, Term = L::Operator>,
+        C: Clone + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S>,
+        O: Adjoint<C, Term = O>,
     {
         let mut tasks = vec![StateTask::Evaluate(self.clone())];
         let mut values: Vec<Self> = Vec::new();
@@ -134,11 +134,11 @@ impl<L: LocalStructure, T> LocalState<L, T> {
     ///
     /// Actions are evaluated internally; no basis or explicit prior evaluation
     /// is needed. Coefficients require arithmetic but no division or remainder.
-    pub fn inner_product(&self, rhs: &Self) -> Complex<T>
+    pub fn inner_product(&self, rhs: &Self) -> C
     where
-        T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
-        L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
-        L::Operator: Adjoint<T, Term = L::Operator>,
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
     {
         let lhs = self.evaluate();
         let rhs = rhs.evaluate();
@@ -147,10 +147,10 @@ impl<L: LocalStructure, T> LocalState<L, T> {
 
     // Both operands must be action-free. Separating this reduction avoids
     // requiring action/adjoint capabilities again in composite contraction.
-    pub(super) fn evaluated_inner_product(&self, rhs: &Self) -> Complex<T>
+    pub(super) fn evaluated_inner_product(&self, rhs: &Self) -> C
     where
-        T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
-        L::State: InnerProduct<T>,
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        S: InnerProduct<C>,
     {
         let mut result = zero();
         for (a, left) in LinearTerms::new(self, state_view) {
@@ -170,12 +170,22 @@ impl<L: LocalStructure, T> LocalState<L, T> {
         result
     }
 
-    /// Computes the unnormalized expectation `self† operator self`.
-    pub fn expectation(&self, operator: &LocalOperator<L, T>) -> Complex<T>
+    /// Returns the real part of the self-inner-product, without clamping.
+    pub fn norm_squared(&self) -> C::Real
     where
-        T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
-        L::State: Act<T, Operator = L::Operator, Term = L::State> + InnerProduct<T>,
-        L::Operator: Adjoint<T, Term = L::Operator>,
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C> + RealPart,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        self.inner_product(self).real_part()
+    }
+
+    /// Computes the unnormalized expectation `self† operator self`.
+    pub fn expectation(&self, operator: &LocalOperator<O, C>) -> C
+    where
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
     {
         self.inner_product(&self.act(operator))
     }
@@ -183,28 +193,28 @@ impl<L: LocalStructure, T> LocalState<L, T> {
 
 // Both state and operator scalar reductions use this same linear walker.
 // None as coefficient means an implicit one, so generating it needs no One.
-enum LinearView<'a, E, P, T> {
+enum LinearView<'a, E, P, C> {
     Leaf(Option<&'a P>),
-    Scale(&'a Complex<T>, &'a E),
+    Scale(&'a C, &'a E),
     Sum(&'a SumExpr<E>),
 }
-struct LinearTerms<'a, E, P, T> {
-    pending: Vec<(&'a E, Option<Complex<T>>)>,
-    view: fn(&'a E) -> LinearView<'a, E, P, T>,
+struct LinearTerms<'a, E, P, C> {
+    pending: Vec<(&'a E, Option<C>)>,
+    view: fn(&'a E) -> LinearView<'a, E, P, C>,
 }
-impl<'a, E, P, T> LinearTerms<'a, E, P, T> {
-    fn new(root: &'a E, view: fn(&'a E) -> LinearView<'a, E, P, T>) -> Self {
+impl<'a, E, P, C> LinearTerms<'a, E, P, C> {
+    fn new(root: &'a E, view: fn(&'a E) -> LinearView<'a, E, P, C>) -> Self {
         Self {
             pending: vec![(root, None)],
             view,
         }
     }
 }
-impl<'a, E, P: 'a, T> Iterator for LinearTerms<'a, E, P, T>
+impl<'a, E, P: 'a, C> Iterator for LinearTerms<'a, E, P, C>
 where
-    T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    C: Clone + Mul<Output = C>,
 {
-    type Item = (Option<Complex<T>>, Option<&'a P>);
+    type Item = (Option<C>, Option<&'a P>);
     fn next(&mut self) -> Option<Self::Item> {
         while let Some((expression, coefficient)) = self.pending.pop() {
             match (self.view)(expression) {
@@ -226,9 +236,7 @@ where
         None
     }
 }
-fn state_view<L: LocalStructure, T>(
-    state: &LocalState<L, T>,
-) -> LinearView<'_, LocalState<L, T>, L::State, T> {
+fn state_view<S, O, C>(state: &LocalState<S, O, C>) -> LinearView<'_, LocalState<S, O, C>, S, C> {
     match state.node() {
         StateNode::Primitive(p) => LinearView::Leaf(Some(p)),
         StateNode::Scale(s) => LinearView::Scale(&s.coefficient, &s.operand),
@@ -236,9 +244,7 @@ fn state_view<L: LocalStructure, T>(
         StateNode::Act(_) => unreachable!("evaluated state"),
     }
 }
-fn operator_view<L: LocalStructure, T>(
-    op: &LocalOperator<L, T>,
-) -> LinearView<'_, LocalOperator<L, T>, L::Operator, T> {
+fn operator_view<O, C>(op: &LocalOperator<O, C>) -> LinearView<'_, LocalOperator<O, C>, O, C> {
     match op.node() {
         OperatorNode::Primitive(p) => LinearView::Leaf(Some(p)),
         OperatorNode::Identity => LinearView::Leaf(None),
@@ -248,19 +254,19 @@ fn operator_view<L: LocalStructure, T>(
     }
 }
 
-enum OperatorTask<L: LocalStructure, T> {
-    Visit(LocalOperator<L, T>, bool),
-    Multiply(LocalOperator<L, T>, LocalOperator<L, T>),
+enum OperatorTask<O, C> {
+    Visit(LocalOperator<O, C>, bool),
+    Multiply(LocalOperator<O, C>, LocalOperator<O, C>),
     Product,
-    Scale(Complex<T>),
+    Scale(C),
     Sum(usize),
 }
 
-impl<L: LocalStructure, T> LocalOperator<L, T> {
+impl<O, C> LocalOperator<O, C> {
     fn evaluated(&self) -> Self
     where
-        T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
-        L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator>,
+        C: Clone + Mul<Output = C> + Conjugate<Output = C>,
+        O: Product<C, Term = O> + Adjoint<C, Term = O>,
     {
         let mut tasks = vec![OperatorTask::Visit(self.clone(), false)];
         let mut values: Vec<Self> = Vec::new();
@@ -359,11 +365,11 @@ impl<L: LocalStructure, T> LocalOperator<L, T> {
     }
 
     /// Computes the ordinary, unnormalized local trace without a chosen basis.
-    pub fn trace(&self) -> Complex<T>
+    pub fn trace(&self) -> C
     where
-        T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
-        L: Identity<T>,
-        L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        O: Identity,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         let evaluated = self.evaluated();
         let mut result = zero();
@@ -371,9 +377,7 @@ impl<L: LocalStructure, T> LocalOperator<L, T> {
             let mut value = if let Some(p) = primitive {
                 p.trace()
             } else {
-                L::identity().into_iter().fold(zero(), |sum, term| {
-                    add(sum, multiply(term.coefficient, term.operand.trace()))
-                })
+                O::identity().trace()
             };
             if let Some(c) = coefficient {
                 value = multiply(c, value);
@@ -384,11 +388,11 @@ impl<L: LocalStructure, T> LocalOperator<L, T> {
     }
 
     /// Computes `Tr(self† rhs)`, without division by the local dimension.
-    pub fn hilbert_schmidt_inner_product(&self, rhs: &Self) -> Complex<T>
+    pub fn hilbert_schmidt_inner_product(&self, rhs: &Self) -> C
     where
-        T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>,
-        L: Identity<T>,
-        L::Operator: Product<T, Term = L::Operator> + Adjoint<T, Term = L::Operator> + Trace<T>,
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        O: Identity,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         self.adjoint().product(rhs).trace()
     }

@@ -7,7 +7,6 @@ description = "Abstract contracts and finite linear combinations for quantum man
 
 [features]
 default = []
-libm = ["num-traits/libm"]
 
 [dependencies]
 num-complex.workspace = true

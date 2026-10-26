@@ -1,11 +1,9 @@
 //! Ordered state, Cartesian-spin, and ladder-operator bases.
 
-use core::ops::{Div, Neg};
+use core::ops::{Add, Div, Neg};
 
-use qmb_core::{
-    Basis, LinearCombination,
-    num_traits::{One, Zero},
-};
+use num_traits::One;
+use qmb_core::{Basis, ImaginaryUnit, LinearCombination};
 
 use crate::{
     SpinHalfOperator, SpinHalfState,
@@ -26,8 +24,8 @@ pub struct CartesianBasis;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct LadderBasis;
 
-impl<T: Zero + One> Basis<SpinHalfState, T> for SzBasis {
-    fn expand(&self, primitive: &SpinHalfState) -> LinearCombination<SpinHalfState, T> {
+impl<C: One> Basis<SpinHalfState, C> for SzBasis {
+    fn expand(&self, primitive: &SpinHalfState) -> LinearCombination<SpinHalfState, C> {
         LinearCombination::primitive(*primitive)
     }
 
@@ -43,15 +41,15 @@ impl<T: Zero + One> Basis<SpinHalfState, T> for SzBasis {
     }
 }
 
-impl<T: Zero + One + Neg<Output = T>> Basis<SpinHalfOperator, T> for CartesianBasis {
-    fn expand(&self, primitive: &SpinHalfOperator) -> LinearCombination<SpinHalfOperator, T> {
+impl<C: One + Neg<Output = C> + ImaginaryUnit> Basis<SpinHalfOperator, C> for CartesianBasis {
+    fn expand(&self, primitive: &SpinHalfOperator) -> LinearCombination<SpinHalfOperator, C> {
         use SpinHalfOperator::*;
         match primitive {
             SPlus => {
-                LinearCombination::primitive(Sx) + LinearCombination::term(imaginary(T::one()), Sy)
+                LinearCombination::primitive(Sx) + LinearCombination::term(imaginary(C::one()), Sy)
             }
             SMinus => {
-                LinearCombination::primitive(Sx) + LinearCombination::term(imaginary(-T::one()), Sy)
+                LinearCombination::primitive(Sx) + LinearCombination::term(imaginary(-C::one()), Sy)
             }
             _ => LinearCombination::primitive(*primitive),
         }
@@ -74,20 +72,16 @@ impl<T: Zero + One + Neg<Output = T>> Basis<SpinHalfOperator, T> for CartesianBa
     }
 }
 
-impl<T> Basis<SpinHalfOperator, T> for LadderBasis
+impl<C> Basis<SpinHalfOperator, C> for LadderBasis
 where
-    T: Zero + One + Div<Output = T> + Neg<Output = T>,
+    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
 {
-    fn expand(&self, primitive: &SpinHalfOperator) -> LinearCombination<SpinHalfOperator, T> {
-        use crate::coefficient::real;
+    fn expand(&self, primitive: &SpinHalfOperator) -> LinearCombination<SpinHalfOperator, C> {
         use SpinHalfOperator::*;
         match primitive {
-            Sx => {
-                LinearCombination::term(real(half()), SPlus)
-                    + LinearCombination::term(real(half()), SMinus)
-            }
+            Sx => LinearCombination::term(half(), SPlus) + LinearCombination::term(half(), SMinus),
             Sy => {
-                LinearCombination::term(imaginary(-half::<T>()), SPlus)
+                LinearCombination::term(imaginary(-half::<C>()), SPlus)
                     + LinearCombination::term(imaginary(half()), SMinus)
             }
             _ => LinearCombination::primitive(*primitive),

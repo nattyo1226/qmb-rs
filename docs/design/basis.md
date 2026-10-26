@@ -1,6 +1,6 @@
 # 基底の数学的能力
 
-更新日: 2026-10-25
+更新日: 2026-10-26
 
 ## 1. 対象と合意した契約
 
@@ -8,22 +8,22 @@
 
 基底の能力契約、式全体への展開、複合基底、座標取得は `qmb-core` が担当する。具体的代数の crate は局所基底と primitive の展開規則を実装する。得られた係数を外部数値コンテナへ格納する処理は `qmb-export` に置く。
 
-基底の定義は `PauliBasis` のような struct が表し、対象の要素型を指定した `Basis<P, T>` を実装する。その実装が、特定の primitive たちを基底とする規則と、各 primitive をその基底へ展開する手続きを提供する。状態基底の展開は `LinearCombination<L::State, T>`、演算子基底の展開は `LinearCombination<L::Operator, T>` を返す。式木側が要素を `map` して通常の式へ取り込む。利用者が基底要素の配列や集合そのものを入力することは要求しない。
+基底の定義は `PauliBasis` のような struct が表し、対象の要素型を指定した `Basis<P, C>` を実装する。その実装が、特定の primitive たちを基底とする規則と、各 primitive をその基底へ展開する手続きを提供する。状態基底の展開は `LinearCombination<S, C>`、演算子基底の展開は `LinearCombination<O, C>` を返す。式木側が要素を `map` して通常の式へ取り込む。利用者が基底要素の配列や集合そのものを入力することは要求しない。
 
-展開・順序番号・列挙は単一の `Basis<P, T>` 実装で提供する。共通 trait 自体には数値制約を置かず、各具体基底の実装に、その展開規則で必要な能力だけを要求する。この実装の制約は `index`・`elements` にも適用される。係数精度を推論できない情報取得では、`<B as Basis<P, T>>::elements` のように明示する。
+展開・順序番号・列挙は単一の `Basis<P, C>` 実装で提供する。共通 trait 自体には数値制約を置かず、各具体基底の実装に、その展開規則で必要な能力だけを要求する。この実装の制約は `index`・`elements` にも適用される。係数精度を推論できない情報取得では、`<B as Basis<P, C>>::elements` のように明示する。
 
-既存の `LinearCombination` を返す契約と `Basis<P, T>` を維持し、[実装計画](../implementation-plan.md)の Step 2 で core・spin-half・テスト実装と局所式の接続を整備する。`StateBasis`・`OperatorBasis` は削除し、利用側で `L: LocalStructure` と次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得の実装は Step 5 に置く。
+既存の `LinearCombination` を返す契約と `Basis<P, C>` を維持し、[実装計画](../implementation-plan.md)の Step 2 で core・spin-half・テスト実装と局所式の接続を整備する。`StateBasis`・`OperatorBasis` は削除し、利用側で次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得の実装は Step 5 に置く。
 
 | 基底を使う処理 | 型制約 |
 | --- | --- |
-| 局所状態の基底処理 | `B: Basis<L::State, T>` |
-| 局所演算子の基底処理 | `B: Basis<L::Operator, T>` |
+| 局所状態の基底処理 | `B: Basis<S, C>` |
+| 局所演算子の基底処理 | `B: Basis<O, C>` |
 
 局所基底要素は対応する primitive の部分集合とし、線型独立かつ対象空間全体に完全であることを要求する。局所基底要素として一般の式を指定することは本契約に含めない。正規直交性は要求しない。Primitive 全体は線型従属でもよい。
 
-基底を使う側は、対応する[局所構造](local-structure.md)、その定義パラメータ、および対象が状態か演算子かを確定する。型の対応は `Basis<L::State, T>` または `Basis<L::Operator, T>` で指定し、独立した所属宣言は要求しない。選択基底は局所構造や自由度の Index の同一性とは区別する。
+基底を使う側は、対応する[局所構造](local-structure.md)、その定義パラメータ、および対象が状態か演算子かを確定する。型の対応は `Basis<S, C>` または `Basis<O, C>` で指定し、独立した所属宣言は要求しない。選択基底は局所構造や自由度の Index の同一性とは区別する。
 
-初期版の複合基底は、同じ局所構造型 `L` の基本因子に対応する局所基底から構成する。因子ごとに異なる基底を選んでも、局所構造自体が異種になるわけではない。異種局所構造を混在させた系の基底は後続へ延期する。別の独自代数の基底は、その代数だけを使う別の系で利用・検証する。
+初期版の複合基底は、同じ primitive 型 S・O の基本因子に対応する局所基底から構成する。因子ごとに異なる基底を選んでも、局所構造自体が異種になるわけではない。異種局所構造を混在させた系の基底は後続へ延期する。別の独自代数の基底は、その代数だけを使う別の系で利用・検証する。
 
 ## 2. Basis の三つの能力
 
@@ -43,8 +43,8 @@ p=\sum_{\mu=0}^{n-1}c_\mu(p)b_\mu.
 
 | 展開する入力 | 返却型 |
 | --- | --- |
-| 状態 primitive `L::State` | `LinearCombination<L::State, T>` |
-| 演算子 primitive `L::Operator` | `LinearCombination<L::Operator, T>` |
+| 状態 primitive `S` | `LinearCombination<S, C>` |
+| 演算子 primitive `O` | `LinearCombination<O, C>` |
 
 返却する線型結合の要素は選択した基底の primitive に限る。式木側は係数・項順序を保持した `map` と共通 constructor により、`Primitive`・`Scale`・`Sum` の通常の式へ取り込む。線型結合にも取り込み後の式にも基底情報や特別な展開済み状態は保持させない。取り込み後は通常の演算や別基底への再展開に使える。基底要素の条件と取り込みの整合性は検証対象とする。
 
@@ -63,7 +63,7 @@ p=\sum_{\mu=0}^{n-1}c_\mu(p)b_\mu.
 
 Basis に独立した要素数の提供を要求しない。要素数を得る便利な操作を設ける場合も、上記の情報から導出する。primitive の個数や、列挙を完走して数えた値を要素数の定義にはしない。
 
-この契約は対象空間全体に完全な基底を前提とする。要件に従い、部分空間基底・射影、および fermion の even 部分だけへの制限は初期版で扱わない。Step 2 では既存の `usize` を維持し、次元だけを参照する `state_basis_len<L>()`・`operator_basis_len<L>()` から不要な型引数 `T` を外す。演算子基底の要素数の二乗が収まらない場合は、既存の `DimensionOverflow` を返す。
+この契約は対象空間全体に完全な基底を前提とする。部分空間基底・射影、および fermion の even 部分だけへの制限は初期版で扱わない。`state_basis_len<S>()`・`operator_basis_len<O>()` は対象 primitive の SpanDimension を参照して `Result<usize, DimensionOverflow>` を返す。O の span の次元は既に d² なので、この関数でさらに二乗しない。整数化できない次元のエラーは取得時に返し、基底や式の保持・構築には次元の能力を要求しない。
 
 ## 4. 能力間の整合性
 
@@ -129,4 +129,4 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 - 後続段階における基底の定義パラメータと、複合基底・式全体への展開の具体的な API
 - 基底 primitive の保持・共有と、展開・列挙の具体的な内部実装
 
-局所基底規則が薄い `LinearCombination` を返すこと、`Basis` の直接利用と `StateBasis`・`OperatorBasis` の削除、および Step 2 での `map` による式木との接続は確定事項とする。後続の設計でも、基底を定義する struct と三つの能力、および局所構造からの要素数の導出を維持する。marker trait の削除後も、基底の線型独立性・完全性、要素数が状態では `d`、全演算子空間では `d²` となる数学的契約と検証条件は維持する。
+局所基底規則が薄い `LinearCombination` を返すこと、`Basis` の直接利用と `StateBasis`・`OperatorBasis` の削除、および Step 2 での `map` による式木との接続は確定事項とする。後続の設計でも、基底を定義する struct と三つの能力、およびprimitive の span の次元からの要素数の導出を維持する。marker trait の削除後も、基底の線型独立性・完全性、要素数が状態では `d`、全演算子空間では `d²` となる数学的契約と検証条件は維持する。

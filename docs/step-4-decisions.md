@@ -1,6 +1,12 @@
 # Step 4 の実装方針と合意事項
 
-更新日: 2026-10-25
+更新日: 2026-10-27
+
+本書の num-complex 成分型 T・core の libm に関する記述は Step 4 実装時点の記録である。その後の[係数型のリファクタリング](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)で、係数全体 C と qmb-normalize の正規化用拡張 trait へ移行した。正規化期待値と NormalizationError も qmb-normalize に移し、core には内積・期待値・norm_squared・スカラー除算を残す。
+
+2026-10-26 の LocalStructure 廃止で、本文の L を用いる型は現在の API へ移行済みである。Geometry／Chain／HilbertSpace は I のみ、式は S・O を直接指定する。以下は Step 4 当時の判断の記録であり、現在の契約は[局所 primitive の設計](design/local-structure.md)と[実装計画](implementation-plan.md)を参照する。
+
+同日に、Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する方針を採用した。空間の構築・保持・grouping・因子順序・配置と束縛はモデル utility・利用側へ移す。2026-10-27に実装移行した。本文の空間保持 API・Arc 共有・Clone 制約と検証結果は移行前の記録であり、採用した契約は[Chain の設計](design/geometry.md)、移行と検証結果は[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行)に従う。
 
 ## 1. 位置付けと実装範囲
 
@@ -131,7 +137,7 @@ Cargo の feature は加算される。確認した `num-traits 0.2.19` は std 
 
 ## 9. 後続の必須課題
 
-State・Operator・Structure・Space の管理方法と Geometry との依存関係は将来必ず見直す。core の数値ライブラリ依存解消と四つの設計上の問いは、[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)を正として管理する。今回の Step 4 の完了条件には追加せず、現行の型構成・libm 方針で実装する。
+State・Operator・Structure・Space の管理方法と Geometry との依存関係は将来必ず見直す。core の係数型・数値能力の整理と四つの設計上の問いは、[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)を正として管理する。これらは Step 4 の完了条件に追加せず、Step 4 自体は本書の型構成・libm 方針で実装した。
 
 ## 10. 実装した構築 API と利用例
 

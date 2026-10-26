@@ -1,30 +1,115 @@
-//! Internal complex arithmetic with operation-specific scalar bounds.
+//! Independent coefficient capabilities, requested only by operations using them.
+//!
+//! Coefficients are commutative scalars. Implementations must preserve the unit,
+//! distributive, conjugation and real-embedding laws required by their algebra,
+//! up to the precision of the numeric representation. Storage has no such bound.
 
-use core::ops::{Add, Mul, Neg, Sub};
-use num_traits::Zero;
+use core::ops::{Add, Div, Mul, Neg, Sub};
+use num_complex::Complex;
+use num_traits::{One, Zero};
 
-use crate::Complex;
-
-pub(crate) fn conjugate<T: Neg<Output = T>>(value: Complex<T>) -> Complex<T> {
-    Complex::new(value.re, -value.im)
+/// Conjugation from a shared reference, independent of other numeric abilities.
+///
+/// Conjugation must be involutive and preserve addition and multiplication.
+pub trait Conjugate {
+    /// Result of conjugation; evaluators require this to be the coefficient type.
+    type Output;
+    /// Returns the complex conjugate without modifying the input.
+    fn conjugate(&self) -> Self::Output;
 }
 
-// Complex<T>'s multiplication implementation also requires Num, including
-// division and remainder. These operations only need a ring's arithmetic.
-pub(crate) fn multiply<T>(a: Complex<T>, b: Complex<T>) -> Complex<T>
+/// Extraction of the real component, used by squared norms.
+pub trait RealPart {
+    /// Real value associated with this coefficient representation.
+    type Real;
+    /// Moves out the real component, without clamping or approximation.
+    fn real_part(self) -> Self::Real;
+}
+
+/// Construction of the imaginary unit, required by particular local algebras.
+///
+/// The returned value must square to minus one. It is not required for storing
+/// expressions or evaluating an algebra whose rules use only real coefficients.
+pub trait ImaginaryUnit {
+    /// Returns the scalar `i`.
+    fn imaginary_unit() -> Self;
+}
+
+/// Division of scalar coefficients.
+///
+/// This separate capability lets a representation preserve its numerical division
+/// algorithm. In particular, complex division by a real self-inner-product must
+/// not unnecessarily square that denominator. Implementations for ordinary real
+/// scalars can forward to [`Div`]. The caller checks for an exactly zero divisor.
+pub trait Divide<Rhs = Self> {
+    /// Result of division.
+    type Output;
+    /// Divides by a nonzero coefficient.
+    fn divide(self, rhs: Rhs) -> Self::Output;
+}
+
+impl<T: Clone + Neg<Output = T>> Conjugate for Complex<T> {
+    type Output = Self;
+    fn conjugate(&self) -> Self {
+        Self::new(self.re.clone(), -self.im.clone())
+    }
+}
+impl<T> RealPart for Complex<T> {
+    type Real = T;
+    fn real_part(self) -> T {
+        self.re
+    }
+}
+impl<T: Zero + One> ImaginaryUnit for Complex<T> {
+    fn imaginary_unit() -> Self {
+        Self::new(T::zero(), T::one())
+    }
+}
+impl<T> Divide for Complex<T>
 where
-    T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Clone + Zero + Sub<Output = T> + Mul<Output = T> + Div<Output = T>,
 {
-    Complex::new(
-        a.re.clone() * b.re.clone() - a.im.clone() * b.im.clone(),
-        a.re * b.im + a.im * b.re,
-    )
+    type Output = Self;
+    fn divide(self, rhs: Self) -> Self {
+        if rhs.im.is_zero() {
+            return Self::new(self.re / rhs.re.clone(), self.im / rhs.re);
+        }
+        let denominator = rhs.re.clone() * rhs.re.clone() + rhs.im.clone() * rhs.im.clone();
+        Self::new(
+            (self.re.clone() * rhs.re.clone() + self.im.clone() * rhs.im.clone())
+                / denominator.clone(),
+            (self.im * rhs.re - self.re * rhs.im) / denominator,
+        )
+    }
 }
 
-pub(crate) fn add<T: Add<Output = T>>(a: Complex<T>, b: Complex<T>) -> Complex<T> {
-    Complex::new(a.re + b.re, a.im + b.im)
+macro_rules! real {
+    ($($real:ty),+) => {$(
+        impl Conjugate for $real {
+            type Output = Self;
+            fn conjugate(&self) -> Self { *self }
+        }
+        impl RealPart for $real {
+            type Real = Self;
+            fn real_part(self) -> Self { self }
+        }
+        impl Divide for $real {
+            type Output = Self;
+            fn divide(self, rhs: Self) -> Self { self / rhs }
+        }
+    )+};
 }
+real!(f32, f64);
 
-pub(crate) fn zero<T: Zero>() -> Complex<T> {
-    Complex::new(T::zero(), T::zero())
+pub(crate) fn conjugate<C: Conjugate<Output = C>>(value: C) -> C {
+    value.conjugate()
+}
+pub(crate) fn multiply<C: Mul<Output = C>>(a: C, b: C) -> C {
+    a * b
+}
+pub(crate) fn add<C: Add<Output = C>>(a: C, b: C) -> C {
+    a + b
+}
+pub(crate) fn zero<C: Zero>() -> C {
+    C::zero()
 }

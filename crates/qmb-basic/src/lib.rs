@@ -42,4 +42,4 @@ impl fmt::Display for Id128 {
 }
 
 /// A core space using the standard UUID index.
-pub type HilbertSpace<L> = qmb_core::HilbertSpace<Id128, L>;
+pub type HilbertSpace = qmb_core::HilbertSpace<Id128>;

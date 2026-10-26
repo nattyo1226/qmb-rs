@@ -1,9 +1,9 @@
 //! Immutable ordinary tensor spaces, generic over an equality-comparable index.
 
 use alloc::{sync::Arc, vec, vec::Vec};
-use core::{iter::FusedIterator, marker::PhantomData, slice};
+use core::{iter::FusedIterator, slice};
 
-use crate::{DimensionOverflow, LocalStructure, expr::parts::SumExpr};
+use crate::{DimensionOverflow, SpanDimension, expr::parts::SumExpr};
 
 /// Errors constructing a tensor space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -13,78 +13,46 @@ pub enum SpaceError {
     DuplicateIndex,
 }
 
-enum Node<I, L: LocalStructure> {
+enum Node<I> {
     Factor(I),
-    Tensor(SumExpr<HilbertSpace<I, L>>),
+    Tensor(SumExpr<HilbertSpace<I>>),
 }
 
 /// A shared factor or ordered, possibly nested ordinary tensor space.
 ///
-/// `L` represents one fixed local definition. Index identity is supplied by
-/// `I: Eq`; generation, hashing and ordering are not required by this crate.
-/// Cloning this handle never clones `I` or `L`.
+/// Local primitive types and dimensions belong to expressions and their query
+/// inputs. Index identity is supplied by I: Eq; cloning never clones an index.
 ///
 /// ```
 /// use core::num::NonZeroUsize;
-/// use qmb_core::{HilbertSpace, LocalStructure};
-/// struct Qubit;
-/// impl LocalStructure for Qubit {
-///     type State = ();
-///     type Operator = ();
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
-/// }
-/// let a = HilbertSpace::<_, Qubit>::factor("a");
+/// use qmb_core::HilbertSpace;
+/// let a = HilbertSpace::factor("a");
 /// let b = HilbertSpace::factor("b");
 /// let h = a.tensor_product(&b)?;
-/// assert_eq!(h.dimension()?, 4);
+/// assert_eq!(h.dimension_with(NonZeroUsize::new(2).unwrap())?, 4);
 /// assert!(a.is_subsystem_of(&h));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-///
-/// Structures remain distinct even if their dimensions and primitive types agree:
-///
-/// ```compile_fail
-/// use core::num::NonZeroUsize;
-/// use qmb_core::{HilbertSpace, LocalStructure};
-/// struct A;
-/// struct B;
-/// impl LocalStructure for A {
-///     type State = ();
-///     type Operator = ();
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-/// }
-/// impl LocalStructure for B {
-///     type State = ();
-///     type Operator = ();
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-/// }
-/// let a = HilbertSpace::<u8, A>::factor(0);
-/// let b = HilbertSpace::<u8, B>::factor(0);
-/// let _ = a.tensor_product(&b);
-/// ```
-pub struct HilbertSpace<I, L: LocalStructure> {
-    root: Option<Arc<Node<I, L>>>,
-    metadata: PhantomData<fn() -> L>,
+pub struct HilbertSpace<I> {
+    root: Option<Arc<Node<I>>>,
 }
 
-impl<I, L: LocalStructure> Clone for HilbertSpace<I, L> {
+impl<I> Clone for HilbertSpace<I> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
-            metadata: PhantomData,
         }
     }
 }
 
-impl<I, L: LocalStructure> HilbertSpace<I, L> {
-    fn new(node: Node<I, L>) -> Self {
+impl<I> HilbertSpace<I> {
+    fn new(node: Node<I>) -> Self {
         Self {
             root: Some(Arc::new(node)),
-            metadata: PhantomData,
         }
     }
 
-    fn node(&self) -> &Node<I, L> {
+    fn node(&self) -> &Node<I> {
         self.root.as_deref().expect("live space handle")
     }
 
@@ -115,16 +83,35 @@ impl<I, L: LocalStructure> HilbertSpace<I, L> {
     }
 
     /// Lazily borrows all leaf indices in tensor order, using a work stack.
-    pub fn indices(&self) -> Indices<'_, I, L> {
+    pub fn indices(&self) -> Indices<'_, I> {
         Indices {
             pending: vec![self],
         }
     }
 
-    /// Computes the dimension, failing only when this integer query overflows.
-    pub fn dimension(&self) -> Result<usize, DimensionOverflow> {
+    /// Computes the tensor-space dimension using primitive P's span per factor.
+    ///
+    /// Use a state primitive for a state-space dimension, and an operator
+    /// primitive for an operator-space dimension. The empty tensor has dimension
+    /// one even when P's local dimension cannot be represented.
+    pub fn dimension<P: SpanDimension>(&self) -> Result<usize, DimensionOverflow> {
+        let mut indices = self.indices();
+        if indices.next().is_none() {
+            return Ok(1);
+        }
+        let local = P::span_dimension()?.get();
+        indices.try_fold(local, |d, _| d.checked_mul(local).ok_or(DimensionOverflow))
+    }
+
+    /// Computes the dimension for an explicitly chosen uniform local space.
+    ///
+    /// This query does not associate a definition or primitive type with indices.
+    pub fn dimension_with(
+        &self,
+        local: core::num::NonZeroUsize,
+    ) -> Result<usize, DimensionOverflow> {
         self.indices().try_fold(1usize, |d, _| {
-            d.checked_mul(L::DIMENSION.get()).ok_or(DimensionOverflow)
+            d.checked_mul(local.get()).ok_or(DimensionOverflow)
         })
     }
 
@@ -137,7 +124,7 @@ impl<I, L: LocalStructure> HilbertSpace<I, L> {
     }
 }
 
-impl<I: Eq, L: LocalStructure> HilbertSpace<I, L> {
+impl<I: Eq> HilbertSpace<I> {
     /// Constructs a tensor, retaining children and grouping and rejecting duplicates.
     pub fn tensor(children: impl IntoIterator<Item = Self>) -> Result<Self, SpaceError> {
         let children: SumExpr<Self> = children.into_iter().collect();
@@ -179,11 +166,11 @@ impl<I: Eq, L: LocalStructure> HilbertSpace<I, L> {
 }
 
 /// A borrowing, depth-first iterator over a space's leaf indices.
-pub struct Indices<'a, I, L: LocalStructure> {
-    pending: Vec<&'a HilbertSpace<I, L>>,
+pub struct Indices<'a, I> {
+    pending: Vec<&'a HilbertSpace<I>>,
 }
 
-impl<'a, I, L: LocalStructure> Iterator for Indices<'a, I, L> {
+impl<'a, I> Iterator for Indices<'a, I> {
     type Item = &'a I;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(space) = self.pending.pop() {
@@ -195,9 +182,9 @@ impl<'a, I, L: LocalStructure> Iterator for Indices<'a, I, L> {
         None
     }
 }
-impl<I, L: LocalStructure> FusedIterator for Indices<'_, I, L> {}
+impl<I> FusedIterator for Indices<'_, I> {}
 
-impl<I, L: LocalStructure> Drop for HilbertSpace<I, L> {
+impl<I> Drop for HilbertSpace<I> {
     fn drop(&mut self) {
         let mut first = self.root.take();
         let mut pending = Vec::new();
