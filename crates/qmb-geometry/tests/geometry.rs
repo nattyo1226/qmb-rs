@@ -1,20 +1,11 @@
-use qmb_core::{HilbertSpace, SpaceError};
 use qmb_geometry::{
-    Boundary::*, Chain, Geometry, GeometryError, NearestNeighborRelation, index_pairs,
-    index_pairs_by_pos,
+    Boundary::*, Chain, ChainError, NearestNeighborRelation, index_pairs, index_pairs_by_pos,
 };
-use std::{
-    num::NonZeroUsize,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-// Neither Clone nor Default; holding and enumerating existing spaces need neither.
+// Neither Clone, Default, Hash nor Ord: existing index inputs move into a chain.
 #[derive(Debug, PartialEq, Eq)]
 struct Id(usize);
-type H = HilbertSpace<Id>;
-fn factor(n: usize) -> H {
-    H::factor(Id(n))
-}
 fn pairs(relation: &impl NearestNeighborRelation<Index = Id>) -> Vec<(usize, usize)> {
     relation.nn_pairs().map(|(a, b)| (a.0, b.0)).collect()
 }
@@ -23,7 +14,7 @@ fn pairs(relation: &impl NearestNeighborRelation<Index = Id>) -> Vec<(usize, usi
 fn boundaries_are_normalized_sorted_unique_and_loop_free() {
     for n in 0..7 {
         for boundary in [Open, Periodic] {
-            let chain = Chain::from_sites((0..n).map(factor), boundary).unwrap();
+            let chain = Chain::from_sites((0..n).map(|i| [Id(i)]), boundary).unwrap();
             let edges: Vec<_> = chain.nn_site_pairs().collect();
             let mut expected: Vec<_> = (0..n.saturating_sub(1)).map(|i| (i, i + 1)).collect();
             if boundary == Periodic && n > 2 {
@@ -35,17 +26,14 @@ fn boundaries_are_normalized_sorted_unique_and_loop_free() {
             assert!(edges.windows(2).all(|w| w[0] < w[1]));
             assert_eq!(pairs(&chain), expected);
             assert_eq!(chain.boundary(), boundary);
-            assert!(chain.space().shares_node_with(chain.geometry().space()));
         }
     }
 }
 
 #[test]
-fn nested_sites_pair_orders_and_empty_sides() {
-    let a = factor(9);
-    let b = factor(3);
-    let left = H::tensor([H::unit(), H::tensor([a.clone(), b.clone()]).unwrap()]).unwrap();
-    let right = H::tensor([factor(8), H::tensor([factor(2), factor(7)]).unwrap()]).unwrap();
+fn variable_length_sites_pair_orders_and_empty_sides() {
+    let left = [Id(9), Id(3)];
+    let right = [Id(8), Id(2), Id(7)];
     let all = vec![(9, 8), (9, 2), (9, 7), (3, 8), (3, 2), (3, 7)];
     assert_eq!(
         index_pairs(&left, &right)
@@ -60,7 +48,7 @@ fn nested_sites_pair_orders_and_empty_sides() {
         [(9, 8), (3, 2)]
     );
     let chain = Chain::from_sites(
-        [left.clone(), right.clone(), H::unit(), factor(6)],
+        [Vec::from(left), Vec::from(right), vec![], vec![Id(6)]],
         Periodic,
     )
     .unwrap();
@@ -72,105 +60,101 @@ fn nested_sites_pair_orders_and_empty_sides() {
             .collect::<Vec<_>>(),
         [(9, 8), (3, 2), (9, 6)]
     );
-    let copy = chain.clone();
-    assert!(copy.space().shares_node_with(chain.space()));
-    assert!(copy.sites()[0].shares_node_with(&left));
-    assert!(
-        copy.sites()[0]
-            .children()
-            .nth(1)
-            .unwrap()
-            .children()
-            .next()
-            .unwrap()
-            .shares_node_with(&a)
-    );
-    assert_eq!(
-        chain.geometry().site(99).err(),
-        Some(GeometryError::SiteOutOfBounds)
-    );
+    assert_eq!(chain.site(0).unwrap(), [Id(9), Id(3)]);
+    assert!(chain.site(2).unwrap().is_empty());
+    assert_eq!(chain.site(99).err(), Some(ChainError::SiteOutOfBounds));
     assert!(chain.sites().get(99).is_none());
-    assert_eq!(index_pairs(&left, &H::unit()).count(), 0);
-    assert_eq!(index_pairs(&H::unit(), &right).count(), 0);
+    assert_eq!(index_pairs(chain.site(0).unwrap(), &[]).count(), 0);
+    assert_eq!(index_pairs(&[], chain.site(1).unwrap()).count(), 0);
 }
 
 #[test]
-fn existing_full_order_grouping_and_errors() {
-    let a = factor(5);
-    let b = factor(1);
-    let c = factor(8);
-    let full = H::tensor([c.clone(), H::tensor([a.clone(), b.clone()]).unwrap()]).unwrap();
-    let geometry = Geometry::with_space([a.clone(), b.clone(), c.clone()], &full).unwrap();
-    assert!(geometry.space().shares_node_with(&full));
+fn duplicates_within_and_across_sites_and_count_mismatches_are_rejected() {
     assert_eq!(
-        geometry.space().indices().map(|i| i.0).collect::<Vec<_>>(),
-        [8, 5, 1]
-    );
-    assert!(geometry.sites()[0].shares_node_with(&a));
-    assert_eq!(
-        Geometry::from_sites([a.clone(), a.clone()]).err(),
-        Some(GeometryError::Space(SpaceError::DuplicateIndex))
+        Chain::from_sites([[Id(1), Id(1)]], Open).err(),
+        Some(ChainError::DuplicateIndex)
     );
     assert_eq!(
-        Geometry::with_space([a.clone(), b.clone()], &full).err(),
-        Some(GeometryError::IncompatibleSpace)
+        Chain::from_sites([[Id(1)], [Id(1)]], Open).err(),
+        Some(ChainError::DuplicateIndex)
     );
     assert_eq!(
-        Geometry::with_space([a.clone(), factor(99), c], &full).err(),
-        Some(GeometryError::IncompatibleSpace)
+        Chain::with_sites(2, [[Id(1)]], Open).err(),
+        Some(ChainError::SiteCountMismatch)
     );
     assert_eq!(
-        Chain::with_sites(2, [a], Open).err(),
-        Some(GeometryError::SiteCountMismatch)
+        Chain::with_sites(0, [[Id(1)]], Open).err(),
+        Some(ChainError::SiteCountMismatch)
+    );
+    assert_eq!(
+        Chain::with_sites(1, [[Id(1)]], Open).unwrap().sites().len(),
+        1
+    );
+    // Equal identities may be reused in separately constructed chains.
+    assert_eq!(
+        Chain::from_sites([[Id(1)]], Open).unwrap().site(0).unwrap(),
+        [Id(1)]
     );
 }
 
 static ISSUED: AtomicUsize = AtomicUsize::new(0);
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Generated(usize);
 impl Default for Generated {
     fn default() -> Self {
         Self(ISSUED.fetch_add(1, Ordering::SeqCst))
     }
 }
+
 #[test]
 fn generation_is_exact_ordered_and_never_repeated_by_access_or_clone() {
     let start = ISSUED.load(Ordering::SeqCst);
     let chain = Chain::<Generated>::new(3, 2, Open).unwrap();
     assert_eq!(ISSUED.load(Ordering::SeqCst), start + 6);
     assert_eq!(
-        chain.space().indices().map(|i| i.0).collect::<Vec<_>>(),
+        chain
+            .sites()
+            .iter()
+            .flatten()
+            .map(|i| i.0)
+            .collect::<Vec<_>>(),
         (start..start + 6).collect::<Vec<_>>()
     );
     let copy = chain.clone();
-    assert!(copy.space().shares_node_with(chain.space()));
+    assert_eq!(copy.sites(), chain.sites());
+    assert_eq!(copy.boundary(), chain.boundary());
+    assert_eq!(
+        copy.site(0).unwrap(),
+        [Generated(start), Generated(start + 1)]
+    );
     assert_eq!(chain.nn_pairs().count(), 8);
     let empty = Chain::<Generated>::new(0, 3, Open).unwrap();
     assert!(empty.sites().is_empty());
-    assert_eq!(
-        empty.space().dimension_with(NonZeroUsize::new(2).unwrap()),
-        Ok(1)
-    );
     let units = Chain::<Generated>::new(4, 0, Periodic).unwrap();
     assert_eq!(units.sites().len(), 4);
-    assert_eq!(
-        units.space().dimension_with(NonZeroUsize::new(2).unwrap()),
-        Ok(1)
-    );
-    assert!(units.sites().iter().all(|s| s.indices().next().is_none()));
+    assert!(units.sites().iter().all(Vec::is_empty));
+    assert_eq!(units.nn_site_pairs().count(), 4);
     assert_eq!(units.nn_pairs().count(), 0);
     assert_eq!(ISSUED.load(Ordering::SeqCst), start + 6);
-    // A Default implementation that reuses identity violates the issuance
-    // contract and is caught by ordinary space validation.
+    // Default alone does not guarantee freshness; validate ordinary equality.
     assert_eq!(
         Chain::<usize>::new(2, 1, Open).err(),
-        Some(GeometryError::Space(SpaceError::DuplicateIndex))
+        Some(ChainError::DuplicateIndex)
     );
 }
 
-// A second, private geometry implements the same public capability. Shared
-// conversion functions require neither custom index generation nor Clone.
-struct TwoSites([H; 2]);
+#[test]
+fn borrowed_indices_need_no_static_lifetime_or_clone() {
+    let names = [String::from("left"), String::from("right")];
+    let chain = Chain::from_sites(names.iter().map(|s| [s.as_str()]), Open).unwrap();
+    assert_eq!(
+        chain.nn_pairs().map(|(&a, &b)| (a, b)).collect::<Vec<_>>(),
+        [("left", "right")]
+    );
+}
+
+// Relationship implementations need no common Geometry container.
+struct TwoSites([Vec<Id>; 2]);
 impl NearestNeighborRelation for TwoSites {
     type Index = Id;
     fn nn_pairs(&self) -> impl Iterator<Item = (&Id, &Id)> + '_ {
@@ -180,34 +164,21 @@ impl NearestNeighborRelation for TwoSites {
         index_pairs_by_pos(&self.0[0], &self.0[1])
     }
 }
+
 #[test]
 fn relationship_capability_is_shared_by_distinct_geometries() {
-    let other = TwoSites([factor(4), H::tensor([factor(1), factor(9)]).unwrap()]);
-    let chain = Chain::from_sites(other.0.iter().cloned(), Open).unwrap();
+    let other = TwoSites([vec![Id(4)], vec![Id(1), Id(9)]]);
+    let chain = Chain::from_sites([vec![Id(4)], vec![Id(1), Id(9)]], Open).unwrap();
     assert_eq!(pairs(&other), pairs(&chain));
     assert_eq!(other.nn_pairs_by_pos().count(), 1);
 }
 
 #[test]
-fn geometry_error_conversion_preserves_message_and_source() {
-    let original = SpaceError::DuplicateIndex;
-    let error = GeometryError::from(original);
-    assert_eq!(error, GeometryError::Space(original));
-    assert_eq!(error.to_string(), original.to_string());
-    assert_eq!(
-        std::error::Error::source(&error).unwrap().to_string(),
-        original.to_string()
-    );
+fn chain_errors_have_messages_and_no_space_dependency() {
     for (error, message) in [
-        (
-            GeometryError::SiteOutOfBounds,
-            "site number is out of bounds",
-        ),
-        (GeometryError::SiteCountMismatch, "site count mismatch"),
-        (
-            GeometryError::IncompatibleSpace,
-            "sites do not partition the full space",
-        ),
+        (ChainError::SiteOutOfBounds, "site number is out of bounds"),
+        (ChainError::SiteCountMismatch, "site count mismatch"),
+        (ChainError::DuplicateIndex, "duplicate factor index"),
     ] {
         assert_eq!(error.to_string(), message);
         assert!(std::error::Error::source(&error).is_none());

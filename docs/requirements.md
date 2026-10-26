@@ -1,6 +1,6 @@
 # qmb-rs 要件
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 文書の目的と責任分離
 
@@ -8,7 +8,7 @@
 
 2026-10-26 に LocalStructure の廃止方針を採用した。primitive の意味・規則は S・O の型と各能力の実装で定め、追加の定義ラベルは設けない。次元は primitive 型全体の span、恒等元は演算子 primitive O の値として提供する。L による関連付け・一致判定は廃止し、[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)で置き換える。製品コード・テスト・利用例を移行済みである。
 
-同日に、Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する方針を採用した。以下の幾何・配置の要件は移行先を表し、製品コード・テスト・利用例の移行は未着手である。詳細は[Chain の設計](design/geometry.md)と[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に記録する。
+同日に、Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する方針を採用した。製品コード・テスト・利用例は2026-10-27に移行した。以下の幾何・配置の要件は移行後の契約を表す。詳細は[Chain の設計](design/geometry.md)と[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行)に記録する。
 
 初期版の提供範囲と完成条件は、[初期版の設計](design/initial-release.md)に定め、9 節にその概要と制限をまとめる。本書には後続機能の数学的契約も含め、機能一覧全体を初期版の必須実装にはしない。公開 API、Rust の具体的な型や内部実装は、本文で採用済みの方針に従って各段階で具体化する。
 

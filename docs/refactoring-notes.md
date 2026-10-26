@@ -1,12 +1,12 @@
 # リファクタリングの整理メモ（一時）
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 目的と位置づけ
 
 [アーキテクチャ第10節](architecture.md#10-将来の必須課題)の5項目について、現状、検討事項、依存関係、着手順序を整理する作業用文書である。State・Operator・Structure・Space の所有・共有・関連付けと、Geometry と空間の依存関係の見直しを全体の対象とする。
 
-必須課題そのものは既存の合意事項である。係数型は3.1節のとおり移行済みであり、LocalStructure の廃止と ordinary な HilbertSpace の責任分離も3.2・3.4節のとおり実装済みである。Operator と State の整理は、検討事項が多いため初期版実装後に延期することを2026-10-26に決定した。同日、Chain は Site ごとの Index 列と境界条件を直接保持する方針を3.5節で採用した。Chain の実装移行は未着手であり、State と Operator の型の統合、Grading の具体的な保持方法・API は未決である。
+必須課題そのものは既存の合意事項である。係数型は3.1節のとおり移行済みであり、LocalStructure の廃止と ordinary な HilbertSpace の責任分離も3.2・3.4節のとおり実装済みである。Operator と State の整理は、検討事項が多いため初期版実装後に延期することを2026-10-26に決定した。同日、Chain は Site ごとの Index 列と境界条件を直接保持する方針を3.5節で採用した。Chain の実装移行は2026-10-27に実施し、State と Operator の型の統合、Grading の具体的な保持方法・API は未決である。
 
 結論を得た項目には、採否、理由、公開 API と実装への影響、移行方法、検証結果を追記する。確定した内容は対応する要件・設計文書・実装計画へ反映し、反映後に本書を整理または削除する。
 
@@ -137,9 +137,9 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 
 **採用した結論（2026-10-26）**：Chain は `sites: Vec<Vec<I>>` と境界条件を直接保持する。Geometry 構造体は廃止し、各 Site の HilbertSpace と全空間を保持しない。幾何関係に必要な Site 順序・Site 内の Index 順序だけを管理し、HilbertSpace の構築・保持・grouping・全体の因子順序・局所式の配置と束縛はモデル構築側・利用側へ移す。
 
-**現状**：Chain と Geometry から局所構造型への依存は除去済みであり、Index 型だけを指定して HilbertSpace の因子構造を保持する。近接関係の列挙は Site 順序・境界条件・葉の Index を使う。一方、spin-half の utility は Factor への配置と全空間への束縛に現在の空間 API を利用する。
+**移行前**：Chain は Geometry を介して Site ごとの HilbertSpace と全空間を保持していた。近接関係は Site 順序・境界条件・葉の Index だけを使い、spin-half の utility が保持済みの Factor と全空間に依存していた。
 
-**理由**：近接関係の計算は Site 数・境界条件・Site ごとの Index 列だけを使い、Tensor の grouping や全空間を参照しない。現在の空間保持はモデル utility に Factor と全空間を供給するための結合であり、Chain 自身の責任にする必要はない。関係ごとの能力 trait は Geometry 構造体を保持せずに実装できる。
+**理由**：近接関係の計算は Site 数・境界条件・Site ごとの Index 列だけを使い、Tensor の grouping や全空間を参照しない。移行前の空間保持はモデル utility に Factor と全空間を供給するための結合であり、Chain 自身の責任にする必要はない。関係ごとの能力 trait は Geometry 構造体を保持せずに実装できる。
 
 **採用した契約**：
 
@@ -152,11 +152,11 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 
 **依存関係**：3.3の型統合や Grading の設計完了を前提にしない。qmb-geometry crate と関係 trait は維持し、Geometry の再公開、空間を受け渡す API、モデル utility・テスト・例を一緒に移行する。
 
-**状態と完了条件**：設計方針は確定、実装移行は未着手である。詳細は[Chain の設計](design/geometry.md)、移行範囲・検証は[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に記録する。実装後に型制約、Index の同一性、列挙・空間接続・モデル構築の契約を検証して完了を記録する。
+**完了（2026-10-27）**：採用方針に沿って実装移行し、workspace 全体の検証に成功した。詳細は[Chain の設計](design/geometry.md)、移行範囲・検証は[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行)に記録する。型制約、Index の同一性、列挙・空間接続・モデル構築の回帰テストを移行・追加した。検証結果は実装計画第9節に記録する。
 
 ## 4. 着手順序の提案
 
-係数型の整理、LocalStructure 廃止、および ordinary な HilbertSpace の責任分離は完了済みである。2026-10-26の判断を反映し、Chain の次の作業は採用した Index 列保持への実装移行とする。Operator／State の整理は初期版実装後、Grading の情報保持・API は fermion 系の実装時に具体化する。
+係数型の整理、LocalStructure 廃止、および ordinary な HilbertSpace の責任分離は完了済みである。2026-10-26の判断を反映し、Chain の Index 列保持・ToSpace・モデル utility の移行を実施した。Operator／State の整理は初期版実装後、Grading の情報保持・API は fermion 系の実装時に具体化する。
 
 | 順序 | 作業 | 成果物 |
 | --- | --- | --- |
@@ -164,11 +164,11 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 | 2（完了） | 係数の能力契約と Complex の具体実装、利用側の移行 | 空間・式の構造を維持した実装と検証結果 |
 | 3（完了） | LocalStructure の責任分担の決定と廃止 | 3.2の採否・根拠・API と移行・検証結果 |
 | 3と同時に完了 | ordinary な HilbertSpace を Index と Tensor の構造に分離 | 3.4の ordinary の責任分離と移行・検証結果 |
-| 次の移行（方針確定・実装未着手） | Chain の Index 列保持、Geometry 廃止、空間管理とモデル構築の接続の移行 | 3.5の採用方針に沿った実装・縦断検証 |
+| 4（完了） | Chain の Index 列保持、Geometry 廃止、空間管理とモデル構築の接続の移行 | 3.5の採用方針に沿った実装・縦断検証 |
 | 初期版実装後 | State／Operator の数学的整理と共通化範囲の検討 | 3.3の採否・根拠・API 案と、採用した場合のリファクタリング |
 | fermion 系の実装時 | Grading の情報保持と API の具体化 | fermion 系の実装要件に基づく設計・実装 |
 
-初期版の機能実装は[実装計画](implementation-plan.md)に従い、3.3や Grading の検討・実装を待たずに進める。3.5は確定した範囲で移行し、実装検証後に完了とする。
+初期版の機能実装は[実装計画](implementation-plan.md)に従い、3.3や Grading の検討・実装を待たずに進める。3.5の移行と検証も完了した。
 
 ## 5. 移行時の検証
 
@@ -197,7 +197,7 @@ MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは�
 | 2. LocalStructure | **完了（2026-10-26）**。S・O の直接指定、Identity・SpanDimension、空間・幾何からの L 除去を実装・検証。追加の定義ラベルは設けない |
 | 3. Operator／State | **初期版実装後へ延期（2026-10-26）**。検討事項が多いため、現行の分離を維持して初期版を実装する。数学的対象・共通化範囲は未決 |
 | 4. HilbertSpace | **初期版の範囲は完了（2026-10-26）**。Index と Tensor の構造に分離済み。Grading の情報保持・API は fermion 系の実装時に具体化する |
-| 5. Chain | **方針確定（2026-10-26）、実装未着手**。Site ごとの Index 列と境界条件を直接保持し、Geometry と空間保持を廃止する |
-| 着手順序 | 係数型・LocalStructure・ordinary な空間の責任分離は完了。Chain の次の作業は実装計画第9節の実装移行。Operator／State は初期版実装後、Grading の情報保持・API は fermion 系の実装時に検討する |
+| 5. Chain | **完了（2026-10-27）**。Site ごとの Index 列と境界条件を直接保持し、Geometry と空間保持を廃止する |
+| 着手順序 | 係数型・LocalStructure・ordinary な空間の責任分離は完了。Chain の実装移行と検証は実装計画第9節に記録。Operator／State は初期版実装後、Grading の情報保持・API は fermion 系の実装時に検討する |
 
 参照されている `docs/step-3-design.md` は、現時点の作業ツリーには存在しない。現状の把握には、現行コード・テストと実装計画の段階4の実装記録を用いた。実装計画の冒頭に残っていた古い進捗・crate 数は、係数型の採用方針の反映時に更新した。

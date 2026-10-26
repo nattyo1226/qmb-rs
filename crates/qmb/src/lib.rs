@@ -39,8 +39,11 @@ pub use qmb_core::{
     Conjugate, Divide, ExpressionError, HilbertSpace, Identity, ImaginaryUnit, LocalOperator,
     LocalState, Operator, RealPart, SpanDimension, State,
 };
-pub use qmb_geometry::{Boundary, Chain, Geometry, GeometryError, NearestNeighborRelation};
+pub use qmb_geometry::{Boundary, Chain, ChainError, NearestNeighborRelation};
 pub use qmb_spin_half::{SpinHalfOperator, SpinHalfState};
+
+pub mod space;
+pub use space::ToSpace;
 
 /// Norm, normalization and normalized expectation extensions (uses std).
 #[cfg(feature = "normalize")]
@@ -52,7 +55,7 @@ pub use qmb_normalize::{
 
 /// Common expression types and optional normalization extension traits.
 pub mod prelude {
-    pub use crate::{HilbertSpace, LocalOperator, LocalState, Operator, State};
+    pub use crate::{HilbertSpace, LocalOperator, LocalState, Operator, State, ToSpace};
     #[cfg(feature = "normalize")]
     pub use qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn};
 }

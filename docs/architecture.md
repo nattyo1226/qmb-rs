@@ -1,12 +1,12 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 文書の位置づけ
 
 本書は、[要件](requirements.md)に基づく設計の概要と、合意済みの設計判断を記録する。各対象の詳細な契約は `docs/design/` 以下の文書に記録する。具体的な Rust の型、公開 API、および内部実装は、対応する設計を決めた時点で追記する。
 
-2026-10-26 に Chain の Index 列保持への移行方針を採用した。本書の Chain の構成は移行先を表し、Geometry・HilbertSpace を保持する製品コードからの移行は未着手である。
+2026-10-26 に Chain の Index 列保持への移行方針を採用した。2026-10-27 に Geometry・HilbertSpace を保持する構成からの実装移行を行った。本書は移行後の構成を表す。
 
 ## 2. 責任分離
 
@@ -26,11 +26,11 @@
 
 ### 2.1. crate の構成
 
-以下の geometry から core への依存は現実装の構成であり、Chain の Index 列保持への移行に合わせて、空間 API の移動で不要になった依存を除く。
+Chain の Index 列保持への移行により、qmb-geometry は core に依存しない。空間への変換は両 crate に依存する qmb::space が担う。
 
 代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得・写像の表現係数を同じ crate が所有する。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
-具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。2026-10-25 にnorm・状態の正規化・正規化期待値を `qmb-normalize` へ分離する方針を採用したため、計画上は計7 crate とする。basic・spin・geometry・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core は basic・UUID・乱数源・具体的代数・Geometry・normalize・数値 backend に依存せず、`no_std + alloc` を維持する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
+具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。2026-10-25 にnorm・状態の正規化・正規化期待値を `qmb-normalize` へ分離する方針を採用したため、計画上は計7 crate とする。basic・spin・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core は basic・UUID・乱数源・具体的代数・Geometry・normalize・数値 backend に依存せず、`no_std + alloc` を維持する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
 
 core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, C>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装する。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
 
@@ -122,9 +122,9 @@ Site は外側の Vec の位置を表す usize、内側の Vec は Site 内の�
 
 Chain は open / periodic を扱う。近接 Site ペアを正規化した辞書順で列挙し、長さ0・1で辺なし、長さ2では両境界条件とも一辺とする。関係ごとの trait を設け、NearestNeighborRelation は全 Index 組合せの `nn_pairs()` と同じ位置同士の `nn_pairs_by_pos()` を提供する。後者は短い方まで列挙する。関係の列挙と相互作用項の生成は区別し、Heisenberg・Neel utility は spin-half に置く。
 
-空間への変換は qmb の接続用 module が提供する独立した拡張 trait `ToSpace` の `to_space` で扱う。Chain には `I: Clone + Eq` のときに実装し、借用から同じ Index と既定の因子順序を持つ空間を構築する。生成した空間は利用側が保持する。trait 全体や幾何関係の列挙には Clone を要求せず、Grading の情報の渡し方は fermion 系の実装時に具体化する。この実装は未着手である。
+空間への変換は qmb の接続用 module が提供する独立した拡張 trait `ToSpace` の `to_space` で扱う。Chain には `I: Clone + Eq` のときに実装し、借用から同じ Index と既定の因子順序を持つ空間を構築する。生成した空間は利用側が保持する。trait 全体や幾何関係の列挙には Clone を要求せず、Grading の情報の渡し方は fermion 系の実装時に具体化する。qmb::space::ToSpace として実装し、root と prelude から公開する。
 
-Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移す。移行先の契約は [Chain の設計](design/geometry.md)、実装範囲と検証は [実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に従う。Step 4 の空間保持・共有に関する契約は移行前の記録とする。
+Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移す。移行先の契約は [Chain の設計](design/geometry.md)、実装範囲と検証は [実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行)に従う。Step 4 の空間保持・共有に関する契約は移行前の記録とする。
 
 ## 9. 初期版の提供範囲と完成条件
 
@@ -144,9 +144,9 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 2. **LocalStructure の必要性（実装移行完了）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
 3. **Operator と State の整理（初期版実装後）**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。2026-10-26に、検討事項が多いため初期版実装後へ延期した。初期版では現行の分離を維持し、この整理の結論を実装の前提条件にしない。
 4. **HilbertSpace の最小構成（初期版の範囲は完了）**：LocalStructure 廃止により、Index と順序付き Tensor の構造だけを保持する構成へ移行した。primitive 型・次元・局所規則は式・取得時の入力・個別能力が担う。Grading の具体的な保持方法・API は、2026-10-26の判断により、fermion 系の実装時に具体化する。
-5. **Chain の内部表現（方針確定・実装未着手）**：Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する。空間の構築・保持・grouping・全体の因子順序・配置と束縛は利用側へ移す。理由と契約は[整理メモの3.5節](refactoring-notes.md#35-chain-の内部表現)に記録する。Grading の設計完了を前提にしない。
+5. **Chain の内部表現（実装移行済み）**：Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する。空間の構築・保持・grouping・全体の因子順序・配置と束縛は利用側へ移す。理由と契約は[整理メモの3.5節](refactoring-notes.md#35-chain-の内部表現)に記録する。Grading の設計完了を前提にしない。
 
-初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持方針は確定し、実装移行を残す。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持・ToSpace・モデル utility の実装移行も2026-10-27に実施した。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
 
 係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
 

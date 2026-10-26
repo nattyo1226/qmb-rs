@@ -1,10 +1,10 @@
 # Chain・Site と自由度の配置
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 対象と責任分担
 
-本書は[要件](../requirements.md)に基づき、Chain と Site への自由度の配置を定める。2026-10-26 に、Chain が Site ごとの Index 列と境界条件だけを保持する方針を採用した。以下は移行先の設計であり、製品コード・テスト・利用例の移行は未着手である。[Step 4 の合意事項](../step-4-decisions.md)にある Geometry・HilbertSpace の保持は移行前の記録とする。
+本書は[要件](../requirements.md)に基づき、Chain と Site への自由度の配置を定める。2026-10-26 に、Chain が Site ごとの Index 列と境界条件だけを保持する方針を採用した。2026-10-27 に製品コード・テスト・利用例を移行した。以下を現在の契約とする。[Step 4 の合意事項](../step-4-decisions.md)にある Geometry・HilbertSpace の保持は移行前の記録とする。
 
 `qmb-geometry` は Site の順序、Site ごとの自由度の Index 列、境界条件と幾何関係の列挙を担当する。Hilbert 空間の構築・保持・grouping・全体の因子順序は利用側が管理する。局所式の配置・束縛・評価は `qmb-core`、UUID の具体型 `Id128` は `qmb-basic`、XYZ・Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・縦断例は `qmb` が担当する。
 
@@ -74,9 +74,9 @@ HilbertSpace の grouping と全体の因子順序は利用側が保持する。
 
 ### 6.1. 空間への変換能力 ToSpace
 
-2026-10-26 に、空間への変換を独立した拡張 trait `ToSpace`、メソッド `to_space` で提供する方針を採用した。Chain と HilbertSpace の両方に依存する `qmb` の接続用 module に置き、qmb から公開する。Chain の保持構造や `NearestNeighborRelation` の必須能力には含めず、qmb-geometry に空間への依存を戻さない。実装は未着手である。
+2026-10-26 に、空間への変換を独立した拡張 trait `ToSpace`、メソッド `to_space` で提供する方針を採用した。Chain と HilbertSpace の両方に依存する `qmb` の接続用 module に置き、qmb から公開する。Chain の保持構造や `NearestNeighborRelation` の必須能力には含めず、qmb-geometry は空間に依存しない。2026-10-27 に qmb::space::ToSpace として実装し、root と prelude からも再公開した。
 
-ordinary な空間に対するシグネチャは次の形を想定する。
+ordinary な空間に対する実装済みのシグネチャは次のとおりである。
 
 ```rust
 pub trait ToSpace {
@@ -98,11 +98,11 @@ Chain の Index 列に含まれない任意の grouping や、Site 順と異な�
 
 Chain は Site ごとの Index 列の借用と、`nn_site_pairs()` による近接 Site ペアの列挙を提供する。近接 Site ペアは正規化した番号の辞書順とし、self-loop・重複辺を生成しない。長さ0・1では辺なし、長さ2では open / periodic とも `(0,1)` 一つとする。
 
-関係ごとの trait を設け、`NearestNeighborRelation` の `nn_pairs()` は近接 Site 間の Index 全組合せ、`nn_pairs_by_pos()` は同じ位置同士を短い方まで列挙する。Index は Chain から借用し、Clone・Default やペア全体の Vec は要求しない。片側が空ならペアなしとし、Site ペア順と Site 内の Index 順序を保持する。共通関数も Index 列の組合せ・位置対応として整理し、HilbertSpace を引数とする契約を移行する。
+関係ごとの trait を設け、`NearestNeighborRelation` の `nn_pairs()` は近接 Site 間の Index 全組合せ、`nn_pairs_by_pos()` は同じ位置同士を短い方まで列挙する。Index は Chain から借用し、Clone・Default やペア全体の Vec は要求しない。片側が空ならペアなしとし、Site ペア順と Site 内の Index 順序を保持する。共通関数 index_pairs・index_pairs_by_pos は二つの Index スライスを受け取り、組合せ・位置対応を列挙する。
 
 演算子・係数の選択、Factor・全空間の構築または既存空間との接続、局所式の配置・束縛、状態の構築はモデル utility・利用側が担当する。既存空間との接続では必要な Factor の存在を検証する。Neel を全空間上に構築する経路では、Site ごとの Index が全因子に対応することを確認し、Up／Down は Site 順で決め、状態は全空間の因子順で構築する。
 
-XYZ・Heisenberg・Neel utility の一 Site 一 spin の制約、0-site の zero Hamiltonian・単位状態、解析的期待値は維持する。空間の構築や接続で新しい Index を発行し直さない。既存空間を明示する経路と Index から空間を構築する経路の具体的な関数シグネチャは、実装移行時に定める。
+XYZ・Heisenberg・Neel utility の一 Site 一 spin の制約、0-site の zero Hamiltonian・単位状態、解析的期待値は維持する。空間の構築や接続で新しい Index を発行し直さない。utility は全空間を明示的に受け取る。新規空間は呼び出し側が ToSpace で構築し、既存空間はそのまま渡す。各 utility は一 Site 一 spin と全因子の過不足・不一致を検証し、不一致は UtilityError::IncompatibleSpace とする。
 
 次近接などの追加の関係 trait と追加の幾何型は、その機能を導入するときに設計する。Geometry 構造体の保持は拡張の前提条件にしない。
 
@@ -112,7 +112,7 @@ Chain の Site 順序・関係・配置は構築後に変更しない。異な�
 
 ## 9. 検証対象
 
-以下は移行後に実施する検証であり、成功済みの記録ではない。
+以下を既存テストと追加の回帰テストで検証した。workspace 全体の検証結果は[実装計画第9節](../implementation-plan.md#9-chain-の-index-列保持への移行)に記録する。
 
 - Clone・Default のない Index の所有入力・借用列挙、Site 内・Site 間の重複拒否、範囲外・Site 数不一致、空・可変長・複数自由度の列。
 - 新規発行の回数と順序、参照・複製・空間接続による識別値の保持。
@@ -121,8 +121,34 @@ Chain の Site 順序・関係・配置は構築後に変更しない。異な�
 - ToSpace の変換前後での Index の同一性と順序、空の Chain、繰り返し変換した空間の互換性、元の Chain の不変性。Clone の要求が変換実装に限定されること。
 - 一 Site 一 spin の制約、0-site、両精度の Neel の norm、XYZ・Heisenberg の Hermiticity と独立行列・解析的期待値との一致。
 
-## 10. 実装移行の境界
+## 10. 実装した API と移行方法（2026-10-27）
 
-Geometry とその再公開、`Chain::from_geometry`・`geometry()`・`space()`、HilbertSpace を受け渡す Site API は新しい責任分担へ移行する。空間の構築・参照・完全性検証を利用側へ移し、テスト・facade・実行例を追従させる。エラーは Chain の入力検証と空間接続側の検証に分け、具体名・constructor 名・借用 API の詳細は実装時に定める。
+| 移行前 | 移行後 |
+| --- | --- |
+| Geometry と Chain の空間保持 | Chain が `Vec<Vec<I>>` と境界条件を直接所有 |
+| `GeometryError` | `ChainError` の `SiteOutOfBounds`・`SiteCountMismatch`・`DuplicateIndex`。空間接続の不一致は utility 側の `UtilityError::IncompatibleSpace` |
+| `Chain::from_sites` / `with_sites` の HilbertSpace 入力 | Site ごとの所有 Index の IntoIterator 入力。Index は移動して取り込む |
+| `Geometry::new` による空間と Index の生成 | `Chain::new` による Index 列の生成 |
+| `geometry()`・`space()`・`from_geometry` | 削除。空間生成は `ToSpace::to_space`、既存空間は利用側で保持 |
+| `sites()` の空間列 | `&[Vec<I>]`。`site(i)` は `Result<&[I], ChainError>` |
+| HilbertSpace を受け取る index_pairs・index_pairs_by_pos | 二つの `&[I]` を借用する共通関数 |
+| `xyz(&chain, jx, jy, jz)` | `xyz(&chain, &space, jx, jy, jz)` |
+| `heisenberg(&chain, coupling)` | `heisenberg(&chain, &space, coupling)` |
+| `neel(&chain, first)` | `neel(&chain, &space, first)` |
 
-移行前の「Chain の Clone に I: Clone は不要」「Site と全空間の Arc 節点を Chain が共有する」という保証は、所有 Index 列の契約へ置き換える。空間接続時にだけ必要な Clone を、Chain の保持・借用列挙へ波及させない。`qmb-geometry` の core 依存は空間 API の移動に合わせて棚卸しし、不要になった依存を除く。
+Geometry・`GeometryError` の再公開を削除し、qmb root から `ChainError` と ToSpace、prelude から ToSpace を公開した。Chain の Clone は `I: Clone` を要求し、所有 Index 列を同じ識別値で複製する。保持・借用列挙には Clone を要求しない。qmb-geometry から core の通常依存を除去し、no_std + alloc と thiserror によるエラー定義を維持した。core の式・空間内部の共有は変更していない。
+
+新規空間を使う場合の流れは次のとおりである。利用側で保持する space に、Index を再発行せずにモデルを接続する。
+
+```rust
+use num_complex::Complex;
+use qmb::{Boundary, Chain, Id128, SpinHalfState, ToSpace};
+use qmb::spin_half::utility::{heisenberg, neel};
+
+let chain = Chain::<Id128>::new(6, 1, Boundary::Open)?;
+let space = chain.to_space()?;
+let h = heisenberg(&chain, &space, 1.0_f64)?;
+let psi = neel::<_, Complex<f64>>(&chain, &space, SpinHalfState::Up)?;
+```
+
+既存空間を利用する場合は、その Index を Site ごとの列として Chain に渡し、元の空間を utility に渡す。utility は実際の Factor を反復的に走査して借用するため、Index の Clone を要求しない。Site 順と空間の因子順が異なっても、Neel の向きは Site 順、状態の因子順は指定した空間に従う。Hamiltonian は指定空間に bind し、空間の元の grouping と共有節点を保持する。状態は指定空間と互換な空間を持ち、元の空間の木は変更しない。

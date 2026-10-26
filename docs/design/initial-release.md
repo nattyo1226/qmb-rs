@@ -1,6 +1,6 @@
 # 初期版の提供範囲と完成条件
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 初期版の目的と文書の位置付け
 
@@ -26,7 +26,7 @@
 
 演算子・状態の具体的な規約と各操作の空間選択は要件に従う。展開結果は基底情報を持たない通常の式木とし、入力の式を変更しない。状態式の `act` は遅延した作用を構築し、`evaluate` は基底を指定しない局所規則による評価を行う。通常の作用・内積・trace に基底展開や行列化を要求しない。
 
-標準の幾何は 1D Chain のみとする。2026-10-26 に、Site ごとの Index 列 `Vec<Vec<I>>` と境界条件を直接保持し、Geometry 構造体と空間保持を廃止する方針を採用した。この実装移行は未着手である。Site 順・Site 内の順序を保持し、空間の構築・保持・全体の因子順序・grouping・配置と束縛は利用側が担当する。既存空間の因子順序は暗黙に変更しない。近接関係は Site 番号のペアから Index の全組合せまたは同じ位置同士へ借用列挙できる。詳細は [Chain の配置契約](geometry.md#41-初期版の-1d-chain-の配置規則)に定める。
+標準の幾何は 1D Chain のみとする。2026-10-26 に、Site ごとの Index 列 `Vec<Vec<I>>` と境界条件を直接保持し、Geometry 構造体と空間保持を廃止する方針を採用した。2026-10-27に実装へ反映した。Site 順・Site 内の順序を保持し、空間の構築・保持・全体の因子順序・grouping・配置と束縛は利用側が担当する。既存空間の因子順序は暗黙に変更しない。近接関係は Site 番号のペアから Index の全組合せまたは同じ位置同士へ借用列挙できる。詳細は [Chain の配置契約](geometry.md#41-初期版の-1d-chain-の配置規則)に定める。
 
 標準提供する局所構造は spin-1/2 のみとする。非公開の別の局所代数や非正規直交基底による検証は、拡張性の完成条件であり、追加の builtin を公開する要求とは区別する。
 
@@ -86,9 +86,9 @@ Index の一意性・同一性、不変な実体の共有、および個別ル�
 
 ## 5. 残る実装設計
 
-crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、norm・状態の正規化の `qmb-normalize`、利用窓口の `qmb` と合わせて計画上は7 crate を構成する。basic・spin・geometry・export・normalize は core に依存し、spin の構築 utility は geometry の公開契約を利用する。core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。normalize は std を利用できる。
+crate 分割と実装順序は、[実装計画](../implementation-plan.md)に定める。抽象契約・有限線型結合・共通式木・ジェネリックな Index の照合・空間・評価・基底処理は `qmb-core` に集約し、UUID の具体型と発行の `qmb-basic`、具体的代数の `qmb-spin-half`、幾何と Site への配置の `qmb-geometry`、数値変換の `qmb-export`、norm・状態の正規化の `qmb-normalize`、利用窓口の `qmb` と合わせて計画上は7 crate を構成する。basic・spin・export・normalize は core に依存し、spin の構築 utility は geometry の公開契約を利用する。core はそれらに依存しない。UUID・乱数源の依存は core に置かず、`no_std + alloc` を維持する。normalize は std を利用できる。
 
-上記の geometry から core への依存は現実装の構成である。Chain の Index 列保持への移行に伴い、空間 API を利用側へ移して不要になった依存を除く。移行範囲と今後の検証は[実装計画第9節](../implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に従う。
+geometry は core に依存せず、両 crate に依存する qmb::space の ToSpace が空間変換を担当する。Chain の移行範囲と検証結果は[実装計画第9節](../implementation-plan.md#9-chain-の-index-列保持への移行)に従う。
 
 式木には `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` の共通パーツを用いる。`LinearCombination<P, C>` は薄い有限線型結合型として維持する。Step 2 で演算 trait を係数全体 `C` と関連型 `Term`・`Act::Operator` に揃え、core・spin-half の局所規則・恒等演算子・局所基底展開の線型結合を `map` と共通 constructor で式木へ取り込む。式全体の基底展開・複合基底・座標取得は Step 5 で実装する。不変な式節点・primitive は式ハンドルの `Arc` で共有し、同じハンドルを再利用した部分を複製しない。
 

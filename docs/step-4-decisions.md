@@ -1,12 +1,12 @@
 # Step 4 の実装方針と合意事項
 
-更新日: 2026-10-25
+更新日: 2026-10-27
 
 本書の num-complex 成分型 T・core の libm に関する記述は Step 4 実装時点の記録である。その後の[係数型のリファクタリング](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)で、係数全体 C と qmb-normalize の正規化用拡張 trait へ移行した。正規化期待値と NormalizationError も qmb-normalize に移し、core には内積・期待値・norm_squared・スカラー除算を残す。
 
 2026-10-26 の LocalStructure 廃止で、本文の L を用いる型は現在の API へ移行済みである。Geometry／Chain／HilbertSpace は I のみ、式は S・O を直接指定する。以下は Step 4 当時の判断の記録であり、現在の契約は[局所 primitive の設計](design/local-structure.md)と[実装計画](implementation-plan.md)を参照する。
 
-同日に、Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する方針を採用した。空間の構築・保持・grouping・因子順序・配置と束縛はモデル utility・利用側へ移す。この移行は未実装である。本文の空間保持 API・Arc 共有・Clone 制約と検証結果は移行前の記録であり、採用した契約は[Chain の設計](design/geometry.md)、今後の移行・検証は[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行実装未着手)に従う。
+同日に、Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する方針を採用した。空間の構築・保持・grouping・因子順序・配置と束縛はモデル utility・利用側へ移す。2026-10-27に実装移行した。本文の空間保持 API・Arc 共有・Clone 制約と検証結果は移行前の記録であり、採用した契約は[Chain の設計](design/geometry.md)、移行と検証結果は[実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行)に従う。
 
 ## 1. 位置付けと実装範囲
 

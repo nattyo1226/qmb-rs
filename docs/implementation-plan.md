@@ -1,6 +1,6 @@
 # qmb-rs 実装計画
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 目的と位置付け
 
@@ -8,7 +8,7 @@
 
 2026-10-26 に LocalStructure の廃止と追加の定義ラベルを設けない方針を採用した。第2〜6節にある L を使う API は移行前の実装・設計記録であり、次の移行方針は第8節に記録する。全 crate の実装移行と検証を完了した。
 
-同日に Chain が Site ごとの Index 列と境界条件を直接保持する方針を採用した。Geometry 構造体と空間保持を廃止し、空間管理を利用側へ移す。第2〜6節の Geometry・HilbertSpace の保持に関する記述は移行前の記録であり、採用した移行範囲と検証は第9節に記録する。Chain の実装移行は未着手である。
+同日に Chain が Site ごとの Index 列と境界条件を直接保持する方針を採用した。Geometry 構造体と空間保持を廃止し、空間管理を利用側へ移す。第2〜6節の Geometry・HilbertSpace の保持に関する記述は移行前の記録であり、採用した移行範囲と検証は第9節に記録する。2026-10-27に Chain の実装移行と検証を完了した。
 
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
@@ -23,7 +23,7 @@ Step 2 の局所構造と演算能力の分離、共通パーツと項型、基�
 | `qmb-core` | 数値精度・局所構造・primitive・基底の契約、有限線型結合、局所・複合式木、ジェネリックな Index の照合・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得・写像の表現係数 | なし |
 | `qmb-basic` | UUID による具体型 `Id128` と、seed 指定不要の new・Default による発行 API | `qmb-core` |
 | `qmb-spin-half` | spin-1/2 の局所構造・primitive・局所規則・基底、Heisenberg・Neel の構築 utility | `qmb-core`、`qmb-geometry` |
-| `qmb-geometry` | Geometry・Site、Chain、近接関係、自由度と Site の対応付け、配置用 Index 発行の補助 | `qmb-core` |
+| `qmb-geometry` | Site ごとの Index 列と境界条件を持つ Chain、近接関係、配置用 Index 発行の補助 | なし |
 | `qmb-export` | 外部数値ライブラリへの密・疎変換、空間・基底・精度情報との対応付け | `qmb-core` |
 | `qmb-normalize` | norm・状態の正規化・正規化期待値と NormalizationError を提供する。std を利用でき、実数型 R に Float を要求する | `qmb-core` |
 | `qmb` | 各 crate と構築 utility の再公開、利用例、縦断的な結合テスト | 上記6 crate |
@@ -40,7 +40,6 @@ graph TD
     Q --> N[qmb-normalize]
     S --> C
     S --> G
-    G --> C
     E --> C
     N --> C
     B --> C
@@ -48,7 +47,7 @@ graph TD
 
 将来の別の具体的代数も、専用 crate として `qmb-core` の契約を実装し、共通型を直接利用できる。初期版には未実装の代数用 crate を作らない。core は具体的代数を列挙せず、独自代数も同じ式木・評価機構で扱う。core の通常依存に具体的代数・Geometry・数値 backend を持ち込まない。
 
-`qmb` は core・共通代数処理・basic の具体型 Id128・spin-1/2・Geometry を再公開する。既定の `normalize` feature が qmb-normalize と Norm・Normalize・NormalizedExpectation・NormalizedExpectationIn 拡張 trait を有効にし、prelude からも提供する。`--no-default-features` では正規化の拡張を除く代数 API を利用できる。旧 `qmb/libm` は `normalize` の互換 alias とし、`qmb-core/libm` は削除した。core は内積・期待値・norm squared・スカラー除算を保持し、単独で no_std + alloc を維持する。
+`qmb` は core・共通代数処理・basic の具体型 Id128・spin-1/2・Chain・ChainError を再公開し、space module の ToSpace を root と prelude から提供する。既定の `normalize` feature が qmb-normalize と Norm・Normalize・NormalizedExpectation・NormalizedExpectationIn 拡張 trait を有効にし、prelude からも提供する。`--no-default-features` では正規化の拡張を除く代数 API を利用できる。旧 `qmb/libm` は `normalize` の互換 alias とし、`qmb-core/libm` は削除した。core は内積・期待値・norm squared・スカラー除算を保持し、単独で no_std + alloc を維持する。
 
 数値 export は後続の `export` feature で有効にし、代数計算だけでも利用できる構成とする。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
 
@@ -207,17 +206,37 @@ LocalStructure・旧 Identity<C>・SpinHalf marker を削除し、core の primi
 
 **完了（2026-10-26）**。workspace の全 feature 有効108テスト・default 無効107テスト（doc test を含む）、format、Clippy、警告をエラーとするドキュメント生成、core 単独ビルド・依存 feature、両構成の実行例を確認した。[API と検証の詳細](refactoring-local-structure.md#8-実装した-api-と移行結果2026-10-26)に記録する。MSRV 1.85、専用 no_std target、性能ベンチマークは未確認である。State／Operator・Grading を含む空間・Chain の追加の設計判断は後続課題として残す。
 
-## 9. Chain の Index 列保持への移行（実装未着手）
+## 9. Chain の Index 列保持への移行
 
-**方針確定（2026-10-26）**。Chain は `Vec<Vec<I>>` と境界条件を直接保持し、Geometry 構造体と、各 Site・全体の HilbertSpace の保持を廃止する。理由と採用事項は[整理メモの3.5節](refactoring-notes.md#35-chain-の内部表現)、移行先の契約は[Chain の設計](design/geometry.md)を正とする。以下は今後の作業であり、実装・検証の完了を表さない。
+**完了（2026-10-27）**。2026-10-26に採用した方針に従い、Chain は `Vec<Vec<I>>` と境界条件を直接保持する構成へ移行した。Geometry 構造体と各 Site・全体の HilbertSpace の保持を廃止した。理由と採用事項は[整理メモの3.5節](refactoring-notes.md#35-chain-の内部表現)、公開 API と移行方法は[Chain の設計第10節](design/geometry.md#10-実装した-api-と移行方法2026-10-27)を参照する。
 
-1. `qmb-geometry` の保持・constructor・Site 参照・エラーを Index 列の契約へ移す。既存の所有 Index を移動して取り込む経路と、Default による新規発行経路を提供する。構築時に Eq で Site 内・Site 間の重複を拒否し、保持・借用列挙へ Clone・Default を要求しない。
-2. Geometry とその再公開、`from_geometry`・`geometry()`・`space()`、HilbertSpace を受け渡す Site API を廃止・移行する。`qmb-geometry` crate と関係 trait は維持し、Index 列から近接ペアを借用列挙する。空間 API の移動で不要になった core 依存を除く。
-3. XYZ・Heisenberg・Neel の Factor・空間の取得、空間構築・対応検証・配置・束縛をモデル utility・利用側へ移す。Site 順と既存全空間の因子順序を区別し、Index を再発行しない。所有データの複製や借用 Index からの Factor 構築にだけ Clone を要求できる。具体的な公開シグネチャはこの責任分担に沿って実装時に定める。
-4. facade・利用例・関連テストを移行する。移行前の「Chain が空間の Arc 節点を共有する」という検証を、識別値の保持と利用側での空間管理の検証へ置き換える。core の式・空間の共有は維持する。
+### 9.1. 実施した変更
 
-空間変換の拡張 trait は `ToSpace`、メソッドは `to_space` とし、qmb の接続用 module に配置して公開する。Chain への実装にだけ `I: Clone + Eq` を要求し、借用から Index を複製して Site 順・Site 内の順で空間を構築する。空の Chain は単位空間とし、繰り返し変換した空間の Index・順序の一致、互換性、元の Chain の不変性を検証する。標準の Into／From に変換契約を固定せず、Grading に必要な情報の渡し方は fermion 系の実装時に具体化する。詳細は[ToSpace の契約](design/geometry.md#61-空間への変換能力-tospace)に従う。この trait の実装も未着手である。
+1. qmb-geometry の保持・constructor・Site 参照・エラーを Index 列の契約へ移行した。from_sites・with_sites は所有 Index の IntoIterator を取り込み、Eq で Site 内・Site 間の重複を拒否する。新規発行にだけ Default を要求し、保持・借用列挙へ Clone・Default を要求しない。Chain の複製には Clone を要求する。
+2. Geometry・GeometryError とその再公開、from_geometry・geometry()・space() を削除した。エラーは ChainError とし、共通ペア関数は二つの Index スライスを借用する。qmb-geometry から core への通常依存を除去し、no_std + alloc を維持した。新しい production 依存は追加していない。
+3. qmb::space::ToSpace と Chain に対する実装を追加し、root・prelude から再公開した。Chain の変換実装にだけ `I: Clone + Eq` を要求する。Index を再発行せず Site 順・Site 内の順で空間を構築し、空の Chain は単位空間、空 Site は空 Tensor とする。繰り返し変換の互換性を保証し、同じ Arc 節点の返却は要求しない。
+4. xyz(&chain, &space, jx, jy, jz)・heisenberg(&chain, &space, coupling)・neel(&chain, &space, first) に移行した。全空間は利用側で生成または保持する。utility は一 Site 一 spin と全因子の過不足・不一致を検証し、必要な Factor を反復的に走査して借用するため、Index の Clone を要求しない。空間接続の不一致は UtilityError::IncompatibleSpace を返す。Site 順と既存全空間の因子順序・grouping を区別し、Hamiltonian は指定空間に bind、Neel は指定空間の因子順に構築する。
+5. facade・例・既存テストを移行し、Index 列の所有と最小限の制約、ToSpace、空間との接続の回帰テストを追加した。旧「Chain が空間の Arc を共有する」検証を、識別値の保持と利用側での空間管理へ置き換えた。core の式・空間の共有は維持している。
 
-移行後は、Clone・Default のない Index の保持・借用列挙、重複・範囲外・Site 数不一致、発行回数と順序、空・可変長・複数自由度、open／periodic の長さ0・1・2と通常長、両 Index ペア方式を検証する。接続側では未配置・不足・不一致、Site 順と異なる全空間の因子順序、利用側で保持する grouping、既存 Index の再利用、一 Site 一 spin・0-site・XYZ／Heisenberg／Neel の両精度の独立行列・解析値との一致を確認する。
+### 9.2. 検証結果
 
-対象テストの後に workspace の全 feature 有効／default 無効のテスト、format、Clippy、必要なドキュメント生成と実行例を確認し、依存・feature と qmb-geometry の no_std + alloc を検証する。結果を記録して実装移行を完了とする。State／Operator の統合や fermion・Grading の設計は今回の移行に追加しない。
+Rust 1.98.0 で以下を実行し、すべて成功した。
+
+- 対象テスト：`cargo test -p qmb-geometry -p qmb --test geometry --test chain --test space -j 2`（18テスト）。
+- `cargo test --workspace --all-features -j 2 --quiet`（doc test を含む117テスト）。
+- `cargo test --workspace --no-default-features -j 2 --quiet`（doc test を含む116テスト）。
+- `cargo fmt --all -- --check`。
+- `cargo clippy --workspace --all-targets --all-features -j 2 -- -D warnings`。
+- `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps -j 2`。
+- `cargo check -p qmb-geometry -p qmb-core --no-default-features -j 2`。
+- `cargo run -p qmb --example heisenberg -j 2` と --no-default-features 構成。両構成で期待値 1.25+0i、既定構成で norm 1。
+
+geometry のテストは Clone・Default・Hash・Ord のない Index の所有入力・借用列挙、Site 内・Site 間の重複、範囲外・Site 数不一致、発行回数と順序、空・可変長・複数自由度、open／periodic の長さ0・1・2と通常長、両ペア方式と別の幾何型での能力 trait を確認した。
+
+ToSpace のテストは生成した空間の Index・順序・Site grouping・空 Site・空 Chain、繰り返し変換の互換性、元の Chain の不変性、Chain より長く利用できる返却値、借用 Index、Clone・Eq を要求しない別の ToSpace 実装を確認した。
+
+モデルのテストは空間の不足・過剰・同数で異なる Index、Site 順と異なる全空間の因子順序と利用側の grouping、一 Site 一 spin・0-site、両精度の独立行列・解析的期待値との一致を確認した。Clone できない Index と2万段の空間を使った接続・評価・破棄も128 KiBスタックで成功した。既存の非正規直交代数・数値能力・共有・深い式の回帰テストも成功した。
+
+`cargo tree -p qmb-geometry --no-default-features -e normal,features` で core・具体的代数・UUID・数値ライブラリへの依存がなく、通常のライブラリ依存が thiserror のみであることを確認した。core の同じ tree 確認でも数値依存の std・libm、normalize は有効にならない。geometry・core の no_std + alloc はソース・依存 feature・ホスト上の単独ビルドによる確認である。
+
+MSRV 1.85、専用 no_std target の実ビルド、性能ベンチマークは今回未実施である。State／Operator の統合は初期版実装後、Grading の情報保持・API は fermion 系の実装時に検討する。
