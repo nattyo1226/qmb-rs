@@ -223,7 +223,7 @@ Step 3 の設計判断は以下を採用済みとする。具体的な構成と�
 | 評価経路 | 作用・内積・full trace を分担し、全経路共通の完全展開形を強制しない。作用は primitive の Product を要求せず、full trace は必要な項の局所積・局所 trace へ委譲する |
 | 深い式 | 評価・走査・最後の所有者になった節点の破棄には明示的な作業スタックを使う |
 
-Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積までを含む。Norm・正規化・正規化期待値は [Step 4 の合意事項](../step-4-decisions.md)に従って局所式・複合式に実装する。bra 型・構築 API は初期版では導入せず、braket は内積で計算する。Partial trace・基底展開・座標取得は Step 5 に置き、初期版の必須範囲からは除外しない。
+Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積までを含む。局所式・複合式の Norm・正規化・正規化期待値は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。bra 型・構築 API は初期版では導入せず、braket は内積で計算する。Partial trace・基底展開・座標取得は Step 5 に置き、初期版の必須範囲からは除外しない。
 
 Step 3 の具体型は `State<I, L, T>`・`Operator<I, L, T>` とし、非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。詳細は [実装した API](../step-3-design.md#11-実装した-api-と後続事項)に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
 

@@ -4,9 +4,11 @@
 
 ## 1. 対象と検討状況
 
-本書は局所状態・演算子 primitive の能力と整合性を定める。LocalStructure と追加の定義ラベルを廃止し、全 crate の式・空間・幾何・利用例を S・O の直接指定へ移行した。採用理由と依存調査は[調査記録](../refactoring-local-structure.md)、移行と検証は[実装計画](../implementation-plan.md#8-localstructure-の廃止)に記録する。
+本書は局所状態・演算子 primitive の能力と整合性を定める。LocalStructure と追加の定義ラベルを廃止し、全 crate の式・空間・幾何・利用例を S・O の直接指定へ移行した。採用理由は第7節、移行と検証は[実装計画](../implementation-plan.md#8-localstructure-の廃止)に記録する。
 
 局所式は `LocalState<S, O, C>`・`LocalOperator<O, C>`、複合式は `State<I, S, O, C>`・`Operator<I, O, C>` とする。演算子式に状態型を要求しない。状態式は遅延した作用節点を保持するため O も指定する。保持・共有・係数計算を伴わない遅延構築に演算能力や primitive の Clone を要求しない。
+
+同じ O が異なる S に作用する場合は、各 S の Act 実装で対応する。状態の構築時に O を推論できなければ、型注釈・型別名や後続の利用箇所から指定する。借用を含む primitive を保持でき、保持のために一律の Send・Sync・'static 制約を課さない。スレッド間の移動・共有の可否は保持する型と Arc の制約に従う。
 
 ## 2. 空間の情報と能力の関連付け
 
@@ -24,6 +26,8 @@
 SpanDimension は `fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow>` として実装した。次元を整数化できない場合は取得時にエラーを返す。`state_basis_len<S>()`・`operator_basis_len<O>()` は対象の次元をそのまま返す。Operator の d² を再度二乗しない。能力は次元を使う操作だけが要求する。
 
 恒等元は primitive の値として表せることを要求するが、選択基底の要素である必要はない。基底に含まれなければ Basis が展開する。線型従属な primitive を許容するため、恒等元用の値を追加しても基底の次元は増えない。式木の記号的な Identity 節点は、数値能力も恒等 primitive の生成も不要な遅延構築と、単位元の直接処理のため維持した。trace で必要になった時に O の恒等元を取得する。
+
+局所 identity と spectator 因子の trace は、O の Identity・Trace から得る。次元の整数値を係数へ変換する経路に置き換えず、局所 trace に係数の One・整数変換を追加要求しない。外部の O に Identity を追加実装できない場合は、提供元の実装か利用者が所有する wrapper で接続する。Identity・SpanDimension は core と qmb root から公開する。
 
 ## 3. 数学的能力の整合性
 
@@ -68,3 +72,5 @@ Index・Site・表示名・選択基底とその列挙順序・メモリ上の o
 ## 7. LocalStructure 廃止の採用方針（2026-10-26）
 
 S・O の直接指定、primitive の span の次元と恒等元、追加の定義ラベルを設けない方針を採用し、実装へ反映した。API は第1〜2節、型と Index の責任分担は第4〜5節を現在の契約とする。旧 LocalStructure・Identity<C> と SpinHalf の定義用 marker は公開しない。
+
+局所規則は S・O・C と個別の能力実装で決まり、定義用の L は規則を切り替える引数ではなかった。次元と恒等元を primitive 側へ移したため、型の組だけを保持する LocalStructure や空間側の定義ラベルは不要とした。Act の関連型から保持型の O を導く構成は、保持・遅延構築に評価能力を要求するため採用しない。全能力をまとめた StatePrimitive・OperatorPrimitive trait、必須の FactorLayout 層、実行時の Definition／provider も導入しない。

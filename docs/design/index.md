@@ -119,11 +119,11 @@ Index 単体や空間の葉から局所代数を取得する契約は置かな�
 
 ## 8. 未決事項
 
-同一性を照合するジェネリックな core と、UUID の具体型・seed 指定不要の発行を担う basic の分離は採用済みとする。[Step 3 の実装方針](../step-3-design.md)に従い、葉の空間と式の共有ハンドルの複製に Index 本体の不要な複製を要求しない。
+同一性を照合するジェネリックな core と、UUID の具体型・seed 指定不要の発行を担う basic の分離は採用済みとする。葉の空間と式の共有ハンドルの複製に Index 本体の不要な複製を要求しない。
 
-Step 3 で core の照合に標準の `Eq` を採用し、`HilbertSpace::factor(index)` と局所式の `at(&factor)` を実装した。`qmb_basic::Index` は UUID v4 の不透明な具体型とし、`new()` と `Default` により seed 指定不要の発行を提供する。生成は `uuid::Uuid::new_v4` に委譲し、通常依存は basic に閉じる。具体的な依存指定と検証環境の解決バージョンは [実装した API](../step-3-design.md#11-実装した-api-と後続事項)に記録する。
+Core の照合は標準の `Eq`、Factor の構築は `HilbertSpace::factor(index)`、局所式の配置は `at(&factor)` とする。標準具体型 `qmb_basic::Id128` は UUID v4 を包む不透明な型であり、`new()` と `Default` は seed 指定不要で新しい Index を発行する。Clone・Copy は同一性を保持し、Display・Debug・等値比較・順序比較・Hash を提供する。生成は `uuid::Uuid::new_v4` に委譲し、乱数源が利用できない場合を含む挙動は同 API に従う。UUID・乱数源は basic に閉じ、Chain は basic に依存しない。
 
-Step 4 では具体型を `qmb_basic::Id128` に改名し、new・Default の新規発行と Clone・Copy の同一性保持を維持する。上記の旧名称は Step 3 の実装記録であり、Step 4 の仕様は [合意事項](../step-4-decisions.md)に従う。UUID・乱数源は basic に閉じ、Geometry は basic に依存しない。
+`qmb_basic::HilbertSpace` は `qmb_core::HilbertSpace<Id128>` の型別名とし、局所 primitive の型引数を持たない。qmb root から Id128 とジェネリックな HilbertSpace を再公開する。
 
 後続の未決事項は以下とする。
 - 保存形式、および保存・復元・Index の付け直しの具体的な公開 API

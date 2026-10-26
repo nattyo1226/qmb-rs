@@ -155,8 +155,22 @@ Site 上の複数の自由度は、利用側が構成する Tensor の内部因�
 
 公開型 `HilbertSpace` への統一、Dof の葉への統合、`Arc` による共有、非公開の節点 enum、借用による列挙、ordinary な葉列の照合、反復的な走査・破棄、および次元取得時の overflow 検出は採用済みとする。具体的な実装方針と検証条件は [Step 3 の実装方針](../step-3-design.md)に従う。
 
-Step 3 で `HilbertSpace<I>`、constructor・列挙・判定・次元取得の API、非公開の節点と作業スタックを実装した。Index は照合するメソッドで `Eq` を要求し、重複検出には等値比較を用いる。公開シグネチャは [移行後の API](../refactoring-local-structure.md#8-実装した-api-と移行結果2026-10-26)に記録する。
+Step 3 で空間・constructor・列挙・判定・次元取得の API、非公開の節点と作業スタックを実装した。LocalStructure 廃止後の公開型は `HilbertSpace<I>` とする。Index は照合するメソッドで `Eq` を要求し、重複検出には等値比較を用いる。現在の API は第10節に記録する。
 
-Chain の Site ごとの Index 列と、利用側が保持する空間・基本自由度の対応は、[Chain の配置契約](geometry.md)に従う。[Step 4 の合意事項](../step-4-decisions.md)にある Geometry の空間保持は移行前の記録とする。
+Chain の Site ごとの Index 列と、利用側が保持する空間・基本自由度の対応は、[Chain の配置契約](geometry.md)に従う。
 
 これらの決定では、再帰的な空間構成、基本因子の Index・順序の保存、および保持する木構造と数学的な互換性の区別を維持する。
+
+## 10. 現在の公開 API
+
+| API | 結果・制約 |
+| --- | --- |
+| `HilbertSpace::factor(index)`・`unit()` | 既存 Index の Factor・空 Tensor を構築する。Index の Clone・Default は不要 |
+| `HilbertSpace::tensor(children)`・`tensor_product(&rhs)` | `I: Eq` で重複を検査し、`Result<Self, SpaceError>` を返す |
+| `factor_index()`・`children()`・`indices()` | Factor の `Option<&I>`・直下の子・全葉の Index を借用する |
+| `is_compatible_with(&rhs)`・`is_subsystem_of(&ambient)` | `I: Eq` で葉の順序付き列を照合する |
+| `dimension::<P>()` | `P: SpanDimension` の次元を因子ごとに適用し、`Result<usize, DimensionOverflow>` を返す |
+| `dimension_with(local_dimension)` | `NonZeroUsize` の局所次元を明示し、同じ Result を返す |
+| `clone()`・`shares_node_with(&rhs)` | Index を複製せず共有ハンドルを複製・比較する |
+
+`dimension::<S>()` は状態空間、`dimension::<O>()` は演算子空間の次元を返す。Operator は S を保持しないため、その作用先の次元 d が必要なら `dimension_with` に局所次元を指定する。空 Tensor の次元は1とし、P の局所次元が overflow する場合も空 Tensor の取得は成功する。空間比較・配置・束縛には primitive 型を登録せず、異なる primitive 型の式が同じ空間構造を利用できる。

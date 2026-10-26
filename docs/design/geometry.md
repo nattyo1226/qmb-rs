@@ -4,7 +4,7 @@
 
 ## 1. 対象と責任分担
 
-本書は[要件](../requirements.md)に基づき、Chain と Site への自由度の配置を定める。2026-10-26 に、Chain が Site ごとの Index 列と境界条件だけを保持する方針を採用した。2026-10-27 に製品コード・テスト・利用例を移行した。以下を現在の契約とする。[Step 4 の合意事項](../step-4-decisions.md)にある Geometry・HilbertSpace の保持は移行前の記録とする。
+本書は[要件](../requirements.md)に基づき、Chain と Site への自由度の配置を定める。2026-10-26 に、Chain が Site ごとの Index 列と境界条件だけを保持する方針を採用した。2026-10-27 に製品コード・テスト・利用例を移行した。以下を現在の契約とする。
 
 `qmb-geometry` は Site の順序、Site ごとの自由度の Index 列、境界条件と幾何関係の列挙を担当する。Hilbert 空間の構築・保持・grouping・全体の因子順序は利用側が管理する。局所式の配置・束縛・評価は `qmb-core`、UUID の具体型 `Id128` は `qmb-basic`、XYZ・Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・縦断例は `qmb` が担当する。
 
@@ -104,6 +104,8 @@ Chain は Site ごとの Index 列の借用と、`nn_site_pairs()` による近�
 
 XYZ・Heisenberg・Neel utility の一 Site 一 spin の制約、0-site の zero Hamiltonian・単位状態、解析的期待値は維持する。空間の構築や接続で新しい Index を発行し直さない。utility は全空間を明示的に受け取る。新規空間は呼び出し側が ToSpace で構築し、既存空間はそのまま渡す。各 utility は一 Site 一 spin と全因子の過不足・不一致を検証し、不一致は UtilityError::IncompatibleSpace とする。
 
+XYZ は実数の結合 Jx・Jy・Jz から `−Σ(Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j)` を構築する。Heisenberg は三つの結合を J に揃えて XYZ に委譲し、正の J を強磁性的とする。Neel は先頭の Up／Down を指定でき、奇数長 periodic でも構築を許可する。空 Site・複数自由度の Site は `UtilityError::InvalidSite` とし、複数自由度から作用対象を選ぶ utility は後続で設計する。接続・配置・束縛のエラーは `UtilityError::Expression` で元の ExpressionError を source として保持する。
+
 次近接などの追加の関係 trait と追加の幾何型は、その機能を導入するときに設計する。Geometry 構造体の保持は拡張の前提条件にしない。
 
 ## 8. 構築後の不変性
@@ -150,5 +152,7 @@ let space = chain.to_space()?;
 let h = heisenberg(&chain, &space, 1.0_f64)?;
 let psi = neel::<_, Complex<f64>>(&chain, &space, SpinHalfState::Up)?;
 ```
+
+[実行可能な例](../../crates/qmb/examples/heisenberg.rs)は `cargo run -p qmb --example heisenberg` で実行できる。上記の6-site open chain・J=1では Neel 期待値は `1.25+0i`、norm は1となる。`--no-default-features` でも、非零の自己内積を使った期待値の商を計算できる。norm の拡張 trait と feature は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。
 
 既存空間を利用する場合は、その Index を Site ごとの列として Chain に渡し、元の空間を utility に渡す。utility は実際の Factor を反復的に走査して借用するため、Index の Clone を要求しない。Site 順と空間の因子順が異なっても、Neel の向きは Site 順、状態の因子順は指定した空間に従う。Hamiltonian は指定空間に bind し、空間の元の grouping と共有節点を保持する。状態は指定空間と互換な空間を持ち、元の空間の木は変更しない。

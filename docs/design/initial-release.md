@@ -98,8 +98,8 @@ LocalStructure は廃止し、式には S・O を直接指定する。恒等元�
 
 Step 3 の空間・複合式・共有・束縛・エラー・評価経路は [実装記録](../implementation-plan.md)に従う。局所規則は S・O と各能力の実装で定め、空間は `Arc` の共有ハンドルとし、総次元の overflow は取得時に検出する。状態は常に所属空間を持ち、演算子の束縛は外側のハンドルへ集約する。検証が必要な複合操作は `Result` を返し、作用・内積・full trace を目的別に評価する。
 
-Norm・正規化・正規化期待値は、[Step 4 の合意事項](../step-4-decisions.md)に従って局所式・複合式に実装する。core の libm は任意 feature、qmb では既定で有効とする。Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。Partial trace・基底処理は Step 5、数値 backend は Step 6 で具体化し、初期版の必須範囲を維持する。bra 型・構築 API は初期版では導入しない。
+Norm・正規化・正規化期待値と NormalizationError は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Norm／Normalize／NormalizedExpectation／NormalizedExpectationIn を import して呼び出す。内積・期待値・norm squared・スカラー除算は core に残し、Float は平方根を使う実数型 R に要求する。qmb の既定 feature は normalize、旧 libm はその互換 alias とし、core の libm feature は設けない。
 
-上記は Step 4 の実装を記録したものである。2026-10-25 に採用した[係数型の方針](../refactoring-coefficient-proposal.md)では、係数全体 C と個別の能力契約へ移行し、norm・normalized・正規化期待値と NormalizationError を qmb-normalize へ移す。内積・期待値・norm squared・スカラー除算は core に残し、Float は平方根を使う実数型 R に要求する。この移行は実装済みであり、Norm／Normalize／NormalizedExpectation／NormalizedExpectationIn を import して呼び出す。qmb の既定 feature は normalize、旧 libm はその互換 alias とする。
+XYZ・Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。[Chain の配置契約](geometry.md)に従い、利用側が保持する空間へ接続する。Partial trace・基底処理は Step 5、数値 backend は Step 6 で具体化し、初期版の必須範囲を維持する。bra 型・構築 API は初期版では導入しない。
 
 非公開の節点・作業領域・補助関数、メソッド名・型引数・シグネチャの詳細、および追加依存の選択は採用済み方針の範囲で各段階に定める。Step 2 の局所式・評価と API の移行、および Step 3 の空間・配置・複合評価と basic の UUID Index は実装済みである。Step 4 以降の機能と初期版全体の完成とは区別する。

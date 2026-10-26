@@ -1,6 +1,6 @@
 # 局所 primitive・式木の数学的能力
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 対象と責任分担
 
@@ -33,7 +33,7 @@ Product は演算子 primitive 側、Act は状態 primitive 側の能力とす�
 
 Rust API は状態式を S・O・C、演算子式を O・C で指定する。恒等元は O が Identity として生成し、次元は S・O が SpanDimension で提供する。演算能力と入出力の対応は必要な評価メソッドで要求し、保持型に全演算能力を要求しない。LocalStructure と追加の定義ラベルは導入しない。
 
-Product・Act・随伴の結果は、同じ局所構造の primitive の有限線型結合を表す薄い `LinearCombination` とする。単一 primitive への閉性は要求しない。演算 trait は係数精度を型引数、返却要素を関連型 `Term` で指定し、局所式や局所構造には依存しない。局所規則では `Term` を対応する primitive 型とし、局所構造の恒等演算子も対応する primitive の線型結合を返す。式木側は `map` で要素を変換し、和・スカラー倍として取り込む。未評価の作用・積・随伴を返して局所計算を先送りしない。加算、scalar multiplication、および zero は共通処理で提供する。演算 trait の関連型への移行と式木への接続は Step 2 で行う。
+Product・Act・随伴の結果は、同じ局所構造の primitive の有限線型結合を表す薄い `LinearCombination` とする。単一 primitive への閉性は要求しない。演算 trait は係数全体 C を型引数、返却要素を関連型 `Term` で指定し、局所式や局所構造には依存しない。局所規則では `Term` を対応する primitive 型とする。式木側は `map` で要素を変換し、和・スカラー倍として取り込む。恒等元は `O: Identity` の値として生成し、選択基底への展開は Basis が担う。未評価の作用・積・随伴を返して局所計算を先送りしない。加算、scalar multiplication、および zero は共通処理で提供する。演算 trait の関連型への移行と式木への接続は Step 2 で行う。
 
 trace は局所 Hilbert 空間上の通常の非正規化 trace を返す。正規直交基底、作用、内積から数学的に導出できるが、通常の評価経路では primitive の trace を直接利用できるようにし、基底展開や数値行列の生成を必須としない。
 
@@ -105,7 +105,27 @@ A(aB+bC)=a(AB)+b(AC),
 | 演算子式・状態式 | 期待値 | 作用と内積から `⟨ψ,Aψ⟩` を計算する |
 | 演算子式・状態式 | 正規化期待値 | 期待値を `⟨ψ,ψ⟩` で割る。zero-norm state では拒否する |
 
-bra 型・構築 API は後続へ延期し、初期版の braket は内積で計算する。Norm・正規化・正規化期待値の具体的な API と feature は [Step 4 の合意事項](../step-4-decisions.md)に従う。これらについて局所代数ごとの実装を必須としない。恒等演算子の規則は局所構造から線型結合として取得し、必要な評価時に対応する演算子式へ取り込む。遅延構築では `Identity` 節点で保持できる。
+bra 型・構築 API は後続へ延期し、初期版の braket は内積で計算する。Norm・正規化・正規化期待値は共通機構から提供し、局所代数ごとの実装を必須としない。恒等演算子は遅延構築では `Identity` 節点で保持し、trace で必要になった時に `O::identity()` を取得する。
+
+### 4.1. Norm・正規化の API と feature
+
+係数全体を C、`C: RealPart` の実数型を R とする。内積・期待値・norm squared・スカラー除算は `qmb-core`、以下の拡張 trait と `NormalizationError` は std を利用する `qmb-normalize` が提供する。
+
+| 操作 | 提供元 | 局所状態の返り値 | 複合状態の返り値 |
+| --- | --- | --- | --- |
+| `norm_squared()` | core の状態式 | R | `Result<R, ExpressionError>` |
+| `norm()` | `Norm` | R | `Result<R, ExpressionError>` |
+| `normalized()` | `Normalize` | `Result<Self, NormalizationError>` | 同左 |
+| `normalized_expectation(&operator)` | `NormalizedExpectation` | `Result<C, NormalizationError>` | 同左 |
+| `normalized_expectation_in(&operator, &ambient)` | `NormalizedExpectationIn` | 提供しない | `Result<C, NormalizationError>` |
+
+norm squared は自己内積の実部、norm はその平方根とする。`norm()`・`normalized()` だけが R に `num_traits::Float` を要求し、正規化には実数を C に埋め込む `From<R>` も要求する。正規化は入力を変更せず、位相を保つ実数の逆ノルムで式をスカラー倍する。通常の作用・内積と同じ評価経路を使い、基底展開・行列化は要求しない。
+
+正規化と正規化期待値は、自己内積全体の `Zero::is_zero()` による厳密なゼロを `NormalizationError::ZeroNorm` として拒否する。明示的な zero に加え、非独立な primitive や項の相殺による zero も対象とする。`norm(zero)` は0を返す。負値の補正・近似ゼロ判定は導入せず、NaN・infinity などは数値型に委ねる。複合式の空間・評価エラーは `NormalizationError::Expression(ExpressionError)` に変換し、元のエラーを source として保持する。
+
+正規化期待値は期待値を自己内積全体で除し、`Divide` を要求する。平方根・実部取得・実数の埋め込みは要求しない。標準 Complex の除算では、純実の分母を不要に二乗しない。明示空間を渡す複合式では、その空間を演算子の既存束縛より優先する。
+
+`qmb` の既定 feature は `normalize` であり、拡張 trait を root・prelude、エラーを root から再公開する。旧 `qmb/libm` は `normalize` の互換 alias とし、libm の使用を強制しない。core の libm feature は設けない。default feature 無効時も core の代数 API・norm squared・スカラー除算は利用でき、非零の自己内積による商を明示的に計算できる。平方根を使わない正規化期待値の拡張 trait 自体も qmb-normalize に属し、qmb 経由では normalize feature が必要である。
 
 ## 5. 線型従属性と基底との接続
 
