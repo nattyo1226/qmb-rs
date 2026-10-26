@@ -1,6 +1,6 @@
 # リファクタリングの整理メモ（一時）
 
-更新日: 2026-10-25
+更新日: 2026-10-26
 
 ## 1. 目的と位置づけ
 
@@ -37,11 +37,7 @@ Step 4 までの機能を実装済みである。Partial trace、式全体の基
 
 零・単位元には num-traits の Zero・One をそのまま採用する。Zero の Add・ゼロ判定、One の Mul は付随する条件として受け入れる。厳密に分割した独自 Zero・One は作らず、ゼロ判定も Zero::is_zero を使う。
 
-利用箇所と演算能力の調査は [係数型の依存・能力の整理](refactoring-coefficients.md)に記録する。
-
 **合意した接続方針**：core は num-complex・num-traits の直接依存を維持する。不足する trait は core 自身が定義し、Complex<f32>・Complex<f64> へ直接実装する。標準の複素数接続のために newtype や演算 provider を必須にしない。
-
-具体的な構成の比較と採用事項は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。2026-10-25 に、利用者が残る5項目の推奨案をすべて採用した。
 
 **追加の採用事項**：
 
@@ -51,13 +47,35 @@ Step 4 までの機能を実装済みである。Partial trace、式全体の基
 - 標準 Complex の左スカラー倍は個別実装し、任意の C は scaled(c) を基本経路とする。
 - 正規化期待値では純実分母を不要に二乗しない既存の数値的な処理を維持する。
 
-core に内積・期待値・norm squared・スカラー除算を残し、正規化期待値と零ノルムの検査・NormalizationError は qmb-normalize に移す。core/expr の正規化 module は削除した。qmb から新 crate と拡張 trait を再公開する。実装は Conjugate・RealPart・ImaginaryUnit・Divide、From<R>、Norm／Normalize に具体化した。数値ライブラリの再公開は削除し、必要な箇所では num-complex・num-traits を直接 import する。API と feature の移行は [実装記録](refactoring-coefficient-proposal.md#10-実装した-api-と移行方法)を参照する。
+core に内積・期待値・norm squared・スカラー除算を残し、正規化期待値と零ノルムの検査・NormalizationError は qmb-normalize に移す。core/expr の正規化 module は削除した。qmb から新 crate と拡張 trait を再公開する。実装は Conjugate・RealPart・ImaginaryUnit・Divide、From<R>、Norm／Normalize に具体化した。数値ライブラリの再公開は削除し、必要な箇所では num-complex・num-traits を直接 import する。
 
 この新 crate は std の利用を許容し、no_std 対応を要件にしない。core 自体の no_std + alloc は維持する。
 
-**最初の変更範囲の提案**：数値の契約、係数表現、具体型との接続、およびその利用箇所に限定する。LocalStructure、空間の構造、State／Operator の分離はこの段階では維持する。
+**実施した変更範囲**：数値の契約、係数表現、具体型との接続、およびその利用箇所に限定した。LocalStructure、空間の構造、State／Operator の分離は維持した。
 
 **完了条件**：操作ごとの必要能力と具体的な Complex の接続を実装し、保持・遅延構築へ不要な数値能力を要求しないことを確認する。単精度・倍精度、独自 scalar、数値能力のない型での保持・遅延構築、平方根を使う／使わない操作を検証する。依存と feature は実際の利用に合わせて確認する。
+
+#### 3.1.1. 完了確認（2026-10-26）
+
+コミット `3d6d2af` の実装・テストを採用方針と照合し、本項の完了条件を満たすことを確認した。確認した範囲で完了を妨げる問題はなく、係数型のリファクタリングを完了とする。
+
+- 線型結合・式節点・演算 trait・局所／複合評価・spin-half・モデル utility・facade が係数全体 C を使う。保持・map・共有・係数計算を伴わない遅延構築に数値能力を要求せず、評価時に個別の能力を要求する。
+- 標準 Complex への直接実装、num-traits の Zero／One、左スカラー倍、任意の C の scaled(c)、qmb-normalize の拡張 trait と feature の接続が採用方針に沿っている。純実分母を二乗しない除算と、自己内積全体による零ノルム検査も維持している。
+- 両精度・独自係数・数値能力のない係数・最小限の型制約・非正規直交な三次元代数・独立行列との一致・深い式の共有／評価／破棄を既存テストで確認した。
+
+Rust 1.98.0 で次を再実行し、すべて成功した。
+
+- `cargo test --workspace --all-features -j 2`（doc test を含む）
+- `cargo test --workspace --no-default-features -j 2`（doc test を含む）
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets --all-features -j 2 -- -D warnings`
+- `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps -j 2`
+- `cargo check -p qmb-core --no-default-features -j 2`
+- `cargo run -p qmb --example heisenberg -j 2` と同コマンドの `--no-default-features` 構成
+
+`cargo tree -p qmb-core --no-default-features -e normal,features` で、core 単独の通常依存に std・libm・qmb-normalize がないことを確認した。facade の default feature 無効時にも qmb-normalize を含まない。実行例は両構成で期待値 `1.25+0i`、既定構成で norm `1` を返した。
+
+MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは未確認である。core の no_std はソース・依存 feature・ホスト上の単独ビルドによる確認である。正式文書への反映は[実装計画の第7節](implementation-plan.md#7-係数型のリファクタリング)を参照する。3.2〜3.5の設計判断は引き続き未決である。
 
 ### 3.2. LocalStructure の必要性
 
@@ -166,11 +184,11 @@ core に内積・期待値・norm squared・スカラー除算を残し、正規
 
 | 項目 | 現在の状態 |
 | --- | --- |
-| 1. 係数型・数値能力 | 係数全体 C・個別能力・標準 Complex への直接実装・num-traits の Zero／One・qmb-normalize・左スカラー倍・除算の方針を採用済み。製品コードを移行済み。検証結果は係数型の採用方針に記録 |
+| 1. 係数型・数値能力 | **完了（2026-10-26）**。実装を採用方針と照合し、完了条件と検証の成功を確認。範囲・結果・未検証事項は3.1.1節に記録 |
 | 2. LocalStructure | 現状と論点を整理済み。維持・変更・廃止は未決 |
 | 3. Operator／State | 現状と論点を整理済み。数学的対象・共通化範囲は未決 |
 | 4. HilbertSpace | 現状と論点を整理済み。最小構成と責任分担は未決 |
 | 5. Chain | 現状と論点を整理済み。内部表現と接続方法は未決 |
-| 着手順序 | 本書の提案。確定した実装計画への反映は未実施 |
+| 着手順序 | 順序1〜2の係数型の整理・移行は完了し、実装計画の第7節へ反映済み。順序3以降は本書の提案 |
 
 参照されている `docs/step-3-design.md` は、現時点の作業ツリーには存在しない。現状の把握には、現行コード・テストと実装計画の段階4の実装記録を用いた。実装計画の冒頭に残っていた古い進捗・crate 数は、係数型の採用方針の反映時に更新した。

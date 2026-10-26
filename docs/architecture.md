@@ -1,6 +1,6 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-25
+更新日: 2026-10-26
 
 ## 1. 文書の位置づけ
 
@@ -139,7 +139,7 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 4. **HilbertSpace の最小構成**：HilbertSpace を Index と Grading だけで議論・表現できるかを検討し、解決する。局所構造などの追加情報を空間自体に保持する必要性と、その情報の責任の置き場所を明らかにする。
 5. **Chain の内部表現**：前項で検討する Index と Grading による HilbertSpace の構成から Grading を除いた構造で、Chain の内部表現を作れるかを議論し、解決する。現行の HilbertSpace を保持する構成との関係も含め、結論と根拠を記録する。
 
-初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更した。残る四つの問いは議論だけで終わらせず、採否を含む設計上の結論を得る。LocalStructure の廃止、Operator と State の統合、HilbertSpace や Chain の表現変更は、現時点で採用した結論ではない。
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。残る四つの問いは議論だけで終わらせず、採否を含む設計上の結論を得る。LocalStructure の廃止、Operator と State の統合、HilbertSpace や Chain の表現変更は、現時点で採用した結論ではない。
 
 係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
 
