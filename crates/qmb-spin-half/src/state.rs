@@ -1,15 +1,15 @@
 //! Spin-1/2 states, their orthonormal inner product, and operator actions.
 
-use core::ops::{Div, Neg};
+use core::ops::{Add, Div, Neg};
 
+use num_traits::{One, Zero};
 use qmb_core::{
-    Act, Complex, InnerProduct, LinearCombination,
-    num_traits::{One, Zero},
+    Act, DimensionOverflow, ImaginaryUnit, InnerProduct, LinearCombination, SpanDimension,
 };
 
 use crate::{
     SpinHalfOperator,
-    coefficient::{half, imaginary, real},
+    coefficient::{half, imaginary},
 };
 
 /// The eigenstates of `Sz`, independent of coefficient precision.
@@ -21,35 +21,41 @@ pub enum SpinHalfState {
     Down,
 }
 
-impl<T: Zero + One> InnerProduct<T> for SpinHalfState {
-    fn inner_product(&self, rhs: &Self) -> Complex<T> {
-        real(if self == rhs { T::one() } else { T::zero() })
+impl<C: Zero + One> InnerProduct<C> for SpinHalfState {
+    fn inner_product(&self, rhs: &Self) -> C {
+        if self == rhs { C::one() } else { C::zero() }
     }
 }
 
-impl<T> Act<T> for SpinHalfState
+impl<C> Act<C> for SpinHalfState
 where
-    T: Zero + One + Div<Output = T> + Neg<Output = T>,
+    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
 {
     type Operator = SpinHalfOperator;
     type Term = Self;
 
-    fn act(&self, operator: &SpinHalfOperator) -> LinearCombination<Self, T> {
+    fn act(&self, operator: &SpinHalfOperator) -> LinearCombination<Self, C> {
         use LinearCombination as Lc;
         use SpinHalfOperator::*;
         use SpinHalfState::*;
 
         match (*operator, *self) {
             (I, state) => Lc::primitive(state),
-            (Sx, Up) => Lc::term(real(half()), Down),
-            (Sx, Down) => Lc::term(real(half()), Up),
+            (Sx, Up) => Lc::term(half(), Down),
+            (Sx, Down) => Lc::term(half(), Up),
             (Sy, Up) => Lc::term(imaginary(half()), Down),
-            (Sy, Down) => Lc::term(imaginary(-half::<T>()), Up),
-            (Sz, Up) => Lc::term(real(half()), Up),
-            (Sz, Down) => Lc::term(real(-half::<T>()), Down),
+            (Sy, Down) => Lc::term(imaginary(-half::<C>()), Up),
+            (Sz, Up) => Lc::term(half(), Up),
+            (Sz, Down) => Lc::term(-half::<C>(), Down),
             (SPlus, Up) | (SMinus, Down) => Lc::zero(),
             (SPlus, Down) => Lc::primitive(Up),
             (SMinus, Up) => Lc::primitive(Down),
         }
+    }
+}
+
+impl SpanDimension for SpinHalfState {
+    fn span_dimension() -> Result<core::num::NonZeroUsize, DimensionOverflow> {
+        Ok(core::num::NonZeroUsize::new(2).unwrap())
     }
 }

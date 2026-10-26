@@ -1,10 +1,12 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-23
+更新日: 2026-10-27
 
 ## 1. 文書の位置づけ
 
 本書は、[要件](requirements.md)に基づく設計の概要と、合意済みの設計判断を記録する。各対象の詳細な契約は `docs/design/` 以下の文書に記録する。具体的な Rust の型、公開 API、および内部実装は、対応する設計を決めた時点で追記する。
+
+2026-10-26 に Chain の Index 列保持への移行方針を採用した。2026-10-27 に Geometry・HilbertSpace を保持する構成からの実装移行を行った。本書は移行後の構成を表す。
 
 ## 2. 責任分離
 
@@ -17,19 +19,22 @@
 | 状態式・演算子式 | core の共通構文、線型性・共役線型性による拡張、不変な部分構造の共有 |
 | 埋め込み・評価 | 局所式の配置と作用空間の確定、局所契約を保存する合成則、整合性検証、grading、必要な部分の評価 |
 | 基底・export | 局所基底と tensor product 基底、通常の式木への展開・再展開、順序・列挙・要素数の導出、座標取得、写像の表現行列、外部の数値表現への変換 |
-| 幾何・モデル構築 | Site の同一性・順序・関係、空間・Index・内部ラベルの配置、配置用 Index の発行補助、状態や Hamiltonian の構築 |
+| 幾何 | Site 順序・Site ごとの Index 列・境界条件、関係の借用列挙、Default による Index 発行補助 |
+| モデル構築・利用側 | Index と Factor の対応、空間の構築・保持・因子順序・grouping、局所式の配置・束縛、状態や Hamiltonian の構築 |
 
 代数 core は幾何構造を必須とせず、自由度と式を直接構築できる。完全な密・疎行列を生成せずに代数オブジェクトを構築・合成・評価し、必要に応じて数値 backend に export する。
 
 ### 2.1. crate の構成
 
+Chain の Index 列保持への移行により、qmb-geometry は core に依存しない。空間への変換は両 crate に依存する qmb::space が担う。
+
 代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得・写像の表現係数を同じ crate が所有する。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
-具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、再公開とモデル構築補助は `qmb` が担当する。初期版はこの6 crate とし、basic・spin・geometry・export は core に依存する。core は basic・UUID・乱数源・具体的代数・Geometry・数値 backend に依存せず、`no_std + alloc` を維持する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
+具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。2026-10-25 にnorm・状態の正規化・正規化期待値を `qmb-normalize` へ分離する方針を採用したため、計画上は計7 crate とする。basic・spin・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core は basic・UUID・乱数源・具体的代数・Geometry・normalize・数値 backend に依存せず、`no_std + alloc` を維持する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
 
-core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, T>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装する。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
+core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, C>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装する。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
 
-共通パーツは `expr::parts` で保持内容も含めて公開し、式ハンドルは crate root から再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, T>` は `ScaleExpr<P, T>` の別名に統合し、要素名を `operand` に揃える。演算 trait の関連型 `Term` は係数を含まない要素型として区別する。既存の線型結合の構築・走査 API を維持し、走査を共通パーツへ集約する。
+共通パーツは `expr::parts` で保持内容も含めて公開し、式ハンドルは crate root から再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, C>` は `ScaleExpr<P, C>` の別名に統合し、要素名を `operand` に揃える。演算 trait の関連型 `Term` は係数を含まない要素型として区別する。既存の線型結合の構築・走査 API を維持し、走査を共通パーツへ集約する。
 
 この分割は、共通型と基本演算を所有する [tensory-core](https://github.com/todo-group/tensory/blob/c84f091e5c65f1408dee91db3730bdb8729e966e/tensory-core/src/lib.rs)と、公開テンソル表現の所有先を集約しつつ実行系・演算群を分ける [tenferro-rs の crate 設計](https://github.com/tensor4all/tenferro-rs/blob/f1d4d8d961ff6b937768111888ad2a493314892a/docs/architecture/tenferro-crates.md)を参考にした。qmb では primitive の局所規則と共通合成則に基づく評価を core に含め、外部数値 backend との接続を分離する。
 
@@ -37,15 +42,15 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 Index は識別子のみを表し、局所構造や次元を持たない。局所構造は、局所 Hilbert 空間と、その上で実現される代数・表現を定める。基本自由度は Index と局所構造を持つ `HilbertSpace` の葉（Factor）として表し、独立した `Dof` 型は設けない。葉も複合空間も同じ空間型で保持・合成する。同じ局所構造を持つ複数の因子を Index で区別する。
 
-初期版では一つの系の全基本因子を同じ局所構造型 `L` で表す一種類の局所構造に揃える。異種局所構造の混在・合成は後続へ延期し、そのための型消去を初期版の要件にしない。ユーザ定義の局所構造は、別の系で単独利用できる。同種因子の入れ子や一つの Site への複数自由度の配置は維持する。
+初期版では一つの系の全基本因子を同じ primitive 型 S・O で表す一種類の局所代数に揃える。異種局所構造の混在・合成は後続へ延期し、そのための型消去を初期版の要件にしない。ユーザ定義の局所構造は、別の系で単独利用できる。同種因子の入れ子や一つの Site への複数自由度の配置は維持する。
 
 局所状態・演算子に Index を付与することで、所属先・作用先の因子を識別する。元の局所構造は局所状態・演算子が保持する。この付与は、spectator を含む全 Hilbert 空間への束縛とは別の操作である。
 
-局所構造が保持する情報と数学的能力の整合性は、[局所構造の設計](design/local-structure.md)に定める。局所構造は、同じ定義・定義パラメータを持つ場合に一致とする。別々に構築・復元した場合もこの条件を用い、数学的同型の判定や primitive の自動対応付けは導入しない。初期版では一つの型 `L` が一つの定義・固定パラメータの組を表す契約を採用する。独立した定義 ID、異なる実装型間の定義照合、実行時パラメータは後続へ延期する。
+局所 primitive の意味・能力と数学的な整合性は、[局所 primitive の設計](design/local-structure.md)に定める。S・O の型と能力実装で定義を表し、追加の定義ラベル・定義 ID は導入しない。異なる規則や表現は primitive の型と実装に反映する。型消去による異種代数の合成と実行時パラメータは後続へ延期する。
 
 Hilbert 空間自体を、基本自由度の Index と局所構造を持つ Factor、および ordinary / graded の種類と順序付きの子 Hilbert 空間を持つ Tensor の再帰構造として表す。Tensor の子に Tensor を含められる。Factor と Tensor は概念上の名前とする。基本因子の順序は子を左からたどった葉の Index 列で表し、Index の値の大小から決めない。基底は空間とは別に選ぶ。
 
-Grouping は空間の木の括り方で表し、そのための独立した Group 型は追加しない。配置層が site と部分空間、内部ラベルと基本因子の対応を管理する。局所複合代数の数学的能力は、子の局所規則と共通の合成・評価機構から処理する。
+Grouping は空間の木の括り方で表し、そのための独立した Group 型は追加しない。Chain は Site ごとの Index 列を保持し、部分空間と grouping は利用側が管理する。Site 内の Index 順序と全空間の因子順序を区別し、接続側が対応を検証する。内部ラベルは初期版では導入しない。局所複合代数の数学的能力は、子の局所規則と共通の合成・評価機構から処理する。
 
 空間の互換性は、基本因子の Index・順序・局所構造と、空・単因子 tensor product の同一視および同種の積の結合則を適用した後の tensor 構造に基づく。保持する木構造と数学的な互換性を分け、括り方だけの違いでは互換性を変えない。構築時の平坦化は要求せず、不変な子空間を共有できるようにする。
 
@@ -57,7 +62,7 @@ Index は局所構造を指定せずに独立に発行し、自由度はあら�
 
 core は Index 型をジェネリックに扱い、同じ Index であることを照合できることを契約とする。具体的な表現・発行・一意性の確保は Index の提供側が担い、標準の具体実装は `qmb-basic` に UUID と seed 指定を要求しない発行 API を置く。同一ランタイム内および複数ランタイム間で、独立に発行した Index の一意性を仮定する。Index と局所構造の対応を全体で登録・固定する機構は設けず、合成・埋め込み・評価に必要な整合性は、その操作の対象から検証する。
 
-詳細は [Index の契約](design/index.md)に定める。同一性の照合は標準の `Eq` で行う。`qmb_basic::Index` は UUID v4 の具体型であり、`new()` で seed 指定不要の発行を提供する。
+詳細は [Index の契約](design/index.md)に定める。同一性の照合は標準の `Eq` で行う。Step 4 では UUID v4 の具体型を `qmb_basic::Id128` とし、`new()` と `Default` による seed 指定不要の新規発行を提供する。発行が必要な箇所だけ `I: Default` を要求し、専用の Index trait は設けない。
 
 保存・復元と複数ランタイムの契約は以下のとおりとする。詳細は [Index の契約の 7 節](design/index.md#7-保存復元と複数ランタイム)に定める。
 
@@ -71,13 +76,13 @@ core は Index 型をジェネリックに扱い、同じ Index であること�
 
 ## 5. Primitive・式木の数学的能力
 
-状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供する。Product・Act・随伴の trait は係数精度 `T` を型引数、返却要素を関連型 `Term` とし、`LinearCombination<Self::Term, T>` を返す。Act の演算子型は関連型 `Operator` で指定する。局所規則と恒等演算子は、同じ局所構造の primitive の有限線型結合を返す。数値制約は各実装に置き、演算 trait は局所式や局所構造に依存させない。内積・trace は従来どおり複素 scalar を返す。局所構造はこれらの能力を関連付け、次元、所属、表現パラメータ、恒等演算子と、結合則・作用・内積・随伴などの整合性を定める。
+状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供する。Product・Act・随伴の trait は係数全体 `C` を型引数、返却要素を関連型 `Term` とし、`LinearCombination<Self::Term, C>` を返す。Act の演算子型は関連型 `Operator` で指定する。局所規則と恒等演算子は、同じ局所構造の primitive の有限線型結合を返す。数値制約は各実装に置き、演算 trait は局所式や局所構造に依存させない。内積・trace は従来どおり複素 scalar を返す。局所構造はこれらの能力を関連付け、次元、所属、表現パラメータ、恒等演算子と、結合則・作用・内積・随伴などの整合性を定める。
 
-Rust の契約では、`LocalStructure` を係数型に依存しない状態・演算子の関連型と次元に限定し、恒等演算子の規則を `Identity<T>: LocalStructure` に分離する。演算能力は利用するメソッドで要求する。保持・係数計算を伴わない遅延構築・map に数値制約を付けず、全能力をまとめた係数 trait は導入しない。状態への作用評価に Product を要求せず、局所積を必要とする trace などで要求する。
+Rust の契約では、LocalStructure と追加の定義ラベルを廃止し、S・O と個別の能力実装で局所規則を定める。恒等元は `O: Identity` の値、次元は `SpanDimension` が返す primitive 型全体の span の次元とする。能力は利用するメソッドで要求し、保持・係数計算を伴わない遅延構築・map に数値制約を付けない。全能力をまとめた係数・primitive trait は導入しない。状態への作用評価に Product を要求せず、局所積を必要とする trace などで要求する。
 
-Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。局所式は `LocalState<L, T>`・`LocalOperator<L, T>` のハンドルが `Arc` で節点 enum を共有し、和・スカラー倍・積・作用・随伴の variant は対応する共通パーツを保持する。zero は空の和で表す。同じ式ハンドルを再利用した箇所で不変な部分式を共有し、別々に構築した同形の式を自動検出して共有する機構は設けない。
+Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。局所式は `LocalState<S, O, C>`・`LocalOperator<O, C>` のハンドルが `Arc` で節点 enum を共有し、和・スカラー倍・積・作用・随伴の variant は対応する共通パーツを保持する。zero は空の和で表す。同じ式ハンドルを再利用した箇所で不変な部分式を共有し、別々に構築した同形の式を自動検出して共有する機構は設けない。
 
-必要な評価時に線型性・半双線型性・共役線型性を用いて primitive の規則へ委譲し、構築時には式全体を展開しない。状態式の `act` は `Act` 節点による遅延した作用を構築し、`evaluate` は基底を指定せず局所規則に基づいて状態式を評価する。`ψ.act(&b).act(&a)` は `A(Bψ)` を表す。Norm、bra、期待値、commutator、Hilbert–Schmidt 内積などは共通機構から導出する。
+必要な評価時に線型性・半双線型性・共役線型性を用いて primitive の規則へ委譲し、構築時には式全体を展開しない。状態式の `act` は `Act` 節点による遅延した作用を構築し、`evaluate` は基底を指定せず局所規則に基づいて状態式を評価する。`ψ.act(&b).act(&a)` は `A(Bψ)` を表す。Norm、正規化、期待値、正規化期待値、commutator、Hilbert–Schmidt 内積などは共通機構から導出する。bra 型は初期版では導入せず、braket は内積で計算する。
 
 評価器は状態評価・演算子の作用・演算子項の走査を分担し、必要な範囲を処理する。評価と、最後の所有者になった式節点の破棄は明示的な作業スタックで反復的に行う。式同士の二項演算子は所有値・借用値の4通りに対応し、所有ハンドルを移動、借用ハンドルは共有参照を複製する。名前付きメソッドは共有借用を基本とする。
 
@@ -85,11 +90,11 @@ Primitive の線型独立性は要求せず、数学的に同じ対象を表す�
 
 ## 6. 基底の数学的能力
 
-基底の定義を表す struct が対象の要素型を指定した `Basis<P, T>` を実装し、primitive の基底展開、基底要素の順序番号の取得、および順序付きの遅延列挙を提供する。状態基底の展開は `LinearCombination<L::State, T>`、演算子基底の展開は `LinearCombination<L::Operator, T>` を返す。各要素は選択した基底の primitive に限り、式木側で `map` して通常の式へ取り込む。結果に基底情報を付随させない。局所基底要素は primitive の部分集合とし、対象空間全体に線型独立かつ完全であることを要求する。
+基底の定義を表す struct が対象の要素型を指定した `Basis<P, C>` を実装し、primitive の基底展開、基底要素の順序番号の取得、および順序付きの遅延列挙を提供する。状態基底の展開は `LinearCombination<S, C>`、演算子基底の展開は `LinearCombination<O, C>` を返す。各要素は選択した基底の primitive に限り、式木側で `map` して通常の式へ取り込む。結果に基底情報を付随させない。局所基底要素は primitive の部分集合とし、対象空間全体に線型独立かつ完全であることを要求する。
 
 基底要素数は、対応する局所構造と対象種別から導出する。局所 Hilbert 空間の次元が `d` なら状態基底は `d`、全演算子基底は `d²` 要素となる。Basis に独立した要素数の提供を要求しない。
 
-Core の共通機構が展開を線型に式全体へ拡張し、順序番号から座標を得る。内積・Gram 行列・双対基底は展開の実装に利用できるが、Basis の必須の独立能力とはしない。Step 2 では `Basis<P, T>` を維持し、`StateBasis`・`OperatorBasis` を削除する。利用側で `L: LocalStructure` と、状態には `Basis<L::State, T>`、演算子には `Basis<L::Operator, T>` を直接要求する。次元からの要素数取得と基底の数学的契約は維持する。詳細は [基底の数学的能力](design/basis.md)に定める。式全体・複合基底の具体的な API は後続で設計する。
+Core の共通機構が展開を線型に式全体へ拡張し、順序番号から座標を得る。内積・Gram 行列・双対基底は展開の実装に利用できるが、Basis の必須の独立能力とはしない。Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` を削除する。利用側で状態には `Basis<S, C>`、演算子には `Basis<O, C>` を直接要求する。次元からの要素数取得と基底の数学的契約は維持する。詳細は [基底の数学的能力](design/basis.md)に定める。式全体・複合基底の具体的な API は後続で設計する。
 
 初期版では局所規則に基づく `evaluate` に加え、指定基底への展開と係数取得を提供する。分配だけ、局所積だけなど、特定の簡約ルールのみを選択して適用する独立した操作は future work とする。必要な分配・局所積・係数の結合は、基底展開や作用・内積・trace の内部処理として維持する。入力の式は変更せず、通常の評価に基底展開を必須としない。
 
@@ -109,15 +114,17 @@ Core の共通機構が展開を線型に式全体へ拡張し、順序番号か
 
 Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 `Operator` は一つの型で未束縛・束縛済みを扱う。束縛情報は外側のハンドルに集約し、明示空間・既存束縛・未束縛の作用時の状態空間の順に選択する。検証が必要な複合操作とその演算子構文は `Result` を返し、空間不整合を早期に検出して局所規則の実行を遅延させる。評価は作用・内積・full trace の経路を分担し、全大域演算子の完全展開を必須にしない。採用した型・共有・空間保持・エラー・評価方針と受入条件は [Step 3 の実装方針](step-3-design.md)にまとめる。
 
-## 8. Geometry・Site と自由度の配置
+## 8. 幾何・モデル構築
 
-Site に Factor または Tensor を対応付け、その空間の全葉の Index をそのまま Site に所属させる。一つの配置では、各 Index をちょうど一つの Site に割り当て、Site 間の重複・未配置・必要数の過不足を拒否する。自由度数 `0` の Site と空の Geometry は認める。
+Chain は Site ごとの `Vec<Vec<I>>` と境界条件を直接保持する。Geometry 構造体は廃止し、各 Site の部分空間と全 Hilbert 空間は利用側が構築・保持する。既存の所有 Index 列を受け取る経路と、Site 数・各 Site 共通の自由度数から `I: Default` で新規発行する経路を提供する。保持・借用列挙には Clone・Default を要求せず、複製や借用 Index から別の空間を構築する操作にだけ Clone を要求できる。
 
-既存空間から構成要素・Index の列挙によって配置する経路と、Geometry が Site ごとの自由度数から Index 列を先に発行し、それを用いて局所構造・Hilbert 空間を構成する経路を提供する。各 Geometry が入力順序・Site 内順序・必要数に関する既定の配置規則を定め、配置で既存の tensor ordering を暗黙に変更しない。Geometry は局所代数の種類を決めない。
+Site は外側の Vec の位置を表す usize、内側の Vec は Site 内の自由度順序とする。Chain を跨ぐ同一性・所属チェックは行わない。構築時の Site 内・Site 間の Index 重複、範囲外、Site 数を指定した経路での数の不一致は Chain が検出する。外部空間との対応・未配置・過不足は接続側が検証する。空 Site・可変長・複数自由度を扱い、既存の Index を再発行しない。全空間の因子順序・grouping は Site 順序から独立に利用側が管理する。内部ラベルは導入しない。
 
-Site の同一性は所属 Geometry とその中の識別子の組とし、複製・共有では保持する。順序番号に加えて任意の内部ラベルを扱い、同じ Site 内でラベルが異なる Index を指す重複を拒否する。近接関係からは、配置情報を通じて両 Site の順序付き Index 列の組を得る。相互作用項の選択はモデル構築側が担当する。
+Chain は open / periodic を扱う。近接 Site ペアを正規化した辞書順で列挙し、長さ0・1で辺なし、長さ2では両境界条件とも一辺とする。関係ごとの trait を設け、NearestNeighborRelation は全 Index 組合せの `nn_pairs()` と同じ位置同士の `nn_pairs_by_pos()` を提供する。後者は短い方まで列挙する。関係の列挙と相互作用項の生成は区別し、Heisenberg・Neel utility は spin-half に置く。
 
-Geometry と確定した配置は構築後に不変とし、別の幾何や配置は新しく構築する。同じ Index を別の配置で利用してよく、Index と Site の対応を全体で固定しない。詳細は [Geometry・Site と自由度の配置](design/geometry.md)に定める。初期版は 1D Chain のみを提供し、`[[a,b],[c,d]]` の外側を Site 順序、内側を Site 内順序とする。Index 発行も同じ入れ子の形に揃え、新規空間の因子順序は外側から内側をたどる順序とする。具体的な識別方式・API・保持形式と追加の Geometry の規則は別途決める。
+空間への変換は qmb の接続用 module が提供する独立した拡張 trait `ToSpace` の `to_space` で扱う。Chain には `I: Clone + Eq` のときに実装し、借用から同じ Index と既定の因子順序を持つ空間を構築する。生成した空間は利用側が保持する。trait 全体や幾何関係の列挙には Clone を要求せず、Grading の情報の渡し方は fermion 系の実装時に具体化する。qmb::space::ToSpace として実装し、root と prelude から公開する。
+
+Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移す。移行先の契約は [Chain の設計](design/geometry.md)、実装範囲と検証は [実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行)に従う。Step 4 の空間保持・共有に関する契約は移行前の記録とする。
 
 ## 9. 初期版の提供範囲と完成条件
 
@@ -126,3 +133,23 @@ Geometry と確定した配置は構築後に不変とし、別の幾何や配�
 標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
 
 完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開と表現行列の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。詳細は [初期版の提供範囲と完成条件](design/initial-release.md)に定める。API・内部表現・数値 backend の具体的な選択は別途行う。
+
+## 10. 将来の必須課題
+
+State・Operator・Structure・Space の管理方法は、将来必ず再検討し、より適切な設計へリファクタリングする。所有・共有・関連付け、および Geometry と空間の依存関係を含めて見直す。現行設計は当面の実装方針であり、最終形として固定しない。具体的な設計と実施時期は後続で決定する。
+
+このリファクタリングと併せて、以下を必須課題として扱う。
+
+1. **core の係数型・数値能力の整理**：`qmb-core` に `num-complex`・`num-traits` を含め、係数型には必要な操作で必要な trait bound を課す。零・単位元には `num_traits::Zero`・`One` をそのまま使い、付随する能力も受け入れる。不足する能力 trait は core で定義し、`Complex<f32>`・`Complex<f64>` に直接実装できる構成にする。保持・構築へ不要な数値能力を要求せず、係数表現・演算・norm・正規化の責任を整理する。
+2. **LocalStructure の必要性（実装移行完了）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
+3. **Operator と State の整理（初期版実装後）**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。2026-10-26に、検討事項が多いため初期版実装後へ延期した。初期版では現行の分離を維持し、この整理の結論を実装の前提条件にしない。
+4. **HilbertSpace の最小構成（初期版の範囲は完了）**：LocalStructure 廃止により、Index と順序付き Tensor の構造だけを保持する構成へ移行した。primitive 型・次元・局所規則は式・取得時の入力・個別能力が担う。Grading の具体的な保持方法・API は、2026-10-26の判断により、fermion 系の実装時に具体化する。
+5. **Chain の内部表現（実装移行済み）**：Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する。空間の構築・保持・grouping・全体の因子順序・配置と束縛は利用側へ移す。理由と契約は[Chain の設計](design/geometry.md)に記録する。Grading の設計完了を前提にしない。
+
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[実装計画第7節](implementation-plan.md#7-係数型のリファクタリング)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持・ToSpace・モデル utility の実装移行も2026-10-27に実施した。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
+
+係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。詳細は [係数型の採用方針](refactoring-coefficient-proposal.md)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
+
+LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を直接指定する。次元は primitive 型全体の span の次元（S は d、O は d²）、恒等元は係数型に依存せず生成する O の値とする。空間・Geometry／Chain から L を外し、因子構造と局所規則を分離する。採用した契約と移行前の仕様の扱いは[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。全 crate の製品コード・テスト・利用例を移行済みである。
+
+この見直しは Step 4 の完了条件には追加しない。具体的な移行範囲と検証は[実装計画第8節](implementation-plan.md#8-localstructure-の廃止)に記録する。

@@ -3,7 +3,7 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::{Complex, HilbertSpace, LocalOperator, LocalState, LocalStructure, SpaceError};
+use crate::{HilbertSpace, LocalOperator, LocalState, SpaceError};
 
 /// Errors connecting, placing or evaluating composite expressions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -25,46 +25,51 @@ pub enum ExpressionError {
     Space(#[from] SpaceError),
 }
 
-/// A composite state with an immutable, always definite Hilbert space.
+/// A composite state with primitive types S and O and an immutable factor space.
 ///
-/// `I` supplies index equality; `L` fixes the local algebra and `T` fixes numeric
-/// precision. Construction and sharing require no arithmetic or primitive Clone.
-///
-/// Different coefficient precisions cannot be added:
+/// Tensor products require the same primitive types even though their spaces
+/// carry only index structure:
 ///
 /// ```compile_fail
-/// use core::num::NonZeroUsize;
-/// use qmb_core::{HilbertSpace, LocalStructure, State};
-/// struct L;
-/// impl LocalStructure for L {
-///     type State = ();
-///     type Operator = ();
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-/// }
-/// let factor = HilbertSpace::<u8, L>::factor(0);
-/// let single = State::<_, _, f32>::zero(&factor);
-/// let double = State::<_, _, f64>::zero(&factor);
-/// let _ = single + double;
+/// use qmb_core::{HilbertSpace, LocalState};
+/// let a = HilbertSpace::factor(0u8);
+/// let b = HilbertSpace::factor(1u8);
+/// let left = LocalState::<u8, (), ()>::primitive(0).at(&a).unwrap();
+/// let right = LocalState::<u16, (), ()>::primitive(0).at(&b).unwrap();
+/// let _ = left.tensor_product(&right);
 /// ```
 ///
-/// Non-Send indices are supported locally, without making the state Send:
+/// Composite action also requires matching operator primitives:
 ///
 /// ```compile_fail
-/// use core::num::NonZeroUsize;
+/// use qmb_core::{HilbertSpace, LocalState, Operator};
+/// let h = HilbertSpace::factor(0u8);
+/// let state = LocalState::<(), u8, ()>::zero().at(&h).unwrap();
+/// let operator = Operator::<u8, u16, ()>::identity().bind(&h).unwrap();
+/// let _ = state.act(&operator);
+/// ```
+///
+/// Coefficient precisions cannot be mixed:
+///
+/// ```compile_fail
+/// use qmb_core::{HilbertSpace, State};
+/// let h = HilbertSpace::factor(0u8);
+/// let a = State::<_, (), (), f32>::zero(&h);
+/// let b = State::<_, (), (), f64>::zero(&h);
+/// let _ = a + b;
+/// ```
+///
+/// Shared syntax still follows the index's Send bound:
+///
+/// ```compile_fail
 /// use std::rc::Rc;
-/// use qmb_core::{LocalStructure, State};
-/// struct L;
-/// impl LocalStructure for L {
-///     type State = ();
-///     type Operator = ();
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-/// }
+/// use qmb_core::State;
 /// fn needs_send<T: Send>() {}
-/// needs_send::<State<Rc<()>, L, f64>>();
+/// needs_send::<State<Rc<()>, (), (), ()>>();
 /// ```
-pub struct State<I, L: LocalStructure, T> {
-    pub(super) expression: StateExpr<I, L, T>,
-    pub(super) space: HilbertSpace<I, L>,
+pub struct State<I, S, O, C> {
+    pub(super) expression: StateExpr<I, S, O, C>,
+    pub(super) space: HilbertSpace<I>,
 }
 
 /// A placed operator with an optional ambient-space binding.
@@ -76,37 +81,39 @@ pub struct State<I, L: LocalStructure, T> {
 /// Scaling and adjoints are lazy and preserve an existing binding. Evaluation
 /// of an unbound operator requires an explicit space, except that action can
 /// use the state's space. See [`State::act`] and [`Operator::trace_in`].
-pub struct Operator<I, L: LocalStructure, T> {
-    pub(super) expression: OpExpr<I, L, T>,
-    pub(super) ambient: Option<HilbertSpace<I, L>>,
+pub struct Operator<I, O, C> {
+    pub(super) expression: OpExpr<I, O, C>,
+    pub(super) ambient: Option<HilbertSpace<I>>,
 }
 
-pub(super) struct StateExpr<I, L: LocalStructure, T> {
-    root: Option<Arc<StateNode<I, L, T>>>,
+pub(super) struct StateExpr<I, S, O, C> {
+    root: Option<Arc<StateNode<I, S, O, C>>>,
     pub(super) pending_action: bool,
 }
-pub(super) struct OpExpr<I, L: LocalStructure, T> {
-    root: Option<Arc<OpNode<I, L, T>>>,
+pub(super) struct OpExpr<I, O, C> {
+    root: Option<Arc<OpNode<I, O, C>>>,
 }
 
-pub(super) enum StateNode<I, L: LocalStructure, T> {
-    Local(HilbertSpace<I, L>, LocalState<L, T>),
+type StateAction<I, S, O, C> = ActExpr<StateExpr<I, S, O, C>, OpExpr<I, O, C>>;
+
+pub(super) enum StateNode<I, S, O, C> {
+    Local(HilbertSpace<I>, LocalState<S, O, C>),
     Unit,
-    Scale(ScaleExpr<StateExpr<I, L, T>, T>),
-    Sum(SumExpr<StateExpr<I, L, T>>),
-    Tensor(SumExpr<StateExpr<I, L, T>>),
-    Act(ActExpr<StateExpr<I, L, T>, OpExpr<I, L, T>>),
+    Scale(ScaleExpr<StateExpr<I, S, O, C>, C>),
+    Sum(SumExpr<StateExpr<I, S, O, C>>),
+    Tensor(SumExpr<StateExpr<I, S, O, C>>),
+    Act(StateAction<I, S, O, C>),
 }
-pub(super) enum OpNode<I, L: LocalStructure, T> {
-    Local(HilbertSpace<I, L>, LocalOperator<L, T>),
+pub(super) enum OpNode<I, O, C> {
+    Local(HilbertSpace<I>, LocalOperator<O, C>),
     Identity,
-    Scale(ScaleExpr<OpExpr<I, L, T>, T>),
-    Sum(SumExpr<OpExpr<I, L, T>>),
-    Product(ProductExpr<OpExpr<I, L, T>>),
-    Adjoint(AdjointExpr<OpExpr<I, L, T>>),
+    Scale(ScaleExpr<OpExpr<I, O, C>, C>),
+    Sum(SumExpr<OpExpr<I, O, C>>),
+    Product(ProductExpr<OpExpr<I, O, C>>),
+    Adjoint(AdjointExpr<OpExpr<I, O, C>>),
 }
 
-impl<I, L: LocalStructure, T> Clone for StateExpr<I, L, T> {
+impl<I, S, O, C> Clone for StateExpr<I, S, O, C> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
@@ -114,14 +121,14 @@ impl<I, L: LocalStructure, T> Clone for StateExpr<I, L, T> {
         }
     }
 }
-impl<I, L: LocalStructure, T> Clone for OpExpr<I, L, T> {
+impl<I, O, C> Clone for OpExpr<I, O, C> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
         }
     }
 }
-impl<I, L: LocalStructure, T> Clone for State<I, L, T> {
+impl<I, S, O, C> Clone for State<I, S, O, C> {
     fn clone(&self) -> Self {
         Self {
             expression: self.expression.clone(),
@@ -129,7 +136,7 @@ impl<I, L: LocalStructure, T> Clone for State<I, L, T> {
         }
     }
 }
-impl<I, L: LocalStructure, T> Clone for Operator<I, L, T> {
+impl<I, O, C> Clone for Operator<I, O, C> {
     fn clone(&self) -> Self {
         Self {
             expression: self.expression.clone(),
@@ -138,8 +145,8 @@ impl<I, L: LocalStructure, T> Clone for Operator<I, L, T> {
     }
 }
 
-impl<I, L: LocalStructure, T> StateExpr<I, L, T> {
-    pub(super) fn new(node: StateNode<I, L, T>) -> Self {
+impl<I, S, O, C> StateExpr<I, S, O, C> {
+    pub(super) fn new(node: StateNode<I, S, O, C>) -> Self {
         let pending_action = match &node {
             StateNode::Local(_, local) => local.has_pending_action(),
             StateNode::Unit => false,
@@ -152,10 +159,10 @@ impl<I, L: LocalStructure, T> StateExpr<I, L, T> {
             pending_action,
         }
     }
-    pub(super) fn node(&self) -> &StateNode<I, L, T> {
+    pub(super) fn node(&self) -> &StateNode<I, S, O, C> {
         self.root.as_deref().expect("live state syntax")
     }
-    pub(super) fn scaled(self, coefficient: Complex<T>) -> Self {
+    pub(super) fn scaled(self, coefficient: C) -> Self {
         Self::new(StateNode::Scale(ScaleExpr {
             operand: self,
             coefficient,
@@ -175,16 +182,16 @@ impl<I, L: LocalStructure, T> StateExpr<I, L, T> {
     }
 }
 
-impl<I, L: LocalStructure, T> OpExpr<I, L, T> {
-    pub(super) fn new(node: OpNode<I, L, T>) -> Self {
+impl<I, O, C> OpExpr<I, O, C> {
+    pub(super) fn new(node: OpNode<I, O, C>) -> Self {
         Self {
             root: Some(Arc::new(node)),
         }
     }
-    pub(super) fn node(&self) -> &OpNode<I, L, T> {
+    pub(super) fn node(&self) -> &OpNode<I, O, C> {
         self.root.as_deref().expect("live operator syntax")
     }
-    fn scaled(self, coefficient: Complex<T>) -> Self {
+    fn scaled(self, coefficient: C) -> Self {
         Self::new(OpNode::Scale(ScaleExpr {
             operand: self,
             coefficient,
@@ -192,11 +199,11 @@ impl<I, L: LocalStructure, T> OpExpr<I, L, T> {
     }
 }
 
-impl<I, L: LocalStructure, T> State<I, L, T> {
+impl<I, S, O, C> State<I, S, O, C> {
     /// Places a whole local expression on a leaf, preserving its index.
     pub fn place(
-        local: &LocalState<L, T>,
-        factor: &HilbertSpace<I, L>,
+        local: &LocalState<S, O, C>,
+        factor: &HilbertSpace<I>,
     ) -> Result<Self, ExpressionError> {
         if factor.factor_index().is_none() {
             return Err(ExpressionError::NotAFactor);
@@ -207,7 +214,7 @@ impl<I, L: LocalStructure, T> State<I, L, T> {
         })
     }
     /// Constructs a zero state with an explicit space, without numeric bounds.
-    pub fn zero(space: &HilbertSpace<I, L>) -> Self {
+    pub fn zero(space: &HilbertSpace<I>) -> Self {
         Self {
             space: space.clone(),
             expression: StateExpr::sum(SumExpr::Empty),
@@ -221,22 +228,22 @@ impl<I, L: LocalStructure, T> State<I, L, T> {
         }
     }
     /// Borrows the state's definite target space.
-    pub fn space(&self) -> &HilbertSpace<I, L> {
+    pub fn space(&self) -> &HilbertSpace<I> {
         &self.space
     }
     /// Returns the scalar source space of this ket.
-    pub fn domain(&self) -> HilbertSpace<I, L> {
+    pub fn domain(&self) -> HilbertSpace<I> {
         HilbertSpace::unit()
     }
     /// Borrows the ket's target space.
-    pub fn codomain(&self) -> &HilbertSpace<I, L> {
+    pub fn codomain(&self) -> &HilbertSpace<I> {
         &self.space
     }
     /// Constructs a coefficient node sharing this state.
-    pub fn scaled(&self, coefficient: Complex<T>) -> Self {
+    pub fn scaled(&self, coefficient: C) -> Self {
         self.clone().into_scaled(coefficient)
     }
-    pub(super) fn into_scaled(self, coefficient: Complex<T>) -> Self {
+    pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self {
             space: self.space,
             expression: self.expression.scaled(coefficient),
@@ -244,10 +251,10 @@ impl<I, L: LocalStructure, T> State<I, L, T> {
     }
 }
 
-impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
+impl<I: Eq, S, O, C> State<I, S, O, C> {
     /// Constructs an ordered sum on an explicit space, including an empty sum.
     pub fn sum(
-        space: &HilbertSpace<I, L>,
+        space: &HilbertSpace<I>,
         states: impl IntoIterator<Item = Self>,
     ) -> Result<Self, ExpressionError> {
         let expressions = states
@@ -293,21 +300,21 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
         Self::tensor([self.clone(), rhs.clone()])
     }
     /// Constructs a delayed action using a binding or this state's space.
-    pub fn act(&self, operator: &Operator<I, L, T>) -> Result<Self, ExpressionError> {
+    pub fn act(&self, operator: &Operator<I, O, C>) -> Result<Self, ExpressionError> {
         self.act_selected(operator, None)
     }
     /// Constructs a delayed action using `ambient` in preference to an old binding.
     pub fn act_in(
         &self,
-        operator: &Operator<I, L, T>,
-        ambient: &HilbertSpace<I, L>,
+        operator: &Operator<I, O, C>,
+        ambient: &HilbertSpace<I>,
     ) -> Result<Self, ExpressionError> {
         self.act_selected(operator, Some(ambient))
     }
     fn act_selected(
         &self,
-        operator: &Operator<I, L, T>,
-        ambient: Option<&HilbertSpace<I, L>>,
+        operator: &Operator<I, O, C>,
+        ambient: Option<&HilbertSpace<I>>,
     ) -> Result<Self, ExpressionError> {
         let space = operator.select_space(ambient, Some(&self.space))?;
         if !space.is_compatible_with(&self.space) {
@@ -321,7 +328,7 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
             })),
         })
     }
-    pub(super) fn into_act(self, operator: Operator<I, L, T>) -> Result<Self, ExpressionError> {
+    pub(super) fn into_act(self, operator: Operator<I, O, C>) -> Result<Self, ExpressionError> {
         let space = operator.select_space(None, Some(&self.space))?;
         if !space.is_compatible_with(&self.space) {
             return Err(ExpressionError::IncompatibleSpaces);
@@ -336,11 +343,11 @@ impl<I: Eq, L: LocalStructure, T> State<I, L, T> {
     }
 }
 
-impl<I, L: LocalStructure, T> Operator<I, L, T> {
+impl<I, O, C> Operator<I, O, C> {
     /// Places a whole local operator on a factor without binding an ambient space.
     pub fn place(
-        local: &LocalOperator<L, T>,
-        factor: &HilbertSpace<I, L>,
+        local: &LocalOperator<O, C>,
+        factor: &HilbertSpace<I>,
     ) -> Result<Self, ExpressionError> {
         if factor.factor_index().is_none() {
             return Err(ExpressionError::NotAFactor);
@@ -365,26 +372,26 @@ impl<I, L: LocalStructure, T> Operator<I, L, T> {
         }
     }
     /// Constructs a scalar multiple of identity without performing arithmetic.
-    pub fn scalar(coefficient: Complex<T>) -> Self {
+    pub fn scalar(coefficient: C) -> Self {
         Self::identity().into_scaled(coefficient)
     }
     /// Borrows the ambient space, if bound.
-    pub fn space(&self) -> Option<&HilbertSpace<I, L>> {
+    pub fn space(&self) -> Option<&HilbertSpace<I>> {
         self.ambient.as_ref()
     }
     /// Borrows the source space of a bound endomorphism.
-    pub fn domain(&self) -> Option<&HilbertSpace<I, L>> {
+    pub fn domain(&self) -> Option<&HilbertSpace<I>> {
         self.space()
     }
     /// Borrows the target space of a bound endomorphism.
-    pub fn codomain(&self) -> Option<&HilbertSpace<I, L>> {
+    pub fn codomain(&self) -> Option<&HilbertSpace<I>> {
         self.space()
     }
     /// Constructs a coefficient node, preserving the optional binding.
-    pub fn scaled(&self, coefficient: Complex<T>) -> Self {
+    pub fn scaled(&self, coefficient: C) -> Self {
         self.clone().into_scaled(coefficient)
     }
-    pub(super) fn into_scaled(self, coefficient: Complex<T>) -> Self {
+    pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self {
             ambient: self.ambient,
             expression: self.expression.scaled(coefficient),
@@ -401,8 +408,8 @@ impl<I, L: LocalStructure, T> Operator<I, L, T> {
     }
 }
 
-impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
-    fn combined_space(operands: &[Self]) -> Result<Option<HilbertSpace<I, L>>, ExpressionError> {
+impl<I: Eq, O, C> Operator<I, O, C> {
+    fn combined_space(operands: &[Self]) -> Result<Option<HilbertSpace<I>>, ExpressionError> {
         // Decide whether every operand is bound before comparing any pair.
         if operands.is_empty() || operands.iter().any(|op| op.ambient.is_none()) {
             return Ok(None);
@@ -465,7 +472,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
         Self::sum([self.product(rhs)?, rhs.product(self)?])
     }
     /// Binds or rebinds this syntax to an explicit space, leaving the input intact.
-    pub fn bind(&self, ambient: &HilbertSpace<I, L>) -> Result<Self, ExpressionError> {
+    pub fn bind(&self, ambient: &HilbertSpace<I>) -> Result<Self, ExpressionError> {
         self.validate(ambient)?;
         Ok(Self {
             expression: self.expression.clone(),
@@ -474,9 +481,9 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     }
     pub(super) fn select_space<'a>(
         &'a self,
-        explicit: Option<&'a HilbertSpace<I, L>>,
-        state: Option<&'a HilbertSpace<I, L>>,
-    ) -> Result<&'a HilbertSpace<I, L>, ExpressionError> {
+        explicit: Option<&'a HilbertSpace<I>>,
+        state: Option<&'a HilbertSpace<I>>,
+    ) -> Result<&'a HilbertSpace<I>, ExpressionError> {
         let space = explicit
             .or(self.ambient.as_ref())
             .or(state)
@@ -484,7 +491,7 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
         self.validate(space)?;
         Ok(space)
     }
-    fn validate(&self, space: &HilbertSpace<I, L>) -> Result<(), ExpressionError> {
+    fn validate(&self, space: &HilbertSpace<I>) -> Result<(), ExpressionError> {
         let mut pending = alloc::vec![&self.expression];
         while let Some(op) = pending.pop() {
             match op.node() {
@@ -507,20 +514,20 @@ impl<I: Eq, L: LocalStructure, T> Operator<I, L, T> {
     }
 }
 
-impl<L: LocalStructure, T> LocalState<L, T> {
+impl<S, O, C> LocalState<S, O, C> {
     /// Places this whole expression on an existing factor, without evaluating it.
-    pub fn at<I>(&self, factor: &HilbertSpace<I, L>) -> Result<State<I, L, T>, ExpressionError> {
+    pub fn at<I>(&self, factor: &HilbertSpace<I>) -> Result<State<I, S, O, C>, ExpressionError> {
         State::place(self, factor)
     }
 }
-impl<L: LocalStructure, T> LocalOperator<L, T> {
+impl<O, C> LocalOperator<O, C> {
     /// Places this whole expression on an existing factor, without binding it.
-    pub fn at<I>(&self, factor: &HilbertSpace<I, L>) -> Result<Operator<I, L, T>, ExpressionError> {
+    pub fn at<I>(&self, factor: &HilbertSpace<I>) -> Result<Operator<I, O, C>, ExpressionError> {
         Operator::place(self, factor)
     }
 }
 
-impl<I, L: LocalStructure, T> Drop for StateExpr<I, L, T> {
+impl<I, S, O, C> Drop for StateExpr<I, S, O, C> {
     fn drop(&mut self) {
         let mut first = self.root.take();
         let mut pending = Vec::new();
@@ -545,7 +552,7 @@ impl<I, L: LocalStructure, T> Drop for StateExpr<I, L, T> {
         }
     }
 }
-impl<I, L: LocalStructure, T> Drop for OpExpr<I, L, T> {
+impl<I, O, C> Drop for OpExpr<I, O, C> {
     fn drop(&mut self) {
         let mut first = self.root.take();
         let mut pending = Vec::new();

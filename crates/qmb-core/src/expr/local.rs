@@ -1,95 +1,77 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::{Complex, LinearCombination, LocalStructure};
+use crate::LinearCombination;
 
-/// An immutable local state expression with shared subexpressions.
+/// A shared local state over state primitive S, operator primitive O and coefficient C.
 ///
-/// Cloning shares nodes and requires no cloning or numeric capabilities of the
-/// structure, primitives, or coefficients. Operations preserve their inputs.
+/// Cloning shares immutable nodes without cloning primitives or coefficients.
+/// Construction requests no algebra or numeric capabilities.
 ///
-/// Coefficient precisions cannot be mixed implicitly:
+/// Different state primitives cannot be added implicitly:
 ///
 /// ```compile_fail
-/// use core::num::NonZeroUsize;
-/// use qmb_core::{LocalState, LocalStructure};
-/// struct L;
-/// impl LocalStructure for L {
-///     type State = u8;
-///     type Operator = u8;
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
-/// }
-/// let a = LocalState::<L, f32>::primitive(0);
-/// let b = LocalState::<L, f64>::primitive(0);
+/// use qmb_core::LocalState;
+/// let a = LocalState::<u8, (), ()>::primitive(0);
+/// let b = LocalState::<u16, (), ()>::primitive(0);
 /// let _ = a + b;
 /// ```
 ///
-/// Shared ownership does not make non-Send primitives transferable:
+/// Coefficient precision also stays fixed:
 ///
 /// ```compile_fail
-/// use core::num::NonZeroUsize;
-/// use std::rc::Rc;
-/// use qmb_core::{LocalState, LocalStructure};
-/// struct L;
-/// impl LocalStructure for L {
-///     type State = Rc<()>;
-///     type Operator = ();
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-/// }
-/// fn needs_send<T: Send>() {}
-/// needs_send::<LocalState<L, f64>>();
+/// use qmb_core::LocalState;
+/// let a = LocalState::<(), (), f32>::zero();
+/// let b = LocalState::<(), (), f64>::zero();
+/// let _ = a + b;
 /// ```
-pub struct LocalState<L: LocalStructure, T> {
-    pub(super) root: Option<Arc<StateNode<L, T>>>,
+///
+/// Shared ownership does not make a non-Send primitive transferable:
+///
+/// ```compile_fail
+/// use std::rc::Rc;
+/// use qmb_core::LocalState;
+/// fn needs_send<T: Send>() {}
+/// needs_send::<LocalState<Rc<()>, (), ()>>();
+/// ```
+pub struct LocalState<S, O, C> {
+    pub(super) root: Option<Arc<StateNode<S, O, C>>>,
     // A structural property, not an evaluation cache. It permits O(1) reuse of
     // already evaluated subtrees without rescanning long expression chains.
     pub(super) has_action: bool,
 }
 
-/// An immutable local operator expression, independent of a chosen basis.
+/// A shared local operator over primitive O and coefficient C.
 ///
-/// Distinct local structures stay distinct even if they use the same primitives:
+/// Its primitive type must match the state's delayed action:
 ///
 /// ```compile_fail
-/// use core::num::NonZeroUsize;
-/// use qmb_core::{LocalState, LocalOperator, LocalStructure};
-/// struct A;
-/// struct B;
-/// impl LocalStructure for A {
-///     type State = u8;
-///     type Operator = u8;
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
-/// }
-/// impl LocalStructure for B {
-///     type State = u8;
-///     type Operator = u8;
-///     const DIMENSION: NonZeroUsize = NonZeroUsize::new(2).unwrap();
-/// }
-/// let state = LocalState::<A, f64>::primitive(0);
-/// let op = LocalOperator::<B, f64>::primitive(0);
-/// let _ = state.act(&op);
+/// use qmb_core::{LocalOperator, LocalState};
+/// let state = LocalState::<(), u8, ()>::zero();
+/// let other = LocalOperator::<u16, ()>::identity();
+/// let _ = state.act(&other);
 /// ```
-pub struct LocalOperator<L: LocalStructure, T> {
-    pub(super) root: Option<Arc<OperatorNode<L, T>>>,
+pub struct LocalOperator<O, C> {
+    pub(super) root: Option<Arc<OperatorNode<O, C>>>,
 }
 
-pub(super) enum StateNode<L: LocalStructure, T> {
-    Primitive(L::State),
-    Scale(ScaleExpr<LocalState<L, T>, T>),
-    Sum(SumExpr<LocalState<L, T>>),
-    Act(ActExpr<LocalState<L, T>, LocalOperator<L, T>>),
+pub(super) enum StateNode<S, O, C> {
+    Primitive(S),
+    Scale(ScaleExpr<LocalState<S, O, C>, C>),
+    Sum(SumExpr<LocalState<S, O, C>>),
+    Act(ActExpr<LocalState<S, O, C>, LocalOperator<O, C>>),
 }
 
-pub(super) enum OperatorNode<L: LocalStructure, T> {
-    Primitive(L::Operator),
+pub(super) enum OperatorNode<O, C> {
+    Primitive(O),
     Identity,
-    Scale(ScaleExpr<LocalOperator<L, T>, T>),
-    Sum(SumExpr<LocalOperator<L, T>>),
-    Product(ProductExpr<LocalOperator<L, T>>),
-    Adjoint(AdjointExpr<LocalOperator<L, T>>),
+    Scale(ScaleExpr<LocalOperator<O, C>, C>),
+    Sum(SumExpr<LocalOperator<O, C>>),
+    Product(ProductExpr<LocalOperator<O, C>>),
+    Adjoint(AdjointExpr<LocalOperator<O, C>>),
 }
 
-impl<L: LocalStructure, T> Clone for LocalState<L, T> {
+impl<S, O, C> Clone for LocalState<S, O, C> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
@@ -97,7 +79,7 @@ impl<L: LocalStructure, T> Clone for LocalState<L, T> {
         }
     }
 }
-impl<L: LocalStructure, T> Clone for LocalOperator<L, T> {
+impl<O, C> Clone for LocalOperator<O, C> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
@@ -105,11 +87,11 @@ impl<L: LocalStructure, T> Clone for LocalOperator<L, T> {
     }
 }
 
-impl<L: LocalStructure, T> LocalState<L, T> {
+impl<S, O, C> LocalState<S, O, C> {
     pub(crate) fn has_pending_action(&self) -> bool {
         self.has_action
     }
-    pub(super) fn new(node: StateNode<L, T>) -> Self {
+    pub(super) fn new(node: StateNode<S, O, C>) -> Self {
         let has_action = match &node {
             StateNode::Primitive(_) => false,
             StateNode::Scale(s) => s.operand.has_action,
@@ -121,12 +103,12 @@ impl<L: LocalStructure, T> LocalState<L, T> {
             has_action,
         }
     }
-    pub(super) fn node(&self) -> &StateNode<L, T> {
+    pub(super) fn node(&self) -> &StateNode<S, O, C> {
         self.root.as_deref().expect("live state handle")
     }
 
     /// Stores a primitive without generating a coefficient or running a rule.
-    pub fn primitive(primitive: L::State) -> Self {
+    pub fn primitive(primitive: S) -> Self {
         Self::new(StateNode::Primitive(primitive))
     }
     /// Constructs the empty sum, without numeric bounds.
@@ -141,46 +123,46 @@ impl<L: LocalStructure, T> LocalState<L, T> {
         }
     }
     /// Incorporates mapped terms as ordinary scale and sum nodes.
-    pub fn from_linear_combination(terms: LinearCombination<Self, T>) -> Self {
+    pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
         Self::sum(
             terms
                 .into_iter()
                 .map(|term| term.operand.into_scaled(term.coefficient)),
         )
     }
-    pub(super) fn into_scaled(self, coefficient: Complex<T>) -> Self {
+    pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self::new(StateNode::Scale(ScaleExpr {
             coefficient,
             operand: self,
         }))
     }
     /// Constructs a scale node sharing this expression, even for zero or one.
-    pub fn scaled(&self, coefficient: Complex<T>) -> Self {
+    pub fn scaled(&self, coefficient: C) -> Self {
         self.clone().into_scaled(coefficient)
     }
-    pub(super) fn into_act(self, operator: LocalOperator<L, T>) -> Self {
+    pub(super) fn into_act(self, operator: LocalOperator<O, C>) -> Self {
         Self::new(StateNode::Act(ActExpr {
             state: self,
             operator,
         }))
     }
     /// Constructs a delayed left action. `psi.act(b).act(a)` means `A(B psi)`.
-    pub fn act(&self, operator: &LocalOperator<L, T>) -> Self {
+    pub fn act(&self, operator: &LocalOperator<O, C>) -> Self {
         self.clone().into_act(operator.clone())
     }
 }
 
-impl<L: LocalStructure, T> LocalOperator<L, T> {
-    pub(super) fn new(node: OperatorNode<L, T>) -> Self {
+impl<O, C> LocalOperator<O, C> {
+    pub(super) fn new(node: OperatorNode<O, C>) -> Self {
         Self {
             root: Some(Arc::new(node)),
         }
     }
-    pub(super) fn node(&self) -> &OperatorNode<L, T> {
+    pub(super) fn node(&self) -> &OperatorNode<O, C> {
         self.root.as_deref().expect("live operator handle")
     }
     /// Stores a primitive without generating a coefficient or running a rule.
-    pub fn primitive(primitive: L::Operator) -> Self {
+    pub fn primitive(primitive: O) -> Self {
         Self::new(OperatorNode::Primitive(primitive))
     }
     /// Constructs the empty sum, without numeric bounds.
@@ -195,21 +177,21 @@ impl<L: LocalStructure, T> LocalOperator<L, T> {
         }
     }
     /// Incorporates mapped terms as ordinary scale and sum nodes.
-    pub fn from_linear_combination(terms: LinearCombination<Self, T>) -> Self {
+    pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
         Self::sum(
             terms
                 .into_iter()
                 .map(|term| term.operand.into_scaled(term.coefficient)),
         )
     }
-    pub(super) fn into_scaled(self, coefficient: Complex<T>) -> Self {
+    pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self::new(OperatorNode::Scale(ScaleExpr {
             coefficient,
             operand: self,
         }))
     }
     /// Constructs a scale node sharing this expression, even for zero or one.
-    pub fn scaled(&self, coefficient: Complex<T>) -> Self {
+    pub fn scaled(&self, coefficient: C) -> Self {
         self.clone().into_scaled(coefficient)
     }
     /// Constructs a symbolic identity, without invoking the identity rule.
@@ -244,31 +226,28 @@ impl<L: LocalStructure, T> LocalOperator<L, T> {
     }
 }
 
-impl<L: LocalStructure, T> Default for LocalState<L, T> {
+impl<S, O, C> Default for LocalState<S, O, C> {
     fn default() -> Self {
         Self::zero()
     }
 }
-impl<L: LocalStructure, T> Default for LocalOperator<L, T> {
+impl<O, C> Default for LocalOperator<O, C> {
     fn default() -> Self {
         Self::zero()
     }
 }
 
-enum Pending<L: LocalStructure, T> {
-    State(Arc<StateNode<L, T>>),
-    Operator(Arc<OperatorNode<L, T>>),
+enum Pending<S, O, C> {
+    State(Arc<StateNode<S, O, C>>),
+    Operator(Arc<OperatorNode<O, C>>),
 }
 
-fn state_child<L: LocalStructure, T>(mut child: LocalState<L, T>, stack: &mut Vec<Pending<L, T>>) {
+fn state_child<S, O, C>(mut child: LocalState<S, O, C>, stack: &mut Vec<Pending<S, O, C>>) {
     if let Some(root) = child.root.take() {
         stack.push(Pending::State(root));
     }
 }
-fn operator_child<L: LocalStructure, T>(
-    mut child: LocalOperator<L, T>,
-    stack: &mut Vec<Pending<L, T>>,
-) {
+fn operator_child<S, O, C>(mut child: LocalOperator<O, C>, stack: &mut Vec<Pending<S, O, C>>) {
     if let Some(root) = child.root.take() {
         stack.push(Pending::Operator(root));
     }
@@ -277,7 +256,7 @@ fn operator_child<L: LocalStructure, T>(
 // Arc::into_inner also avoids recursive final-release races between threads.
 // Taking children out before their handles drop keeps the whole mixed DAG on
 // this work stack. Empty/shared/primitive roots need no work-stack allocation.
-fn release<L: LocalStructure, T>(root: Pending<L, T>) {
+fn release<S, O, C>(root: Pending<S, O, C>) {
     let mut stack = Vec::new();
     let mut first = Some(root);
     while let Some(root) = first.take().or_else(|| stack.pop()) {
@@ -321,17 +300,19 @@ fn release<L: LocalStructure, T>(root: Pending<L, T>) {
     }
 }
 
-impl<L: LocalStructure, T> Drop for LocalState<L, T> {
+impl<S, O, C> Drop for LocalState<S, O, C> {
     fn drop(&mut self) {
         if let Some(root) = self.root.take() {
             release(Pending::State(root))
         }
     }
 }
-impl<L: LocalStructure, T> Drop for LocalOperator<L, T> {
+impl<O, C> Drop for LocalOperator<O, C> {
     fn drop(&mut self) {
         if let Some(root) = self.root.take() {
-            release(Pending::Operator(root))
+            // Operators have no state descendants. The mixed work stack needs
+            // no concrete state primitive when releasing an operator root.
+            release::<core::convert::Infallible, O, C>(Pending::Operator(root))
         }
     }
 }

@@ -1,0 +1,9 @@
+[package]
+name = "qmb-geometry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Immutable site geometries and geometric relations"
+
+[dependencies]
+thiserror.workspace = true

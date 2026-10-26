@@ -1,6 +1,6 @@
 //! Local basis expansion, indexing, and lazy enumeration.
 
-use crate::{DimensionOverflow, LinearCombination, LocalStructure};
+use crate::{DimensionOverflow, LinearCombination, SpanDimension};
 
 /// Expansion, indexing and enumeration of a complete, ordered basis.
 ///
@@ -11,9 +11,9 @@ use crate::{DimensionOverflow, LinearCombination, LocalStructure};
 ///
 /// Numeric bounds belong to each concrete implementation, rather than this
 /// trait. All three methods use that implementation's coefficient precision.
-pub trait Basis<P, T> {
+pub trait Basis<P, C> {
     /// Expands a primitive into a combination of elements of this basis.
-    fn expand(&self, primitive: &P) -> LinearCombination<P, T>;
+    fn expand(&self, primitive: &P) -> LinearCombination<P, C>;
 
     /// Returns the zero-based index, or `None` for a non-basis primitive.
     fn index(&self, primitive: &P) -> Option<usize>;
@@ -21,27 +21,18 @@ pub trait Basis<P, T> {
     /// Yields each basis element exactly once in index order.
     ///
     /// Elements are owned; allocation and an exact-size iterator are not required.
-    /// Use a qualified call when `T` cannot be inferred from context.
+    /// Use a qualified call when `C` cannot be inferred from context.
     fn elements(&self) -> impl Iterator<Item = P> + '_;
 }
 
-/// Returns the number of elements in any complete state basis for `L`.
-pub fn state_basis_len<L>() -> usize
-where
-    L: LocalStructure,
-{
-    L::DIMENSION.get()
+/// Returns the state basis size from the span of state primitive S.
+pub fn state_basis_len<S: SpanDimension>() -> Result<usize, DimensionOverflow> {
+    Ok(S::span_dimension()?.get())
 }
 
-/// Returns the squared state dimension, the size of a complete operator basis.
+/// Returns the operator basis size from the span of operator primitive O.
 ///
-/// # Errors
-///
-/// Returns [`DimensionOverflow`] if the square does not fit in `usize`.
-pub fn operator_basis_len<L>() -> Result<usize, DimensionOverflow>
-where
-    L: LocalStructure,
-{
-    let dimension = L::DIMENSION.get();
-    dimension.checked_mul(dimension).ok_or(DimensionOverflow)
+/// This is already the operator-space dimension, not a value to square again.
+pub fn operator_basis_len<O: SpanDimension>() -> Result<usize, DimensionOverflow> {
+    Ok(O::span_dimension()?.get())
 }
