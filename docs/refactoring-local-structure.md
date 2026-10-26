@@ -4,7 +4,7 @@
 
 ## 1. 位置づけと結論
 
-[整理メモの3.2節](refactoring-notes.md#32-localstructure-の必要性)に対する調査と設計判断である。コミット `6fc01b6` の実装を調査し、2026-10-26 の議論で以下の方針を採用した。第2〜3節は移行前の実装、第4節以降は採用した移行方針を記録する。製品コード・テスト・利用例の移行を完了した。
+LocalStructure の廃止に向けた調査と設計判断の記録である。コミット `6fc01b6` の実装を調査し、2026-10-26 の議論で以下の方針を採用した。第2〜3節は移行前の実装、第4節以降は採用した移行方針を記録する。製品コード・テスト・利用例の移行を完了した。
 
 **LocalStructure を廃止し、式に primitive 型 S・O を直接指定する。追加の定義ラベル・定義 ID は設けない。** primitive の意味・規則は S・O の型と各能力の実装で定める。保持と評価の分離を維持し、因子構造を扱う空間・Geometry／Chain から局所定義への依存を外す。
 
@@ -20,7 +20,7 @@
 | 定義の区別 | S・O の型と各能力の実装が担う。同じ S・O に別の意味を与えるための追加ラベルは設けない |
 | 因子の構造 | 空間が Index・順序・grouping を扱う。空間比較・bind のために L を保持しない |
 
-数学的な契約は[局所構造の設計](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)、実装の移行範囲は[実装計画](implementation-plan.md#8-localstructure-の廃止)にも記録する。State／Operator の一般の写像としての整理、空間の Grading を含む最小構成、Chain の内部表現の詳細は後続の議論とする。
+数学的な契約は[局所構造の設計](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)、実装の移行範囲は[実装計画](implementation-plan.md#8-localstructure-の廃止)にも記録する。未実施の State／Operator の整理と Grading の情報保持・API の具体化は[整理メモ](refactoring-notes.md)に記録する。
 
 ## 2. 移行前の機能（調査記録）
 
@@ -183,7 +183,7 @@ primitive の意味や規則が違う場合は S・O の型と能力の実装で
 
 place・bind・空間比較は Factor の形、Index の存在・重複、因子順序を確認する。zero・identity・unit でも式の S・O は型として残り、primitive の値がないことを理由に空間へ L を戻す必要はない。
 
-Geometry／Chain から L への依存も外す。モデル utility は既存の Factor に spin の局所式を配置し、全空間へ bind する。Index の再発行や共有構造の全複製はしない。Site の分割・全空間の因子順序・空 Site の契約を維持する。Grading を含む空間の最小構成と Chain の内部表現の詳細は、整理メモの3.4・3.5で詰める。
+Geometry／Chain から L への依存も外す。モデル utility は既存の Factor に spin の局所式を配置し、全空間へ bind する。Index の再発行や共有構造の全複製はしない。Site の分割・全空間の因子順序・空 Site の契約を維持する。Grading の情報保持・API の具体化は[整理メモの第3節](refactoring-notes.md#3-grading-の情報保持と-api)、その後の Chain の内部表現の変更は[Chain の設計](design/geometry.md)を参照する。
 
 ## 5. 採用理由と不採用にした構成
 
@@ -244,4 +244,4 @@ core 単独の `cargo tree -p qmb-core --no-default-features -e normal,features`
 
 [primitive の契約テスト](../crates/qmb-core/tests/primitive_contracts.rs)は、異なる primitive 型の式が同じ因子構造を共有して配置・bind できること、数値能力のない係数での保持・遅延構築、d と d² の区別、次元取得にだけ現れる overflow、空の tensor の次元1を検証する。局所／複合式の compile-fail は S・O・C の不適切な混在と Send 制約を検証する。既存の行列照合・非正規直交基底・独自係数・零ノルム・深い式の128 KiBスタック上の評価／破棄・割り当て・Chain の各契約も成功した。
 
-MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは未実施である。State／Operator の一般の写像としての整理、Grading、Chain の内部表現の追加の見直しは、この移行の完了とは別の後続課題とする。
+MSRV 1.85 と専用 no_std target の実ビルド、性能ベンチマークは未実施である。State／Operator の一般の写像としての整理と Grading は、この移行の完了とは別の後続課題とする。Chain は2026-10-27に Index 列保持へ移行済みである。

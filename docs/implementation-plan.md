@@ -180,15 +180,15 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 同じリファクタリングで、core の係数型と数値能力を整理する。2026-10-25 の方針変更により `num-complex`・`num-traits` は core に含め、不足する能力 trait を `Complex<f32>`・`Complex<f64>` に直接実装し、必要な操作で必要な trait bound を課す。零・単位元には num-traits の Zero・One をそのまま使い、付随する能力も受け入れる。また、LocalStructure の必要性、操作的量子論に基づく Operator・State の一般の演算子の特別な形としての整理、Index と Grading だけによる HilbertSpace の構成、その構成から Grading を除いた Chain の内部表現について、議論して設計上の結論と根拠を記録する。これら五つの課題を必須課題とし、Step 4 の完了条件には追加しない。
 
-2026-10-26に、Operator と State の整理は検討事項が多いため、設計の検討と、それに基づくリファクタリングを初期版実装後へ延期した。初期版は現行の State／Operator の分離を維持し、段階5〜6の実装はこの整理の結論を前提条件にしない。HilbertSpace・Chain の検討も現行の分離を前提に行える。論点と更新した着手順序は[整理メモの3.3節](refactoring-notes.md#33-operator-と-state-の整理)と[第4節](refactoring-notes.md#4-着手順序の提案)に記録する。
+2026-10-26に、Operator と State の整理は検討事項が多いため、設計の検討と、それに基づくリファクタリングを初期版実装後へ延期した。初期版は現行の State／Operator の分離を維持し、段階5〜6の実装はこの整理の結論を前提条件にしない。HilbertSpace・Chain の検討も現行の分離を前提に行える。論点と再開時期は[整理メモの第2節](refactoring-notes.md#2-operator-と-state-の整理)に記録する。
 
-HilbertSpace の最小構成のうち、ordinary の責任分離は第8節の LocalStructure 廃止で実装済みである。空間は Index と順序付き Tensor の構造だけを保持し、局所代数の情報は外部から得る。2026-10-26に、Grading の情報保持・API は fermion 系の実装時に具体化する方針とし、初期版向けの空間の整理を完了とした。Chain は同日に Index 列を直接保持する方針を採用し、第9節の実装移行を残す。
+HilbertSpace の最小構成のうち、ordinary の責任分離は第8節の LocalStructure 廃止で実装済みである。空間は Index と順序付き Tensor の構造だけを保持し、局所代数の情報は外部から得る。2026-10-26に、Grading の情報保持・API は fermion 系の実装時に具体化する方針とし、初期版向けの空間の整理を完了とした。Chain は同日に Index 列を直接保持する方針を採用し、第9節のとおり2026-10-27に実装移行を完了した。
 
 係数型の残る推奨案は同日にすべて採用した。係数全体 C への型引数の移行、個別の共役・実数値取得・実係数の埋め込み・純虚係数生成、qmb-normalize の拡張 trait、標準 Complex の左スカラー倍の個別実装と任意の C の scaled(c)、正規化期待値の純実分母の処理の維持を実装する。追加 provider は導入しない。移行順序と検証基準は [係数型の採用方針](refactoring-coefficient-proposal.md)に従う。
 
 ## 7. 係数型のリファクタリング
 
-**完了（2026-10-26）**。実装・テストを採用方針と照合し、完了条件を満たすことを確認した。再検証のコマンド・結果と未検証事項は[整理メモの完了確認](refactoring-notes.md#311-完了確認2026-10-26)に記録する。
+**完了（2026-10-26）**。実装・テストを採用方針と照合し、完了条件を満たすことを確認した。移行後の workspace 全体の検証結果は第9.2節、未実施の検証は[整理メモの第4節](refactoring-notes.md#4-未実施の検証)に記録する。
 
 2026-10-25 に、薄い線型結合・共通パーツ・演算 trait・局所／複合式・共通評価・spin 規則・基底・モデル utility・利用例を係数全体 C へ移行した。保持・共有・構築に数値 bound はなく、必要な操作で標準演算、num-traits の Zero／One、独立した Conjugate・RealPart・ImaginaryUnit・Divide を要求する。実係数は From<R> で埋め込む。標準 Complex は core 内で直接接続し、正規化期待値では純実分母を不要に二乗しない。
 
@@ -204,11 +204,11 @@ LocalStructure・旧 Identity<C>・SpinHalf marker を削除し、core の primi
 
 旧ラベルの混在拒否テストは primitive 型の混在拒否へ変更し、同じ空間の構造を異なる primitive 型の式が共有できることを追加検証した。構築・共有の最小限の制約、作用に Product を要求しないこと、恒等元と trace、span の次元と基底要素数、overflow、既存 Index・因子順序・grouping、不変な共有、深い式の評価・破棄、両精度と独自代数の検証は成功した。
 
-**完了（2026-10-26）**。workspace の全 feature 有効108テスト・default 無効107テスト（doc test を含む）、format、Clippy、警告をエラーとするドキュメント生成、core 単独ビルド・依存 feature、両構成の実行例を確認した。[API と検証の詳細](refactoring-local-structure.md#8-実装した-api-と移行結果2026-10-26)に記録する。MSRV 1.85、専用 no_std target、性能ベンチマークは未確認である。State／Operator・Grading を含む空間・Chain の追加の設計判断は後続課題として残す。
+**完了（2026-10-26）**。workspace の全 feature 有効108テスト・default 無効107テスト（doc test を含む）、format、Clippy、警告をエラーとするドキュメント生成、core 単独ビルド・依存 feature、両構成の実行例を確認した。[API と検証の詳細](refactoring-local-structure.md#8-実装した-api-と移行結果2026-10-26)に記録する。MSRV 1.85、専用 no_std target、性能ベンチマークは未確認である。State／Operator の整理と Grading の情報保持・API の具体化は後続課題として残す。Chain は第9節のとおり移行済みである。
 
 ## 9. Chain の Index 列保持への移行
 
-**完了（2026-10-27）**。2026-10-26に採用した方針に従い、Chain は `Vec<Vec<I>>` と境界条件を直接保持する構成へ移行した。Geometry 構造体と各 Site・全体の HilbertSpace の保持を廃止した。理由と採用事項は[整理メモの3.5節](refactoring-notes.md#35-chain-の内部表現)、公開 API と移行方法は[Chain の設計第10節](design/geometry.md#10-実装した-api-と移行方法2026-10-27)を参照する。
+**完了（2026-10-27）**。2026-10-26に採用した方針に従い、Chain は `Vec<Vec<I>>` と境界条件を直接保持する構成へ移行した。Geometry 構造体と各 Site・全体の HilbertSpace の保持を廃止した。理由と採用事項は[Chain の設計](design/geometry.md)、公開 API と移行方法は[同第10節](design/geometry.md#10-実装した-api-と移行方法2026-10-27)を参照する。
 
 ### 9.1. 実施した変更
 
