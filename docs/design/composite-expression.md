@@ -1,10 +1,12 @@
 # 埋め込み・複合空間の式と数学的能力
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 1. 対象と責任分担
 
 本書は、[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づき、局所式の配置、全 Hilbert 空間への束縛、および複合系の状態・演算子式の数学的能力と整合性を定める。[局所 primitive・式木の数学的能力](primitive-expression.md)を、[Hilbert 空間の再帰構造](hilbert-space.md)に沿って複合系へ拡張する契約である。
+
+2026-10-27に、partial trace を一旦 future work とし、Step 5 の担当範囲と初期版の必須機能・検証項目から外した。本書の partial trace に関する契約と検証条件は将来の実装向けに保持する。
 
 初期版で合成する全基本因子は、同じ primitive 型 S・O で表す一種類の局所代数を持つ。配置・束縛・作用・縮約も同じ `L` の系の内部で行う。異種局所構造の混在・合成と、そのための型消去・保持機構は後続へ延期する。異なる Index や入れ子の grouping は、異種局所構造を意味しない。
 
@@ -50,7 +52,7 @@ Index の付与を「配置」、spectator を含む全 Hilbert 空間の確定�
 | 状態式 | Act | 状態式と演算子式 | 状態式。線型性・因子順序・grading に従い、状態 primitive の Act による局所作用へ委譲する |
 | 演算子式 | 随伴 | 演算子式 | 演算子式。係数の共役・積の順序反転・局所式の随伴を扱う |
 | 演算子式 | Full trace | 全作用空間が確定した演算子式 | 複素 scalar。通常の非正規化 trace を計算する |
-| 演算子式 | Partial trace | 演算子式・全作用空間・縮約対象の部分系 | 残存空間に束縛された演算子式。残存因子の Index・局所構造・順序を保持する |
+| 演算子式（future work） | Partial trace | 演算子式・全作用空間・縮約対象の部分系 | 残存空間に束縛された演算子式。残存因子の Index・局所構造・順序を保持する |
 | 状態・演算子式 | Grading の処理〈graded の場合〉 | homogeneous な成分 | 成分の parity から符号を処理する。混合 parity の式に単一の parity を要求しない |
 
 積と作用は各引数について線型、内積は第一引数について共役線型・第二引数について線型、随伴は共役線型、full/partial trace は線型とする。`AB` は右側の `B` から状態に作用する。局所式に含まれる primitive 間の線型関係を保存し、結果の係数列や式構造の一意性は要求しない。
@@ -166,6 +168,8 @@ Full trace は、ordinary / graded ともに通常の非正規化 trace とす�
 
 `Tr(XY) = Tr(YX)` と `Tr(I_H) = dim H` を要求する。巡回性に parity の符号を追加せず、supertrace は採用しない。
 
+以下の partial trace は future work の数学的契約であり、今回の実装・検証対象には含めない。
+
 Partial trace は、確定した因子順序と通常の tensor 表現に対して定義する。`ambient = H` の部分系 `T` を縮約し、残存空間を `R` とする。残存因子の基底 index を `r,r'`、縮約因子の完全正規直交基底 index を `t` としたとき、`B = Tr_T^H(X)` の行列要素は以下とする。
 
 ```math
@@ -223,7 +227,7 @@ Step 3 の設計判断は以下を採用済みとする。具体的な構成と�
 | 評価経路 | 作用・内積・full trace を分担し、全経路共通の完全展開形を強制しない。作用は primitive の Product を要求せず、full trace は必要な項の局所積・局所 trace へ委譲する |
 | 深い式 | 評価・走査・最後の所有者になった節点の破棄には明示的な作業スタックを使う |
 
-Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積までを含む。局所式・複合式の Norm・正規化・正規化期待値は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。bra 型・構築 API は初期版では導入せず、braket は内積で計算する。Partial trace・基底展開・座標取得は Step 5 に置き、初期版の必須範囲からは除外しない。
+Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積までを含む。局所式・複合式の Norm・正規化・正規化期待値は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。bra 型・構築 API は初期版では導入せず、braket は内積で計算する。基底展開・座標取得は Step 5 に置き、初期版の必須範囲を維持する。Partial trace は future work とし、Step 5 と初期版の必須範囲に含めない。
 
 Step 3 の具体型は `State<I, L, T>`・`Operator<I, L, T>` とし、非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。詳細は [実装した API](../step-3-design.md#11-実装した-api-と後続事項)に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
 
