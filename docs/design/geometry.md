@@ -114,7 +114,7 @@ Chain の Site 順序・関係・配置は構築後に変更しない。異な�
 
 ## 9. 検証対象
 
-以下を既存テストと追加の回帰テストで検証した。workspace 全体の検証結果は[実装計画第9節](../implementation-plan.md#9-chain-の-index-列保持への移行)に記録する。
+以下を既存テストと追加の回帰テストで検証した。2026-10-27 の移行時には Rust 1.98.0 で workspace の全 feature・default feature 無効のテスト、format、Clippy、ドキュメント生成、および core・geometry の単独チェックも成功した。
 
 - Clone・Default のない Index の所有入力・借用列挙、Site 内・Site 間の重複拒否、範囲外・Site 数不一致、空・可変長・複数自由度の列。
 - 新規発行の回数と順序、参照・複製・空間接続による識別値の保持。

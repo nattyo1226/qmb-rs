@@ -4,9 +4,9 @@
 
 ## 1. 状態と責任分担
 
-**完了（2026-10-27）**。[実装計画第4.6節](../implementation-plan.md#46-段階6の実装検証状況)の Step 6 として、採用した型・API・feature・依存指定を qmb-export と qmb に実装した。Rust 1.98.0 で受入確認を実施した。MSRV 1.85 の実ビルド・テストは利用者の依頼により省略しており、対応を実証したものではない。
+**完了（2026-10-27）**。Step 6 として、採用した型・API・feature・依存指定を qmb-export と qmb に実装した。Rust 1.98.0 で受入確認を実施した。MSRV 1.85 の実ビルド・テストは利用者の依頼により省略しており、対応を実証したものではない。
 
-数学的契約は[要件第6節](../requirements.md#6-基底export)、既存の基底列挙・座標取得 API は[基底の設計](basis.md)、初期版の完成条件は[初期版の設計](initial-release.md)に従う。
+数学的契約は[要件第6節](../requirements.md#6-基底export)、既存の基底列挙・座標取得 API は[基底の設計](basis.md)、初期版の完成条件は[アーキテクチャ第9節](../architecture.md#9-初期版の提供範囲と完成条件)に従う。
 
 代数的な基底列挙・作用・座標取得は `qmb-core`、数値データの格納と backend への接続は `qmb-export` が担当する。core の非公開の式木へアクセスせず、評価規則を再実装しない。core に backend の依存を加えず、既存の `no_std + alloc` を維持する。export は std を利用できる一つの crate にまとめる。
 
@@ -161,7 +161,7 @@ workspace と qmb-export の Cargo.toml に採用指定を反映し、依存を�
 
 ## 7. 受入確認
 
-以下の受入条件を Rust 1.98.0 で検証した。コマンドと結果は[実装計画第4.6節](../implementation-plan.md#46-段階6の実装検証状況)に記録する。
+以下の受入条件を Rust 1.98.0 で検証した。
 
 - 独立に定義した spin の局所行列・二因子の 4×4 行列を用い、複素係数を含む状態・積・作用・随伴・trace を代数計算・座標・密・疎の各経路で比較する。演算子基底で展開した式からの経路とも比較する。
 - 状態・演算子それぞれで、ndarray への直接出力と Vec 出力結果からの変換について、成分・shape・格納順序・基底・空間・因子順序・係数精度の一致を確認する。非対称かつ虚部のある行列で flatten・転置の取り違えを検出する。
@@ -173,6 +173,16 @@ workspace と qmb-export の Cargo.toml に採用指定を反映し、依存を�
 - 暗黙の精度変更の拒否と、取り出した数値データの明示的な精度変換を検証する。保持・移動に不要な係数・Index・primitive の制約を追加していないことも確認する。
 - 疎ベクトルは、非零成分の少ない大きな空間で密領域を確保しないことを確認する。疎行列は列ごとに処理し、密変換・全列の一括保持を行わないことを対象テストと実装レビューで確認する。
 - backend 無効・ndarray のみ・sprs のみ・両方、および qmb の export 有効・無効を確認した。workspace の test・format・Clippy・警告をエラーとするドキュメント生成、core 単独チェックも成功した。MSRV 1.85 の実確認は利用者の依頼で省略した。
+
+2026-10-27 の受入確認では、依存取得後に以下を実行し、すべて成功した。
+
+- `cargo test --workspace --all-features --offline -j 2 --quiet`（doc test を含む151テスト）と `cargo test --workspace --no-default-features --offline -j 2 --quiet`（146テスト）。
+- `cargo test -p qmb-export --no-default-features --features ndarray --offline -j 2 --quiet`（15テスト）と、同じ指定の sprs 構成（16テスト）。
+- `cargo test -p qmb --no-default-features --features export --offline -j 2 --quiet`（13テスト）。
+- `cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features --offline -j 2 -- -D warnings`、`RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps --offline -j 2`、および qmb-export の default feature 無効でのドキュメント生成。
+- `cargo check -p qmb-core --no-default-features --offline -j 2` と heisenberg の `--all-features`、`--no-default-features --features export`、`--no-default-features` の各構成での実行。
+
+6-site open chain の代数・密・疎の期待値はいずれも 1.25 であり、CSC 行列の shape は `(64, 64)`、非零成分は224だった。MSRV・専用 no_std target・性能ベンチマークの未実施事項は[今後の課題](../future-work.md#3-未実施の検証と性能)に記録する。
 
 ## 8. 実装した型と構成・延期範囲
 

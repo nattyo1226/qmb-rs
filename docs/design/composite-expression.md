@@ -214,7 +214,7 @@ Graded な場合も埋め込み後の実際の作用を縮約する。二 mode �
 
 ## 9. 未決事項と実装範囲
 
-Step 3 の設計判断は以下を採用済みとする。実装・検証状況は[実装計画第4.3節](../implementation-plan.md#43-段階3の実装検証状況)に記録する。Ordinary な配置・束縛・複合評価と Step 5 の基底処理は実装済みであり、後続の partial trace・graded な演算とは区別する。
+Step 3 の設計判断は以下を採用済みとする。Ordinary な配置・束縛・複合評価と Step 5 の基底処理は実装済みであり、後続の partial trace・graded な演算とは区別する。段階3の検証では、spin-half の三因子系と三次元代数の二因子系を両精度の独立した行列計算と照合し、空間・束縛・エラー・共有、および深い式の処理を確認した。
 
 | 対象 | 採用した方針 |
 | --- | --- |
@@ -231,7 +231,7 @@ Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積ま�
 
 Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。LocalStructure 廃止後の公開型は `State<I, S, O, C>`・`Operator<I, O, C>` とする。現在の API は第10節に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
 
-本書は数学的な契約を定める。[初期版の提供範囲](initial-release.md)は同種局所構造の ordinary な演算とし、異種局所構造の合成と graded な演算の実装は後続へ延期する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
+本書は数学的な契約を定める。[初期版の提供範囲](../architecture.md#9-初期版の提供範囲と完成条件)は同種局所構造の ordinary な演算とし、異種局所構造の合成と graded な演算の実装は[後続へ延期](../future-work.md#2-延期した機能と検討事項)する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
 
 ## 10. 現在の公開 API
 

@@ -30,9 +30,9 @@ Chain の Index 列保持への移行により、qmb-geometry は core に依存
 
 代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得を同じ crate が所有する。写像の表現係数は将来の同 crate の担当とする。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
-具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。2026-10-25 にnorm・状態の正規化・正規化期待値を `qmb-normalize` へ分離する方針を採用したため、計画上は計7 crate とする。basic・spin・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core は basic・UUID・乱数源・具体的代数・Geometry・normalize・数値 backend に依存せず、`no_std + alloc` を維持する。crate ごとの責任・依存関係と段階的な実装順序は、[実装計画](implementation-plan.md)に定める。
+具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。2026-10-25 に norm・状態の正規化・正規化期待値を `qmb-normalize` へ分離する方針を採用し、計7 crate で構成する。basic・spin・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core は basic・UUID・乱数源・具体的代数・Geometry・normalize・数値 backend に依存せず、`no_std + alloc` を維持する。
 
-core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, C>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装する。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
+core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, C>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装した。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
 
 共通パーツは `expr::parts` で保持内容も含めて公開し、式ハンドルは crate root から再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, C>` は `ScaleExpr<P, C>` の別名に統合し、要素名を `operand` に揃える。演算 trait の関連型 `Term` は係数を含まない要素型として区別する。既存の線型結合の構築・走査 API を維持し、走査を共通パーツへ集約する。
 
@@ -120,7 +120,7 @@ Core の共通機構が展開を線型に式全体へ拡張し、順序番号か
 
 局所契約を満たすことは局所構造の提供者、契約を保存する合成則は共通機構の責任とする。操作時には適用の前提を検証し、数学的法則を任意の実装について実行時に自動証明することは要求しない。能力一覧・数式・検証対象の詳細は [埋め込み・複合空間の式と数学的能力](design/composite-expression.md)に定める。初期版は ordinary な演算を提供し、graded な演算の実装は後続へ回す。
 
-Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 `Operator` は一つの型で未束縛・束縛済みを扱う。束縛情報は外側のハンドルに集約し、明示空間・既存束縛・未束縛の作用時の状態空間の順に選択する。検証が必要な複合操作とその演算子構文は `Result` を返し、空間不整合を早期に検出して局所規則の実行を遅延させる。評価は作用・内積・full trace の経路を分担し、全大域演算子の完全展開を必須にしない。採用方針と公開 API は[複合式の設計](design/composite-expression.md)、検証状況は[実装計画第4.3節](implementation-plan.md#43-段階3の実装検証状況)に記録する。
+Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 `Operator` は一つの型で未束縛・束縛済みを扱う。束縛情報は外側のハンドルに集約し、明示空間・既存束縛・未束縛の作用時の状態空間の順に選択する。検証が必要な複合操作とその演算子構文は `Result` を返し、空間不整合を早期に検出して局所規則の実行を遅延させる。評価は作用・内積・full trace の経路を分担し、全大域演算子の完全展開を必須にしない。採用方針と公開 API は[複合式の設計](design/composite-expression.md)に記録する。
 
 ## 8. 幾何・モデル構築
 
@@ -132,11 +132,13 @@ Chain は open / periodic を扱う。近接 Site ペアを正規化した辞書
 
 空間への変換は qmb の接続用 module が提供する独立した拡張 trait `ToSpace` の `to_space` で扱う。Chain には `I: Clone + Eq` のときに実装し、借用から同じ Index と既定の因子順序を持つ空間を構築する。生成した空間は利用側が保持する。trait 全体や幾何関係の列挙には Clone を要求せず、Grading の情報の渡し方は fermion 系の実装時に具体化する。qmb::space::ToSpace として実装し、root と prelude から公開する。
 
-Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移す。移行先の契約は [Chain の設計](design/geometry.md)、実装範囲と検証は [実装計画第9節](implementation-plan.md#9-chain-の-index-列保持への移行)に従う。Step 4 の空間保持・共有に関する契約は移行前の記録とする。
+Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移した。契約と検証は [Chain の設計](design/geometry.md)に記録する。
 
 ## 9. 初期版の提供範囲と完成条件
 
-**段階1〜6完了（2026-10-27）**。初期版の機能実装と受入確認を完了した。検証結果は[実装計画第4.6節](implementation-plan.md#46-段階6の実装検証状況)、MSRV・専用 no_std target・性能ベンチマークの未実施事項は[同第5.1節](implementation-plan.md#51-未実施の検証)に記録する。
+**段階1〜6完了（2026-10-27）**。初期版の機能実装と受入確認を完了した。数値 export の検証結果は[数値 export の設計](design/export.md#7-受入確認)、MSRV・専用 no_std target・性能ベンチマークの未実施事項は[今後の課題](future-work.md#3-未実施の検証と性能)に記録する。
+
+各設計文書の Step または段階は、1 が局所契約と具体例、2 が局所式と評価、3 が空間と複合評価、4 が Chain と導出操作、5 が基底展開と座標取得、6 が数値 export と受入確認を指す。
 
 初期版は、spin-1/2 の 1D Chain を代数的に構築・評価して密・疎の数値表現へ変換する版とする。ユーザ定義の有限次元局所構造の単独利用、同種の基本因子による ordinary な入れ子空間、状態・演算子の演算と full trace、指定基底への展開・再展開・係数取得、および単精度・倍精度の複素数を提供する。
 
@@ -144,7 +146,7 @@ Chain の配置と順序は構築後に不変とする。空間の構築・既�
 
 標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
 
-完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。詳細は [初期版の提供範囲と完成条件](design/initial-release.md)に定める。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として実装済みであり、検証結果と MSRV 等の制限は実装計画第4.6節に記録する。その他の API・内部表現は各機能の採用済み方針に従って具体化する。
+完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として実装済みである。後続へ延期した機能は[今後の課題](future-work.md)にまとめる。
 
 ## 10. 将来の必須課題
 
@@ -158,13 +160,13 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 4. **HilbertSpace の最小構成（初期版の範囲は完了）**：LocalStructure 廃止により、Index と順序付き Tensor の構造だけを保持する構成へ移行した。primitive 型・次元・局所規則は式・取得時の入力・個別能力が担う。Grading の具体的な保持方法・API は、2026-10-26の判断により、fermion 系の実装時に具体化する。
 5. **Chain の内部表現（実装移行済み）**：Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する。空間の構築・保持・grouping・全体の因子順序・配置と束縛は利用側へ移す。理由と契約は[Chain の設計](design/geometry.md)に記録する。Grading の設計完了を前提にしない。
 
-初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。検証結果と未検証事項は[実装計画第7節](implementation-plan.md#7-係数型のリファクタリング)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持・ToSpace・モデル utility の実装移行も2026-10-27に実施した。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。未検証事項は[今後の課題](future-work.md#3-未実施の検証と性能)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持・ToSpace・モデル utility の実装移行も2026-10-27に実施した。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
 
-係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。移行内容は[実装計画第7節](implementation-plan.md#7-係数型のリファクタリング)に記録する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。
+係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。詳細は[正規化 API の契約](design/primitive-expression.md#41-norm正規化の-api-と-feature)に記録する。
 
 LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を直接指定する。次元は primitive 型全体の span の次元（S は d、O は d²）、恒等元は係数型に依存せず生成する O の値とする。空間・Geometry／Chain から L を外し、因子構造と局所規則を分離する。採用した契約と移行前の仕様の扱いは[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。全 crate の製品コード・テスト・利用例を移行済みである。
 
-この見直しは Step 4 の完了条件には追加しない。具体的な移行範囲と検証は[実装計画第8節](implementation-plan.md#8-localstructure-の廃止)に記録する。
+この見直しは Step 4 の完了条件には追加しなかった。
 
 ### 10.1. Operator と State の整理
 

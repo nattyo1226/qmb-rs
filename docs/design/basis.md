@@ -12,7 +12,7 @@
 
 展開・順序番号・列挙は単一の `Basis<P, C>` 実装で提供する。共通 trait 自体には数値制約を置かず、各具体基底の実装に、その展開規則で必要な能力だけを要求する。この実装の制約は `index`・`elements` にも適用される。係数精度を推論できない情報取得では、`<B as Basis<P, C>>::elements` のように明示する。
 
-既存の `LinearCombination` を返す契約と `Basis<P, C>` を維持し、[実装計画](../implementation-plan.md)の Step 2 で core・spin-half・テスト実装と局所式の接続を整備した。`StateBasis`・`OperatorBasis` は削除し、利用側で次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得は Step 5 で実装済みであり、現在の公開 API は第8節に記録する。
+既存の `LinearCombination` を返す契約と `Basis<P, C>` を維持し、Step 2 で core・spin-half・テスト実装と局所式の接続を整備した。`StateBasis`・`OperatorBasis` は削除し、利用側で次の制約を直接指定する。両 marker trait の定義・再公開・実装宣言・テストや doc test の利用箇所も同じ Step 2 で移行し、互換用の marker trait や別名は残さない。式全体への展開、複合基底、座標取得は Step 5 で実装済みであり、現在の公開 API は第8節に記録する。
 
 | 基底を使う処理 | 型制約 |
 | --- | --- |
@@ -130,7 +130,7 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 
 2026-10-27に、Step 5 の実装方針を採用した。`expand_in` と集約済み座標の取得 API で内部の係数処理を共有し、基底番号をキーに疎に集約して基底順で返す。座標には対象空間・共通局所基底・因子順序を対応付け、通常の式木へそれらを付随させない。空間不整合・不正な基底番号や展開先・次元 overflow を区別し、Index と数値能力の制約は必要な操作にだけ要求する。実装は局所式から複合式へ進めた。
 
-具体的な API・座標番号・返却コンテナ・エラーの型は第8節に、実装内容と検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。
+具体的な API・座標番号・返却コンテナ・エラーの型は第8節に記録する。2026-10-27 に Rust 1.98.0 で、両精度の独立行列、三次元代数と非正規直交基底、直接展開と再展開、空・入れ子・zero、不正入力、overflow、および深い式と空間を検証した。workspace の全 feature・default feature 無効のテスト、format、Clippy、ドキュメント生成、core 単独チェックも成功した。
 
 局所基底規則が薄い `LinearCombination` を返すこと、`Basis` の直接利用と `StateBasis`・`OperatorBasis` の削除、および Step 2 での `map` による式木との接続は確定事項とする。後続の設計でも、基底を定義する struct と三つの能力、およびprimitive の span の次元からの要素数の導出を維持する。marker trait の削除後も、基底の線型独立性・完全性、要素数が状態では `d`、全演算子空間では `d²` となる数学的契約と検証条件は維持する。
 
@@ -167,7 +167,7 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 
 内部では BTreeMap を使い、基底番号列に対して疎に集約する。集約時と複合状態のスカラー倍後に厳密な零係数を除き、その後の tensor 積へ零成分を持ち越さない。近似誤差による成分の切り捨ては行わず、零係数を理由に後続の基底展開を打ち切らない。`LinearCombination` の重複・零・入力順を保持する契約は変更しない。全基底要素や密ベクトル・行列の一括生成は行わないが、集約済みの疎な係数自体は保持する。
 
-演算子の座標は演算子基底に対する展開係数であり、状態に作用する数値行列の成分とは区別する。写像の表現行列は future work とし、外部数値コンテナへの格納は Step 6 で実装した。[数値 export の設計](export.md)に従い、座標から Vec とメタデータ・ndarray・sprs へ接続し、作用行列は状態基底への作用結果を列として座標化する。Coordinates をそのまま受け取る sprs の API を前提とせず、qmb-export が既存の成分列挙と constructor を接続する。Step 6 の export は実装済みであり、[実装計画第4.6節](../implementation-plan.md#46-段階6の実装検証状況)に検証結果と省略した MSRV の確認を記録する。
+演算子の座標は演算子基底に対する展開係数であり、状態に作用する数値行列の成分とは区別する。写像の表現行列は future work とし、外部数値コンテナへの格納は Step 6 で実装した。[数値 export の設計](export.md)に従い、座標から Vec とメタデータ・ndarray・sprs へ接続し、作用行列は状態基底への作用結果を列として座標化する。Coordinates をそのまま受け取る sprs の API を前提とせず、qmb-export が既存の成分列挙と constructor を接続する。Step 6 の検証結果は[数値 export の設計第7節](export.md#7-受入確認)、省略した MSRV の確認は[今後の課題](../future-work.md#3-未実施の検証と性能)に記録する。
 
 ### 8.3. 複合基底の遅延列挙
 
@@ -179,4 +179,4 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 
 `BasisError` は基底展開が返した非基底 primitive（`NonBasisElement`）、局所番号の範囲外（`IndexOutOfBounds`）、列挙と番号・要素数の不一致（`InvalidEnumeration`）、次元 overflow（`Dimension`）、空間不整合・未束縛など（`Expression`）を区別する。得られた情報で検出し、全基底の線型独立性・完全性を実行時に自動証明することは要求しない。零係数であっても不正な参照や不正な展開先を見逃さない。
 
-`qmb-core` の root から Basis・BasisError・Coordinates を公開し、`qmb` でも再公開する。Basis は qmb の prelude にも含める。利用例は `crates/qmb/examples/basis_expansion.rs` に置く。検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。
+`qmb-core` の root から Basis・BasisError・Coordinates を公開し、`qmb` でも再公開する。Basis は qmb の prelude にも含める。利用例は `crates/qmb/examples/basis_expansion.rs` に置く。検証の概要は第7節に記録する。

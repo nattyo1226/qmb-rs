@@ -4,7 +4,7 @@
 
 ## 1. 対象と検討状況
 
-本書は局所状態・演算子 primitive の能力と整合性を定める。LocalStructure と追加の定義ラベルを廃止し、全 crate の式・空間・幾何・利用例を S・O の直接指定へ移行した。採用理由は第7節、移行と検証は[実装計画](../implementation-plan.md#8-localstructure-の廃止)に記録する。
+本書は局所状態・演算子 primitive の能力と整合性を定める。LocalStructure と追加の定義ラベルを廃止し、全 crate の式・空間・幾何・利用例を S・O の直接指定へ移行した。採用理由と契約は第7節に記録する。移行時には primitive 型の混在拒否、同じ空間の異なる primitive 型の式による共有、深い式の評価・破棄、および両精度と独自代数を検証した。
 
 局所式は `LocalState<S, O, C>`・`LocalOperator<O, C>`、複合式は `State<I, S, O, C>`・`Operator<I, O, C>` とする。演算子式に状態型を要求しない。状態式は遅延した作用節点を保持するため O も指定する。保持・共有・係数計算を伴わない遅延構築に演算能力や primitive の Clone を要求しない。
 
