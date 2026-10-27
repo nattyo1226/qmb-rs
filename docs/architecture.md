@@ -26,17 +26,17 @@
 
 ### 2.1. crate の構成
 
-Chain の Index 列保持への移行により、qmb-geometry は core に依存しない。空間への変換は両 crate に依存する qmb::space が担う。
+Chain は Index 列を直接保持する。`qmb-geometry` は空間への変換を提供するため `qmb-core` に依存するが、Chain 自体は Hilbert 空間を保持しない。core は geometry に依存しない。
 
 代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得を同じ crate が所有する。写像の表現係数は将来の同 crate の担当とする。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
-具体的代数は専用 crate とし、初期版の `qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けは `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。2026-10-25 に norm・状態の正規化・正規化期待値を `qmb-normalize` へ分離する方針を採用し、計7 crate で構成する。basic・spin・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core は basic・UUID・乱数源・具体的代数・Geometry・normalize・数値 backend に依存せず、`no_std + alloc` を維持する。
+具体的代数は専用 crate とし、`qmb-spin-half` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係・自由度と Site の対応付けおよび空間への変換は `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、norm・状態の正規化・正規化期待値は `qmb-normalize` が担当する。workspace は6つのライブラリ crate と [examples パッケージ](../examples/README.md)で構成する。basic・geometry・spin・export・normalize は core に依存し、spin のモデル utility は geometry の公開契約を利用する。normalize は std を利用できる。core と geometry は `no_std + alloc` を維持し、core は basic・UUID・乱数源・具体的代数・geometry・normalize・数値 backend に依存しない。
 
 core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, C>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装した。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
 
 共通パーツは `expr::parts` で保持内容も含めて公開し、式ハンドルは crate root から再公開する。節点 enum と共有の内部表現は非公開とする。項型 `Term<P, C>` は `ScaleExpr<P, C>` の別名に統合し、要素名を `operand` に揃える。演算 trait の関連型 `Term` は係数を含まない要素型として区別する。既存の線型結合の構築・走査 API を維持し、走査を共通パーツへ集約する。
 
-この分割は、共通型と基本演算を所有する [tensory-core](https://github.com/todo-group/tensory/blob/c84f091e5c65f1408dee91db3730bdb8729e966e/tensory-core/src/lib.rs)と、公開テンソル表現の所有先を集約しつつ実行系・演算群を分ける [tenferro-rs の crate 設計](https://github.com/tensor4all/tenferro-rs/blob/f1d4d8d961ff6b937768111888ad2a493314892a/docs/architecture/tenferro-crates.md)を参考にした。qmb では primitive の局所規則と共通合成則に基づく評価を core に含め、外部数値 backend との接続を分離する。
+この分割は、共通型と基本演算を所有する [tensory-core](https://github.com/todo-group/tensory/blob/c84f091e5c65f1408dee91db3730bdb8729e966e/tensory-core/src/lib.rs)と、公開テンソル表現の所有先を集約しつつ実行系・演算群を分ける [tenferro-rs の crate 設計](https://github.com/tensor4all/tenferro-rs/blob/f1d4d8d961ff6b937768111888ad2a493314892a/docs/architecture/tenferro-crates.md)を参考にした。qmb-rs では primitive の局所規則と共通合成則に基づく評価を core に含め、外部数値 backend との接続を分離する。
 
 ### 2.2. 数値 export（実装済み）
 
@@ -44,7 +44,7 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 疎表現は core の Coordinates から sprs の疎ベクトル・CSC 行列を構築する。行列の列は状態基底への作用と座標取得から生成し、密・疎で共有する。空間・基底・因子順序・係数型の解釈を保持し、通常の式木に backend や基底識別情報を追加しない。
 
-qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs は個別の feature で有効化する。qmb の任意の export feature は両方を有効にする。公開 API・所有権・エラー・依存指定・未実施の検証は[数値 export の設計](design/export.md)に定める。Step 6 の実装と Rust 1.98.0 での受入確認は完了した。MSRV の実ビルドは利用者の依頼により省略している。
+qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs は個別の feature で有効化する。examples の任意の export feature は両方を有効にする。公開 API・所有権・エラー・依存指定・未実施の検証は[数値 export の設計](design/export.md)に定める。Step 6 の実装と Rust 1.98.0 での受入確認は完了した。MSRV の実ビルドは利用者の依頼により省略している。
 
 ## 3. Index・自由度・局所構造・空間
 
@@ -130,7 +130,7 @@ Site は外側の Vec の位置を表す usize、内側の Vec は Site 内の�
 
 Chain は open / periodic を扱う。近接 Site ペアを正規化した辞書順で列挙し、長さ0・1で辺なし、長さ2では両境界条件とも一辺とする。関係ごとの trait を設け、NearestNeighborRelation は全 Index 組合せの `nn_pairs()` と同じ位置同士の `nn_pairs_by_pos()` を提供する。後者は短い方まで列挙する。関係の列挙と相互作用項の生成は区別し、Heisenberg・Neel utility は spin-half に置く。
 
-空間への変換は qmb の接続用 module が提供する独立した拡張 trait `ToSpace` の `to_space` で扱う。Chain には `I: Clone + Eq` のときに実装し、借用から同じ Index と既定の因子順序を持つ空間を構築する。生成した空間は利用側が保持する。trait 全体や幾何関係の列挙には Clone を要求せず、Grading の情報の渡し方は fermion 系の実装時に具体化する。qmb::space::ToSpace として実装し、root と prelude から公開する。
+空間への変換は `qmb-geometry` が提供する独立した拡張 trait `ToSpace` の `to_space` で扱う。Chain には `I: Clone + Eq` のときに実装し、借用から同じ Index と既定の因子順序を持つ空間を構築する。生成した空間は利用側が保持する。trait 全体や幾何関係の列挙には Clone を要求せず、Grading の情報の渡し方は fermion 系の実装時に具体化する。`qmb_geometry::space::ToSpace` として実装し、crate root からも公開する。
 
 Chain の配置と順序は構築後に不変とする。空間の構築・既存 Factor との接続・配置・束縛をモデル utility と利用側へ移した。契約と検証は [Chain の設計](design/geometry.md)に記録する。
 

@@ -1,8 +1,10 @@
 //! Expand ordinary expressions, then obtain sparse coordinates for numeric export.
 
 use num_complex::Complex;
-use qmb::spin_half::{CartesianBasis, LadderBasis, SzBasis};
-use qmb::{HilbertSpace, LocalOperator, LocalState, SpinHalfOperator as Op, SpinHalfState as Ket};
+use qmb_core::{HilbertSpace, LocalOperator, LocalState};
+use qmb_spin_half::{
+    CartesianBasis, LadderBasis, SpinHalfOperator as Op, SpinHalfState as Ket, SzBasis,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     type S = LocalState<Ket, Op, Complex<f64>>;

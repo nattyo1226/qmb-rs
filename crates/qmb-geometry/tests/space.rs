@@ -1,6 +1,5 @@
-use qmb::prelude::*;
-use qmb::{Boundary, Chain};
-use qmb_core::SpaceError;
+use qmb_core::{HilbertSpace, SpaceError};
+use qmb_geometry::{Boundary, Chain, ToSpace};
 
 // Clone and Eq suffice; no Default, Copy, Hash or Ord is needed for conversion.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -125,7 +125,7 @@ norm squared は自己内積の実部、norm はその平方根とする。`norm
 
 正規化期待値は期待値を自己内積全体で除し、`Divide` を要求する。平方根・実部取得・実数の埋め込みは要求しない。標準 Complex の除算では、純実の分母を不要に二乗しない。明示空間を渡す複合式では、その空間を演算子の既存束縛より優先する。
 
-`qmb` の既定 feature は `normalize` であり、拡張 trait を root・prelude、エラーを root から再公開する。旧 `qmb/libm` は `normalize` の互換 alias とし、libm の使用を強制しない。core の libm feature は設けない。default feature 無効時も core の代数 API・norm squared・スカラー除算は利用でき、非零の自己内積による商を明示的に計算できる。平方根を使わない正規化期待値の拡張 trait 自体も qmb-normalize に属し、qmb 経由では normalize feature が必要である。
+拡張 trait とエラーは `qmb-normalize` から直接利用する。core の libm feature は設けず、core の代数 API・norm squared・スカラー除算は正規化 crate がなくても利用できる。非零の自己内積による商を明示的に計算でき、平方根を使わない正規化期待値の拡張 trait も `qmb-normalize` に属する。
 
 ## 5. 線型従属性と基底との接続
 

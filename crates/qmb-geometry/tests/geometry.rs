@@ -174,7 +174,7 @@ fn relationship_capability_is_shared_by_distinct_geometries() {
 }
 
 #[test]
-fn chain_errors_have_messages_and_no_space_dependency() {
+fn chain_errors_have_messages_and_no_sources() {
     for (error, message) in [
         (ChainError::SiteOutOfBounds, "site number is out of bounds"),
         (ChainError::SiteCountMismatch, "site count mismatch"),

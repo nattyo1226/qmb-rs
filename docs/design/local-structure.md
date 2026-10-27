@@ -27,7 +27,7 @@ SpanDimension は `fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow
 
 恒等元は primitive の値として表せることを要求するが、選択基底の要素である必要はない。基底に含まれなければ Basis が展開する。線型従属な primitive を許容するため、恒等元用の値を追加しても基底の次元は増えない。式木の記号的な Identity 節点は、数値能力も恒等 primitive の生成も不要な遅延構築と、単位元の直接処理のため維持した。trace で必要になった時に O の恒等元を取得する。
 
-局所 identity と spectator 因子の trace は、O の Identity・Trace から得る。次元の整数値を係数へ変換する経路に置き換えず、局所 trace に係数の One・整数変換を追加要求しない。外部の O に Identity を追加実装できない場合は、提供元の実装か利用者が所有する wrapper で接続する。Identity・SpanDimension は core と qmb root から公開する。
+局所 identity と spectator 因子の trace は、O の Identity・Trace から得る。次元の整数値を係数へ変換する経路に置き換えず、局所 trace に係数の One・整数変換を追加要求しない。外部の O に Identity を追加実装できない場合は、提供元の実装か利用者が所有する wrapper で接続する。Identity・SpanDimension は `qmb-core` の root から公開する。
 
 ## 3. 数学的能力の整合性
 

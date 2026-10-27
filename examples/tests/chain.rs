@@ -2,13 +2,13 @@ use num_complex::Complex;
 #[cfg(feature = "normalize")]
 use num_traits::Float;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
-use qmb::spin_half::utility::{UtilityError, heisenberg, neel, xyz};
-use qmb::{
-    Boundary, Chain, Divide, HilbertSpace, Id128, LocalState, Operator, SpinHalfState, State,
-    ToSpace,
-};
+use qmb_basic::Id128;
+use qmb_core::{Divide, ExpressionError, HilbertSpace, LocalState, Operator, State};
+use qmb_geometry::{Boundary, Chain, ToSpace};
 #[cfg(feature = "normalize")]
-use qmb::{Norm, Normalize, NormalizedExpectation};
+use qmb_normalize::{Norm, Normalize, NormalizedExpectation};
+use qmb_spin_half::SpinHalfState;
+use qmb_spin_half::utility::{UtilityError, heisenberg, neel, xyz};
 use std::{fmt::Debug, ops::Neg};
 
 trait Real: Num + Copy + Neg<Output = Self> + FromPrimitive + ToPrimitive + Debug {
@@ -198,13 +198,12 @@ fn models_match_analytic_energies_and_independent_matrices_both_precisions() {
 
 #[cfg(feature = "export")]
 fn check_exports<T: Real + num_traits::NumAssign + Default + Send + Sync + 'static>() {
-    use qmb::export::{
-        Exported, MatrixArgs,
+    use qmb_export::{
+        Export, Exported, MatrixArgs,
         ndarray::{Array1, Array2},
         sprs::{CsMat, CsVec},
     };
-    use qmb::prelude::Export;
-    use qmb::spin_half::SzBasis;
+    use qmb_spin_half::SzBasis;
     for n in 0..=4 {
         for boundary in [Boundary::Open, Boundary::Periodic] {
             let chain = explicit_chain(n, boundary);
@@ -321,7 +320,7 @@ fn check_norms<T: Real + Float>() {
 }
 #[cfg(feature = "normalize")]
 #[test]
-fn default_facade_enables_norms_at_both_precisions() {
+fn normalization_extensions_work_at_both_precisions() {
     check_norms::<f32>();
     check_norms::<f64>();
 }
@@ -496,7 +495,7 @@ fn xyz_matches_anisotropic_matrices_and_heisenberg_limit_both_precisions() {
 
 #[test]
 fn utility_error_conversion_preserves_message_and_source() {
-    let original = qmb::ExpressionError::NotAFactor;
+    let original = ExpressionError::NotAFactor;
     let error = UtilityError::from(original);
     assert_eq!(error, UtilityError::Expression(original));
     assert_eq!(error.to_string(), original.to_string());

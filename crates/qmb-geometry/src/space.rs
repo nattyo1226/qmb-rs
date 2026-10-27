@@ -1,7 +1,9 @@
 //! Connections from geometric index assignments to ordinary Hilbert spaces.
 
+use alloc::vec::Vec;
 use qmb_core::{HilbertSpace, SpaceError};
-use qmb_geometry::Chain;
+
+use crate::Chain;
 
 /// Converts a borrowed object to an ordinary space without issuing indices.
 ///
@@ -10,8 +12,7 @@ use qmb_geometry::Chain;
 /// cloning is a requirement of individual implementations, not of this trait.
 ///
 /// ```
-/// use qmb::prelude::*;
-/// use qmb::{Boundary, Chain};
+/// use qmb_geometry::{Boundary, Chain, ToSpace};
 /// let chain = Chain::from_sites([vec![9, 3], vec![], vec![8]], Boundary::Open)?;
 /// let space = chain.to_space()?;
 /// assert_eq!(space.indices().copied().collect::<Vec<_>>(), [9, 3, 8]);

@@ -6,7 +6,7 @@
 
 本書は[要件](../requirements.md)に基づき、Chain と Site への自由度の配置を定める。2026-10-26 に、Chain が Site ごとの Index 列と境界条件だけを保持する方針を採用した。2026-10-27 に製品コード・テスト・利用例を移行した。以下を現在の契約とする。
 
-`qmb-geometry` は Site の順序、Site ごとの自由度の Index 列、境界条件と幾何関係の列挙を担当する。Hilbert 空間の構築・保持・grouping・全体の因子順序は利用側が管理する。局所式の配置・束縛・評価は `qmb-core`、UUID の具体型 `Id128` は `qmb-basic`、XYZ・Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・縦断例は `qmb` が担当する。
+`qmb-geometry` は Site の順序、Site ごとの自由度の Index 列、境界条件、幾何関係の列挙、および Hilbert 空間への変換を担当する。Hilbert 空間の保持・grouping・全体の因子順序は利用側が管理する。局所式の配置・束縛・評価は `qmb-core`、UUID の具体型 `Id128` は `qmb-basic`、XYZ・Heisenberg・Neel の構築 utility は `qmb-spin-half` が担当する。縦断例は `examples` に置く。
 
 保持構成は次のとおりとする。Geometry 構造体は廃止し、Chain が直接データを所有する。代わりの配置用ラッパー構造体は設けない。`qmb-geometry` crate と関係ごとの能力 trait は維持する。
 
@@ -74,7 +74,7 @@ HilbertSpace の grouping と全体の因子順序は利用側が保持する。
 
 ### 6.1. 空間への変換能力 ToSpace
 
-2026-10-26 に、空間への変換を独立した拡張 trait `ToSpace`、メソッド `to_space` で提供する方針を採用した。Chain と HilbertSpace の両方に依存する `qmb` の接続用 module に置き、qmb から公開する。Chain の保持構造や `NearestNeighborRelation` の必須能力には含めず、qmb-geometry は空間に依存しない。2026-10-27 に qmb::space::ToSpace として実装し、root と prelude からも再公開した。
+空間への変換は独立した拡張 trait `ToSpace`、メソッド `to_space` で提供する。`qmb_geometry::space::ToSpace` として実装し、`qmb_geometry::ToSpace` からも公開する。`qmb-geometry` は `qmb-core` に依存するが、Chain の保持構造や `NearestNeighborRelation` の必須能力には空間を含めない。
 
 ordinary な空間に対する実装済みのシグネチャは次のとおりである。
 
@@ -138,14 +138,16 @@ Chain の Site 順序・関係・配置は構築後に変更しない。異な�
 | `heisenberg(&chain, coupling)` | `heisenberg(&chain, &space, coupling)` |
 | `neel(&chain, first)` | `neel(&chain, &space, first)` |
 
-Geometry・`GeometryError` の再公開を削除し、qmb root から `ChainError` と ToSpace、prelude から ToSpace を公開した。Chain の Clone は `I: Clone` を要求し、所有 Index 列を同じ識別値で複製する。保持・借用列挙には Clone を要求しない。qmb-geometry から core の通常依存を除去し、no_std + alloc と thiserror によるエラー定義を維持した。core の式・空間内部の共有は変更していない。
+Geometry・`GeometryError` を削除し、`ChainError` と `ToSpace` は `qmb-geometry` から公開する。Chain の Clone は `I: Clone` を要求し、所有 Index 列を同じ識別値で複製する。保持・借用列挙には Clone を要求しない。`qmb-geometry` は空間変換に core を利用し、no_std + alloc と thiserror によるエラー定義を維持する。core の式・空間内部の共有は変更していない。
 
 新規空間を使う場合の流れは次のとおりである。利用側で保持する space に、Index を再発行せずにモデルを接続する。
 
 ```rust
 use num_complex::Complex;
-use qmb::{Boundary, Chain, Id128, SpinHalfState, ToSpace};
-use qmb::spin_half::utility::{heisenberg, neel};
+use qmb_basic::Id128;
+use qmb_geometry::{Boundary, Chain, ToSpace};
+use qmb_spin_half::SpinHalfState;
+use qmb_spin_half::utility::{heisenberg, neel};
 
 let chain = Chain::<Id128>::new(6, 1, Boundary::Open)?;
 let space = chain.to_space()?;
@@ -153,6 +155,6 @@ let h = heisenberg(&chain, &space, 1.0_f64)?;
 let psi = neel::<_, Complex<f64>>(&chain, &space, SpinHalfState::Up)?;
 ```
 
-[実行可能な例](../../crates/qmb/examples/heisenberg.rs)は `cargo run -p qmb --example heisenberg` で実行できる。上記の6-site open chain・J=1では Neel 期待値は `1.25+0i`、norm は1となる。`--no-default-features` でも、非零の自己内積を使った期待値の商を計算できる。norm の拡張 trait と feature は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。
+[実行可能な例](../../examples/src/bin/heisenberg.rs)は、リポジトリ直下から `cargo run -p examples --bin heisenberg` で実行できる。上記の6-site open chain・J=1では Neel 期待値は `1.25+0i`、norm は1となる。`--no-default-features` でも、非零の自己内積を使った期待値の商を計算できる。norm の拡張 trait と feature は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。
 
 既存空間を利用する場合は、その Index を Site ごとの列として Chain に渡し、元の空間を utility に渡す。utility は実際の Factor を反復的に走査して借用するため、Index の Clone を要求しない。Site 順と空間の因子順が異なっても、Neel の向きは Site 順、状態の因子順は指定した空間に従う。Hamiltonian は指定空間に bind し、空間の元の grouping と共有節点を保持する。状態は指定空間と互換な空間を持ち、元の空間の木は変更しない。

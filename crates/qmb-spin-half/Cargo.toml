@@ -3,7 +3,7 @@ name = "qmb-spin-half"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Spin-1/2 primitives, local rules, and bases for qmb"
+description = "Spin-1/2 primitives, local rules, and bases for qmb-rs"
 
 [dependencies]
 qmb-core.workspace = true

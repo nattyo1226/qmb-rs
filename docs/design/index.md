@@ -113,7 +113,7 @@ Index 単体や空間の葉から局所代数を取得する契約は置かな�
 
 異なる Index を、次元や物理的意味の一致だけから自動で対応づけない。独立した系として扱いたい場合は、7.2 節の明示的な付け直しを用いる。合成時の重複を避けるために Index を暗黙に変更しない。
 
-計算上の内部 bond の処理によって qmb の Index を暗黙に変更しない。テンソルネットワークへの export では、物理自由度と計算上の脚の対応を別に設計する。
+計算上の内部 bond の処理によって qmb-rs の Index を暗黙に変更しない。テンソルネットワークへの export では、物理自由度と計算上の脚の対応を別に設計する。
 
 本節は同一性の設計契約を定めるものであり、保存機能や並列評価を初期版の必須実装に追加するものではない。
 
@@ -123,7 +123,7 @@ Index 単体や空間の葉から局所代数を取得する契約は置かな�
 
 Core の照合は標準の `Eq`、Factor の構築は `HilbertSpace::factor(index)`、局所式の配置は `at(&factor)` とする。標準具体型 `qmb_basic::Id128` は UUID v4 を包む不透明な型であり、`new()` と `Default` は seed 指定不要で新しい Index を発行する。Clone・Copy は同一性を保持し、Display・Debug・等値比較・順序比較・Hash を提供する。生成は `uuid::Uuid::new_v4` に委譲し、乱数源が利用できない場合を含む挙動は同 API に従う。UUID・乱数源は basic に閉じ、Chain は basic に依存しない。
 
-`qmb_basic::HilbertSpace` は `qmb_core::HilbertSpace<Id128>` の型別名とし、局所 primitive の型引数を持たない。qmb root から Id128 とジェネリックな HilbertSpace を再公開する。
+`qmb_basic::HilbertSpace` は `qmb_core::HilbertSpace<Id128>` の型別名とし、局所 primitive の型引数を持たない。Id128 は `qmb-basic`、ジェネリックな HilbertSpace は `qmb-core` から利用する。
 
 後続の未決事項は以下とする。
 - 保存形式、および保存・復元・Index の付け直しの具体的な公開 API

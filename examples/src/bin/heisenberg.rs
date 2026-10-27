@@ -1,10 +1,12 @@
 use num_complex::Complex;
+use qmb_basic::Id128;
 #[cfg(not(feature = "normalize"))]
-use qmb::Divide;
-use qmb::spin_half::utility::{heisenberg, neel};
-use qmb::{Boundary, Chain, Id128, SpinHalfState, ToSpace};
+use qmb_core::Divide;
+use qmb_geometry::{Boundary, Chain, ToSpace};
 #[cfg(feature = "normalize")]
-use qmb::{Norm, NormalizedExpectation};
+use qmb_normalize::{Norm, NormalizedExpectation};
+use qmb_spin_half::SpinHalfState;
+use qmb_spin_half::utility::{heisenberg, neel};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let chain = Chain::<Id128>::new(6, 1, Boundary::Open)?;
@@ -23,12 +25,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Neel norm: {}", psi.norm()?);
     #[cfg(feature = "export")]
     {
-        use qmb::export::{
+        use qmb_export::{
             Export, Exported, MatrixArgs,
             ndarray::{Array1, Array2},
             sprs::{CsMat, CsVec},
         };
-        use qmb::spin_half::SzBasis;
+        use qmb_spin_half::SzBasis;
         // The Vec output is also usable with other numerical libraries.
         let raw: Exported<Vec<_>, _> = (&psi).export(&SzBasis)?;
         println!("Vector shape: {:?}", raw.metadata().shape());

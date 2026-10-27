@@ -1,7 +1,7 @@
 //! Immutable site index assignments and geometric relations.
 //!
-//! A chain owns ordered index lists and its boundary condition. Hilbert spaces,
-//! tensor grouping and local algebras are managed by its callers.
+//! A chain owns ordered index lists and its boundary condition. Space conversion
+//! is available separately; callers manage Hilbert spaces, grouping and local algebras.
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -10,6 +10,9 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+
+pub mod space;
+pub use space::ToSpace;
 
 /// Invalid chain assignments or site references.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]

@@ -4,7 +4,7 @@
 
 ## 1. 状態と責任分担
 
-**完了（2026-10-27）**。Step 6 として、採用した型・API・feature・依存指定を qmb-export と qmb に実装した。Rust 1.98.0 で受入確認を実施した。MSRV 1.85 の実ビルド・テストは利用者の依頼により省略しており、対応を実証したものではない。
+**完了（2026-10-27）**。Step 6 として、採用した型・API・feature・依存指定を qmb-export に実装した。Rust 1.98.0 で受入確認を実施した。現在は `qmb-export` を直接利用する。MSRV 1.85 の実ビルド・テストは利用者の依頼により省略しており、対応を実証したものではない。
 
 数学的契約は[要件第6節](../requirements.md#6-基底export)、既存の基底列挙・座標取得 API は[基底の設計](basis.md)、初期版の完成条件は[アーキテクチャ第9節](../architecture.md#9-初期版の提供範囲と完成条件)に従う。
 
@@ -68,7 +68,7 @@ pub trait Export<T, Args = ()> {
 
 Vec 出力結果から ndarray への変換は所有値を受け取り、同じ係数型のまま数値データを移動する。基底・空間・shape の解釈も引き継ぐ。ベクトル用と行列用のメタデータによって Array1／Array2 への対応を定める。
 
-以下は公開 API の利用形を示す。実行可能な全体例は [heisenberg.rs](../../crates/qmb/examples/heisenberg.rs) を参照する。`cargo run -p qmb --example heisenberg --features export` で密・疎の比較も実行できる。
+以下は公開 API の利用形を示す。実行可能な全体例は [heisenberg.rs](../../examples/src/bin/heisenberg.rs) を参照する。リポジトリ直下から `cargo run -p examples --bin heisenberg --features export` で密・疎の比較も実行できる。
 
 ```rust
 // Vec とメタデータへの出力。
@@ -107,7 +107,7 @@ ndarray への変換では、ベクトルは `Array1::from_vec`、行列はメ�
 
 疎ベクトルは Coordinates の成分から index・値の配列を作り、`CsVec::try_new(dimension, indices, data)` で構築する。疎行列の初期 export は CSC・index は `usize` に固定する。列ごとに得た座標の平坦番号順を使い、重複のない成分から `indptr`・`indices`・`data` を作って `CsMat::try_new_csc` へ渡す。検査付き API を利用し、unsafe や非公開の検査省略経路を使わない。
 
-sprs に qmb の Coordinates をそのまま渡す既存 API があるという意味ではない。`qmb-export` の Export 実装が、`flat_entries()`・`into_entries()` などと sprs の constructor を接続する。密表現用の Vec 中間層や、新しい独自の疎コンテナを必須経路にしない。
+sprs に `qmb-core` の Coordinates をそのまま渡す既存 API があるという意味ではない。`qmb-export` の Export 実装が、`flat_entries()`・`into_entries()` などと sprs の constructor を接続する。密表現用の Vec 中間層や、新しい独自の疎コンテナを必須経路にしない。
 
 sprs には座標形式で行列を作る `TriMat::from_triplets`・`add_triplet` と、`to_csc`・`to_csr` もある。採用した列生成では整列・集約済み座標から CSC を構築し、TriMat の経由を必須にしない。CSR が必要な利用者は取り出した sprs 行列を変換する。export 時の形式選択や別の index 整数型は後続の必要性に応じて追加する。
 
@@ -142,7 +142,7 @@ sprs には座標形式で行列を作る `TriMat::from_triplets`・`add_triplet
 
 `qmb-export` の既定 feature は空とし、Export・Vec 出力・メタデータを常時提供する。`ndarray`・`sprs` の feature で各 API と任意依存を有効にする。ndarray feature は式・Coordinates からの直接出力と、所有する Vec 出力結果からの変換の両方を有効にする。
 
-`qmb` の任意の `export` feature は両 backend を有効にし、`qmb::export` として crate を再公開する。Export は root と prelude からも提供する。Vec のみ、または片方の API を使う場合は `qmb-export` の feature を直接選択する。backend の型は対応 feature の下で `qmb_export::ndarray`・`qmb_export::sprs` として再公開する。
+利用者は `qmb-export` の feature を直接選択する。backend の型は対応 feature の下で `qmb_export::ndarray`・`qmb_export::sprs` として再公開する。`examples` パッケージの任意の `export` feature は両 backend を有効にする。
 
 sprs は通常依存に ndarray を含むため、sprs feature だけでも ndarray 自体は依存に入る。この分離は公開する変換 API の選択である。sprs の既定の alga・multi_thread は無効とし、ndarray は std の範囲で使う。BLAS・rayon・保存用 feature は初期導入に含めない。
 
@@ -172,13 +172,13 @@ workspace と qmb-export の Cargo.toml に採用指定を反映し、依存を�
 - 比較式は要件第5.6節に従い、f32 の atol・rtol は初期値を各 `2e-5`、f64 は各 `1e-12` とする。調整する場合は計算規模と誤差の根拠を記録する。
 - 暗黙の精度変更の拒否と、取り出した数値データの明示的な精度変換を検証する。保持・移動に不要な係数・Index・primitive の制約を追加していないことも確認する。
 - 疎ベクトルは、非零成分の少ない大きな空間で密領域を確保しないことを確認する。疎行列は列ごとに処理し、密変換・全列の一括保持を行わないことを対象テストと実装レビューで確認する。
-- backend 無効・ndarray のみ・sprs のみ・両方、および qmb の export 有効・無効を確認した。workspace の test・format・Clippy・警告をエラーとするドキュメント生成、core 単独チェックも成功した。MSRV 1.85 の実確認は利用者の依頼で省略した。
+- backend 無効・ndarray のみ・sprs のみ・両方、および当時の包括 crate での export 有効・無効を確認した。workspace の test・format・Clippy・警告をエラーとするドキュメント生成、core 単独チェックも成功した。MSRV 1.85 の実確認は利用者の依頼で省略した。
 
 2026-10-27 の受入確認では、依存取得後に以下を実行し、すべて成功した。
 
 - `cargo test --workspace --all-features --offline -j 2 --quiet`（doc test を含む151テスト）と `cargo test --workspace --no-default-features --offline -j 2 --quiet`（146テスト）。
 - `cargo test -p qmb-export --no-default-features --features ndarray --offline -j 2 --quiet`（15テスト）と、同じ指定の sprs 構成（16テスト）。
-- `cargo test -p qmb --no-default-features --features export --offline -j 2 --quiet`（13テスト）。
+- 当時の包括 crate での、正規化を無効にして export を有効にした構成（13テスト）。対応する縦断テストは現在 `examples` パッケージにある。
 - `cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features --offline -j 2 -- -D warnings`、`RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps --offline -j 2`、および qmb-export の default feature 無効でのドキュメント生成。
 - `cargo check -p qmb-core --no-default-features --offline -j 2` と heisenberg の `--all-features`、`--no-default-features --features export`、`--no-default-features` の各構成での実行。
 

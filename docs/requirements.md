@@ -24,7 +24,7 @@ qmb-rs は、量子系の Hilbert 空間、状態、および演算子を代数�
 
 以下の対象ごとに、定義、操作、制約、および検証条件をまとめる。局所構造から埋め込み・評価までと、基底・係数データの構築は代数 core が担当し、幾何・モデル構築と数値 backend への export はその上に接続する。
 
-代数 core は `qmb-core` に集約する。具体的代数は `qmb-spin-half` などの専用 crate、幾何と Site への配置は `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、再公開・利用例は `qmb` が担当する。共通の型・式木・評価・基底処理を core の module として分離し、具体的代数には独自の式木・evaluator を要求しない。責任と依存関係は[アーキテクチャ](architecture.md#21-crate-の構成)に定める。
+代数 core は `qmb-core` に集約する。具体的代数は `qmb-spin-half` などの専用 crate、幾何と Site への配置および空間への変換は `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half` が担当する。利用例は各 crate を直接利用する workspace の [examples パッケージ](../examples/README.md)に置く。共通の型・式木・評価・基底処理を core の module として分離し、具体的代数には独自の式木・evaluator を要求しない。責任と依存関係は[アーキテクチャ](architecture.md#21-crate-の構成)に定める。
 
 | 対象 | 担当すること | 記述先 |
 | --- | --- | --- |

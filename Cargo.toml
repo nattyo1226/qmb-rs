@@ -5,9 +5,9 @@ members = [
     "crates/qmb-spin-half",
     "crates/qmb-basic",
     "crates/qmb-geometry",
-    "crates/qmb",
     "crates/qmb-normalize",
     "crates/qmb-export",
+    "examples",
 ]
 
 [workspace.package]

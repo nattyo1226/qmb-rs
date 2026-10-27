@@ -179,4 +179,4 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 
 `BasisError` は基底展開が返した非基底 primitive（`NonBasisElement`）、局所番号の範囲外（`IndexOutOfBounds`）、列挙と番号・要素数の不一致（`InvalidEnumeration`）、次元 overflow（`Dimension`）、空間不整合・未束縛など（`Expression`）を区別する。得られた情報で検出し、全基底の線型独立性・完全性を実行時に自動証明することは要求しない。零係数であっても不正な参照や不正な展開先を見逃さない。
 
-`qmb-core` の root から Basis・BasisError・Coordinates を公開し、`qmb` でも再公開する。Basis は qmb の prelude にも含める。利用例は `crates/qmb/examples/basis_expansion.rs` に置く。検証の概要は第7節に記録する。
+`qmb-core` の root から Basis・BasisError・Coordinates を公開する。利用例は [basis_expansion.rs](../../examples/src/bin/basis_expansion.rs) に置く。検証の概要は第7節に記録する。
