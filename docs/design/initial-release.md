@@ -6,7 +6,7 @@
 
 初期版は、spin-1/2 の 1D Chain を代数的に構築・評価し、密・疎の数値表現へ変換する一連の流れが完結する版とする。[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に記録した数学的契約のうち、本書の提供範囲を初期版の必須実装とする。
 
-具体的な Rust の型・API・内部表現は、採用済みの方針に従って各段階で具体化する。数値 backend は後続段階で選定する。本書は完成条件を定めるものであり、実装済みであることを示すものではない。後続機能のために既に合意した数学的契約は保持する。
+具体的な Rust の型・API・内部表現は、採用済みの方針に従って各段階で具体化する。数値 export の API・backend・依存指定は2026-10-27に採用し、[数値 export の設計](export.md)にまとめた。本書は完成条件を定めるものであり、実装済みであることを示すものではない。後続機能のために既に合意した数学的契約は保持する。
 
 ## 2. 提供範囲
 
@@ -19,7 +19,7 @@
 | 状態・演算子式 | 合意済みの加算・scalar multiplication・zero・identity、状態の tensor product、演算子積、配置・束縛、作用・内積・随伴・full trace |
 | 導出する操作 | Norm・正規化、期待値・正規化期待値、commutator / anticommutator、Hilbert–Schmidt 内積 |
 | 基底 | 順序付き状態基底 `{up,down}`、演算子基底 `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}`、それらの tensor product 基底。指定基底への展開・再展開・係数取得 |
-| 数値 export | 状態の密・疎ベクトル、演算子の密・疎行列。外部数値ライブラリへの必要最小限の接続 |
+| 数値 export | Vec と shape・基底・空間などのメタデータへの密出力、それを経由する ndarray の Array1／Array2 への直接・段階的な出力、Coordinates から sprs の疎ベクトル・CSC 行列への出力 |
 | 幾何・配置 | 1D Chain の open / periodic。Site ごとの所有 Index 列の入力と、Site 数・各 Site 共通の自由度数から Default による Index 発行。Chain は Index 列と境界条件を直接保持し、空間・grouping は利用側が管理。内部ラベルは導入しない |
 | 数値精度 | 単精度・倍精度の複素数。精度の混在を拒否し、変換は明示的に行う |
 
@@ -101,6 +101,6 @@ Step 3 の空間・複合式・共有・束縛・エラー・評価経路は [�
 
 Norm・正規化・正規化期待値と NormalizationError は qmb-normalize に実装済みであり、[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Norm／Normalize／NormalizedExpectation／NormalizedExpectationIn を import して呼び出す。内積・期待値・norm squared・スカラー除算は core に残し、Float は平方根を使う実数型 R に要求する。qmb の既定 feature は normalize、旧 libm はその互換 alias とし、core の libm feature は設けない。
 
-XYZ・Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。[Chain の配置契約](geometry.md)に従い、利用側が保持する空間へ接続する。基底処理は Step 5 で実装済みとし、数値 backend は Step 6 で具体化する。Partial trace は future work とし、初期版の必須範囲に含めない。bra 型・構築 API は初期版では導入しない。
+XYZ・Heisenberg・Neel utility は qmb-spin-half に置き、qmb は再公開と縦断例を提供する。[Chain の配置契約](geometry.md)に従い、利用側が保持する空間へ接続する。基底処理は Step 5 で実装済みとし、数値 export は[採用済みの設計](export.md)に従って Step 6 で実装する。Partial trace は future work とし、初期版の必須範囲に含めない。bra 型・構築 API は初期版では導入しない。
 
-Step 5 は追加依存なしで実装済みである。`expand_in` は通常の式を返し、`coordinates_in` は独立した集約済みの疎な座標を返す。現在の公開 API と契約は[基底の設計第8節](basis.md#8-実装した公開-api2026-10-27)、検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。Step 6 の数値 backend とその追加依存は同段階で選定する。段階1〜5の実装と初期版全体の完成とは区別し、数値 export とその受入確認は引き続き未実装とする。
+Step 5 は追加依存なしで実装済みである。`expand_in` は通常の式を返し、`coordinates_in` は独立した集約済みの疎な座標を返す。現在の公開 API と契約は[基底の設計第8節](basis.md#8-実装した公開-api2026-10-27)、検証結果は[実装計画第4.5節](../implementation-plan.md#45-段階5の実装検証状況)に記録する。Step 6 の Export・結果型・引数・エラー・feature・ndarray／sprs の依存指定は採用済みである。依存の追加と推移依存を含む MSRV 1.85 の実ビルド、Vec・ndarray の両 API と疎変換の受入確認は未実施であり、[実装計画第4.6節](../implementation-plan.md#46-段階6の採用方針と実装状況)に従って進める。段階1〜5の実装と初期版全体の完成とは区別し、数値 export とその受入確認は引き続き未実装とする。
