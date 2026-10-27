@@ -38,13 +38,13 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 この分割は、共通型と基本演算を所有する [tensory-core](https://github.com/todo-group/tensory/blob/c84f091e5c65f1408dee91db3730bdb8729e966e/tensory-core/src/lib.rs)と、公開テンソル表現の所有先を集約しつつ実行系・演算群を分ける [tenferro-rs の crate 設計](https://github.com/tensor4all/tenferro-rs/blob/f1d4d8d961ff6b937768111888ad2a493314892a/docs/architecture/tenferro-crates.md)を参考にした。qmb では primitive の局所規則と共通合成則に基づく評価を core に含め、外部数値 backend との接続を分離する。
 
-### 2.2. 数値 export（設計採用済み・未実装）
+### 2.2. 数値 export（実装済み）
 
 2026-10-27に Step 6 の数値 export 設計を採用した。qmb-export の `Export<T, Args = ()>` と、数値データ・メタデータを持つ `Exported<D, M>` を共通の利用窓口にする。密表現は Vec と shape・格納順序のメタデータを出力し、ndarray の Array1／Array2 への直接出力・取得済み Vec 出力からの変換も提供する。密行列専用の数値コンテナは設けない。
 
 疎表現は core の Coordinates から sprs の疎ベクトル・CSC 行列を構築する。行列の列は状態基底への作用と座標取得から生成し、密・疎で共有する。空間・基底・因子順序・係数型の解釈を保持し、通常の式木に backend や基底識別情報を追加しない。
 
-qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs は個別の feature で有効化する。qmb の任意の export feature は両方を有効にする。公開 API・所有権・エラー・依存指定・未実施の検証は[数値 export の設計](design/export.md)に定める。設計の採用と Step 6 の実装完了は区別する。
+qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs は個別の feature で有効化する。qmb の任意の export feature は両方を有効にする。公開 API・所有権・エラー・依存指定・未実施の検証は[数値 export の設計](design/export.md)に定める。Step 6 の実装と Rust 1.98.0 での受入確認は完了した。MSRV の実ビルドは利用者の依頼により省略している。
 
 ## 3. Index・自由度・局所構造・空間
 
@@ -142,7 +142,7 @@ Chain の配置と順序は構築後に不変とする。空間の構築・既�
 
 標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
 
-完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。詳細は [初期版の提供範囲と完成条件](design/initial-release.md)に定める。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として採用済みであり、実装・受入確認は未実施である。その他の API・内部表現は各機能の採用済み方針に従って具体化する。
+完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。詳細は [初期版の提供範囲と完成条件](design/initial-release.md)に定める。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として実装済みであり、検証結果と MSRV 等の制限は実装計画第4.6節に記録する。その他の API・内部表現は各機能の採用済み方針に従って具体化する。
 
 ## 10. 将来の必須課題
 

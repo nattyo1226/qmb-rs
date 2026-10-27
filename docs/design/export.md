@@ -4,7 +4,7 @@
 
 ## 1. 状態と責任分担
 
-**設計採用済み・未実装（2026-10-27）**。[実装計画](../implementation-plan.md)の Step 6 に向けた推奨案をすべて採用し、一時メモから本書へ統合した。本書の型・API・feature・依存指定は実装する契約であり、製品コードや依存への反映、受入確認の完了を示すものではない。
+**実装済み（2026-10-27）**。[実装計画第4.6節](../implementation-plan.md#46-段階6の採用方針と実装状況)の Step 6 として、採用した型・API・feature・依存指定を qmb-export と qmb に実装した。Rust 1.98.0 で受入確認を実施した。MSRV 1.85 の実ビルド・テストは利用者の依頼により省略しており、対応を実証したものではない。
 
 数学的契約は[要件第6節](../requirements.md#6-基底export)、既存の基底列挙・座標取得 API は[基底の設計](basis.md)、初期版の完成条件は[初期版の設計](initial-release.md)に従う。
 
@@ -25,7 +25,7 @@ Vec とメタデータへの出力、入力から ndarray への直接出力、�
 
 ### 2.2. Exported とメタデータ
 
-数値データ `D` と解釈情報 `M` を保持する共通の `Exported<D, M>` を提供し、具体的な組み合わせには型別名を提供する。これは `qmb-export` が新設する結果型である。
+数値データ `D` と解釈情報 `M` を保持する共通の `Exported<D, M>` を提供する。これは `qmb-export` が新設する結果型であり、具体的な出力先もこの型で直接指定する。
 
 - `data()`・`metadata()` でそれぞれを借用する。
 - `into_data()` で数値コンテナを、`into_parts()` で数値データとメタデータを所有値として取り出す。
@@ -68,7 +68,7 @@ pub trait Export<T, Args = ()> {
 
 Vec 出力結果から ndarray への変換は所有値を受け取り、同じ係数型のまま数値データを移動する。基底・空間・shape の解釈も引き継ぐ。ベクトル用と行列用のメタデータによって Array1／Array2 への対応を定める。
 
-以下は採用した API の利用イメージであり、実装・コンパイル確認済みの例ではない。
+以下は公開 API の利用形を示す。実行可能な全体例は [heisenberg.rs](../../crates/qmb/examples/heisenberg.rs) を参照する。`cargo run -p qmb --example heisenberg --features export` で密・疎の比較も実行できる。
 
 ```rust
 // Vec とメタデータへの出力。
@@ -157,11 +157,11 @@ MSRV 1.85 を維持する。sprs 0.11.4 の公開 manifest は Rust 1.85.0 と n
 
 参照: [sprs 0.11.4 manifest](https://docs.rs/crate/sprs/0.11.4/source/Cargo.toml)、[sprs 0.11.5 manifest](https://docs.rs/crate/sprs/0.11.5/source/Cargo.toml.orig)、[ndarray 0.17.2 manifest](https://github.com/rust-ndarray/ndarray/blob/0.17.2/Cargo.toml)、[sprs の feature](https://docs.rs/crate/sprs/0.11.4/features)。
 
-依存指定の採用と実ビルドの検証は区別する。Cargo.toml・Cargo.lock への追加、sprs と直接依存での ndarray のバージョン統一、推移依存を含む MSRV 1.85 のビルド・テストは未実施であり、Step 6 の実装時に確認する。
+workspace と qmb-export の Cargo.toml に採用指定を反映し、依存を解決した。直接依存と sprs の ndarray はどちらも 0.17.2 で統一されていることを cargo tree で確認した。Cargo.lock は既存のリポジトリ方針で Git 管理対象外である。MSRV 1.85 のビルド・テストは利用者の依頼により省略した。
 
 ## 7. 受入確認
 
-以下は実施する検証であり、成功済みの結果ではない。
+以下の受入条件を Rust 1.98.0 で検証した。コマンドと結果は[実装計画第4.6節](../implementation-plan.md#46-段階6の採用方針と実装状況)に記録する。
 
 - 独立に定義した spin の局所行列・二因子の 4×4 行列を用い、複素係数を含む状態・積・作用・随伴・trace を代数計算・座標・密・疎の各経路で比較する。演算子基底で展開した式からの経路とも比較する。
 - 状態・演算子それぞれで、ndarray への直接出力と Vec 出力結果からの変換について、成分・shape・格納順序・基底・空間・因子順序・係数精度の一致を確認する。非対称かつ虚部のある行列で flatten・転置の取り違えを検出する。
@@ -172,10 +172,14 @@ MSRV 1.85 を維持する。sprs 0.11.4 の公開 manifest は Rust 1.85.0 と n
 - 比較式は要件第5.6節に従い、f32 の atol・rtol は初期値を各 `2e-5`、f64 は各 `1e-12` とする。調整する場合は計算規模と誤差の根拠を記録する。
 - 暗黙の精度変更の拒否と、取り出した数値データの明示的な精度変換を検証する。保持・移動に不要な係数・Index・primitive の制約を追加していないことも確認する。
 - 疎ベクトルは、非零成分の少ない大きな空間で密領域を確保しないことを確認する。疎行列は列ごとに処理し、密変換・全列の一括保持を行わないことを対象テストと実装レビューで確認する。
-- backend 無効・ndarray のみ・sprs のみ・両方、および qmb の export 有効・無効を検証する。関連テスト、workspace の test・format・Clippy・警告をエラーとするドキュメント生成、core 単独チェック、MSRV 1.85 での検証を行う。
+- backend 無効・ndarray のみ・sprs のみ・両方、および qmb の export 有効・無効を確認した。workspace の test・format・Clippy・警告をエラーとするドキュメント生成、core 単独チェックも成功した。MSRV 1.85 の実確認は利用者の依頼で省略した。
 
-## 8. 実装時に具体化する内部事項と延期範囲
+## 8. 実装した型と構成・延期範囲
 
-本書の公開契約・依存指定・受入条件は採用済みとする。メタデータ型の完全な型引数一覧、具体的な型別名、エラー variant の名称、非公開の補助型・module 分割は、この契約を維持して実装時に具体化する。
+公開型は `qmb_export` の root に提供する。`VectorMetadata<'b, B, H = (), P = ()>` は、基底・空間・shape に加えて状態からの export では P に状態 primitive 型を記録し、Coordinates の直接 export では P を `()` とする。`MatrixMetadata<'b, S, B, H = ()>` は状態型 S と選択空間を記録する。H は局所式では `()`、複合式では `HilbertSpace<I>` である。
+
+出力先は `Exported<Vec<C>, M>`、`Exported<ndarray::Array1<C>, M>`・`Exported<ndarray::Array2<C>, M>`、`Exported<sprs::CsVec<C>, M>`・`Exported<sprs::CsMat<C>, M>` のように指定する。具体的な組み合わせの型別名は設けない。局所変数ではメタデータを `_` で推論できる。行列の状態型は `MatrixArgs::<S, _>::new(&basis)` で指定できる。完全な型引数と各メソッドは Rust API ドキュメントを参照する。
+
+実装は data・vector・matrix・error と backend ごとの非公開 module に分けた。内部の格納処理で密・疎の列生成を共有し、ndarray の直接・段階的な変換は共通の Vec 構築・配列変換を使う。qmb-core の実装や通常依存は変更していない。
 
 Partial trace、汎用的な写像の表現行列・表現係数、異なる入出力基底を扱う汎用機構、Graded・異種局所代数・追加 backend は既存の初期版の範囲に従って延期する。通常の状態・演算子の数値 export は、これらを前提条件にしない。

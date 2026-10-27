@@ -35,6 +35,6 @@ Tensor の積の種類と状態・演算子成分の parity を区別し、ど�
 
 ## 4. 未実施の検証
 
-- MSRV（Rust 1.85）でのビルド・テスト。
+- MSRV（Rust 1.85）でのビルド・テスト。Step 6 では利用者の依頼により省略した。
 - 専用 no_std target での実ビルド。core・geometry の no_std は、ソース・依存 feature・ホスト上の単独ビルドによる確認にとどまる。
 - 性能ベンチマーク。

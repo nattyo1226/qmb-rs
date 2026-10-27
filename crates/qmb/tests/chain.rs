@@ -196,6 +196,113 @@ fn models_match_analytic_energies_and_independent_matrices_both_precisions() {
     check::<f64>();
 }
 
+#[cfg(feature = "export")]
+fn check_exports<T: Real + num_traits::NumAssign + Default + Send + Sync + 'static>() {
+    use qmb::export::{
+        Exported, MatrixArgs,
+        ndarray::{Array1, Array2},
+        sprs::{CsMat, CsVec},
+    };
+    use qmb::prelude::Export;
+    use qmb::spin_half::SzBasis;
+    for n in 0..=4 {
+        for boundary in [Boundary::Open, Boundary::Periodic] {
+            let chain = explicit_chain(n, boundary);
+            let space = chain.to_space().unwrap();
+            let j = real::<T>(1.3);
+            let h = heisenberg(&chain, &space, j).unwrap();
+            for first in [SpinHalfState::Up, SpinHalfState::Down] {
+                let psi = neel::<_, Complex<T>>(&chain, &space, first).unwrap();
+                let raw: Exported<Vec<Complex<T>>, _> = (&psi).export(&SzBasis).unwrap();
+                let pointer = raw.data().as_ptr();
+                let vector: Exported<Array1<_>, _> = raw.export(()).unwrap();
+                assert_eq!(pointer, vector.data().as_ptr());
+                let direct: Exported<Array1<_>, _> = (&psi).export(&SzBasis).unwrap();
+                assert_eq!(vector.data(), direct.data());
+                let dense: Exported<Array2<_>, _> = (&h)
+                    .export(MatrixArgs::<SpinHalfState, _>::new(&SzBasis))
+                    .unwrap();
+                let raw: Exported<Vec<Complex<T>>, _> = (&h)
+                    .export(MatrixArgs::<SpinHalfState, _>::new(&SzBasis))
+                    .unwrap();
+                assert_eq!(raw.data().as_slice(), dense.data().as_slice().unwrap());
+                assert_eq!(raw.metadata().shape(), [1 << n; 2]);
+                let sparse: Exported<CsMat<_>, _> = (&h)
+                    .export(MatrixArgs::<SpinHalfState, _>::new(&SzBasis))
+                    .unwrap();
+                let sparse_vector: Exported<CsVec<_>, _> = (&psi).export(&SzBasis).unwrap();
+                assert!(sparse.data().is_csc());
+                assert!(dense.metadata().space().shares_node_with(&space));
+                assert!(sparse.metadata().space().shares_node_with(&space));
+                let bits = (0..n).fold(0, |bits, i| {
+                    (bits << 1) | usize::from((i % 2 == 1) == (first == SpinHalfState::Up))
+                });
+                for i in 0..1 << n {
+                    close(vector.data()[i], c(if i == bits { 1. } else { 0. }, 0.));
+                    for k in 0..1 << n {
+                        let reference = matrix_element(n, boundary, i, k, [j; 3]);
+                        close(dense.data()[[i, k]], reference);
+                        close(
+                            sparse
+                                .data()
+                                .get(i, k)
+                                .copied()
+                                .unwrap_or_else(|| c(0., 0.)),
+                            reference,
+                        );
+                        close(dense.data()[[i, k]], dense.data()[[k, i]].conj());
+                    }
+                }
+                let dense_acted = dense.data().dot(vector.data());
+                let sparse_acted = sparse.data() * sparse_vector.data();
+                let algebra = psi.act(&h).unwrap();
+                let algebra: Exported<Vec<Complex<T>>, _> = (&algebra).export(&SzBasis).unwrap();
+                for i in 0..1 << n {
+                    close(dense_acted[i], algebra.data()[i]);
+                    close(
+                        sparse_acted.get(i).copied().unwrap_or_else(|| c(0., 0.)),
+                        algebra.data()[i],
+                    );
+                }
+                let energy_dense = vector
+                    .data()
+                    .iter()
+                    .zip(&dense_acted)
+                    .fold(c(0., 0.), |s, (&x, &y)| s + x.conj() * y);
+                let energy_sparse = sparse_vector.data().iter().fold(c(0., 0.), |s, (i, &x)| {
+                    s + x.conj() * sparse_acted.get(i).copied().unwrap_or_else(|| c(0., 0.))
+                });
+                close(energy_dense, psi.expectation(&h).unwrap());
+                close(energy_sparse, energy_dense);
+                close(
+                    h.trace().unwrap(),
+                    (0..1 << n).fold(c(0., 0.), |s, i| s + dense.data()[[i, i]]),
+                );
+                if boundary == Boundary::Open {
+                    close(
+                        energy_dense,
+                        Complex::new(
+                            if n == 0 {
+                                T::zero()
+                            } else {
+                                j * real::<T>((n - 1) as f64 / 4.)
+                            },
+                            T::zero(),
+                        ),
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "export")]
+#[test]
+fn exports_complete_chain_scenario_at_both_precisions() {
+    check_exports::<f32>();
+    check_exports::<f64>();
+}
+
 #[cfg(feature = "normalize")]
 fn check_norms<T: Real + Float>() {
     for n in 0..=6 {
