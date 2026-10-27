@@ -1,0 +1,263 @@
+# 型引数と係数型の指定を集約する API 案
+
+作成日: 2026-10-27
+更新日: 2026-10-28
+状態: 設計検討。関連型名・個別 primitive 用メソッドを追加しない方針、および第4.3節のモデル構築 API の方針は合意済み。製品 API への実装は未実施。
+
+## 1. 推奨する方向
+
+状態・演算子 primitive と係数型を関連付ける `QuantumSystem` trait を用意し、primitive を受け取って既存の式木を返す既定メソッドを提供する案を推奨する。spin-1/2 では、仮称 `SpinHalf<C>` がその trait を実装する。
+
+```rust
+// 提案 API。現行の qmb-core・qmb-spin-half にはまだ存在しない。
+use qmb_core::QuantumSystem;
+use qmb_spin_half::{SpinHalfState, SpinHalfOperator};
+
+type Spin = qmb_spin_half::SpinHalf<num_complex::Complex<f64>>;
+
+let up = Spin::state(SpinHalfState::Up);
+let sx = Spin::operator(SpinHalfOperator::Sx);
+let result = up.act(&sx);
+```
+
+係数型の選択は `Spin` の定義に集約する。状態・演算子の primitive 型は spin-half 側で指定する。各構築結果の型はこの時点で決まり、後から期待値を計算することや戻り値を注釈することを型推論の前提にしない。
+
+`LocalStateOf<Q>`・`StateOf<Q, I>` などの汎用の型別名で、戻り値の型も選択済みの `Q` から書けるようにする。式木・評価器を変更せずに導入できる範囲から着手し、型引数そのものを core 全体で組み替える案は、残る負担を確認してから判断する。
+
+[使いやすさの論点一覧](api-usability.md)のうち、型引数と係数型の指定に対象を絞った検討である。関連型名は `State`・`Operator`・`Coeff` とし、これらは状態 primitive・演算子 primitive・係数の型を表す。構築の入口は `state(primitive)`・`operator(primitive)` とし、`up()`・`sx()` など個別 primitive 用メソッドは今回追加しない。その他の公開名とシグネチャは提案段階である。
+
+## 2. 現行 API で負担が生じる理由
+
+型指定には、役割の違う情報が混在している。
+
+| 情報 | 現行の指定箇所 | 集約の方針 |
+| --- | --- | --- |
+| 状態・演算子 primitive の組 `S, O` | `LocalState<S, O, C>`、`State<I, S, O, C>` など | `QuantumSystem` の関連型でまとめる |
+| 式の係数型 `C` | 状態と演算子の構築、モデル utility の型引数・推論 | `QuantumSystem` の関連型として一度選び、各戻り値へ引き継ぐ |
+| Index 型 `I` | `HilbertSpace<I>`、`State`、`Operator` | 配置先や Chain から推論する |
+| モデルの実結合定数の型 `R` | `heisenberg`・`xyz` の数値引数 | `C` への変換元として引数から推論する |
+| 行列が作用する状態型 `S` | `MatrixArgs<S, B>` | 係数型とは別の論点として、状態からの推論を補助する案を検討する |
+| 数値出力先 | `Exported<Vec<_>, _>` などの戻り値注釈 | データ型の選択として明示する。係数の精度選択は引き継ぐ |
+
+現在も、後段で状態と演算子を組み合わせれば `C` を推論できる場合がある。[Heisenberg の利用例](../../examples/src/bin/heisenberg.rs)はその例である。しかし、個別の状態・演算子を独立に構築する際の型指定は残り、コードの一部を切り出した際に後段の型推論へ依存することもある。
+
+状態型から `Act<C>::Operator` を求めれば `O` を省けるが、保持・遅延構築に `Act<C>` の実装を要求することになる。現在は、演算能力を持たない型でも式を保持・構築できるため、この方法だけで core の型引数を削る案は勧めない。[現在の保持契約のテスト](../../crates/qmb-core/tests/primitive_contracts.rs)を維持する。
+
+## 3. 候補の比較
+
+| 案 | 型指定への効果 | 主な代償・限界 | 評価 |
+| --- | --- | --- | --- |
+| builtin の型別名だけを追加する | `S, O` の繰り返しを省ける | 状態と演算子で `C` を別々に指定する入口が残る | 推奨案の補助として使う |
+| `QuantumSystem` と投影した型別名を使う | `S, O, C` を一度選び、構築と戻り値型の両方に引き継げる | primitive の組を表す概念の導入と、その責任を定義する必要がある | 第一候補 |
+| `SpinHalf<C>` 固有の関連関数だけを追加する | 代数と `C` を一度選び、状態・演算子・モデルに引き継げる | 型の関連付けが具体的代数の中に留まり、汎用コードから参照できない | 共通 trait を設ける前の案 |
+| `let spin = SpinHalf::<C>::new()` のメソッドを使う | 関連関数の案と同じ型指定削減ができる | 保持する情報がない場合も構築用の値を管理する | 値を渡して構築処理を抽象化したい場合の候補 |
+| 代数・係数型を束ねた型を core の式型引数にする | `State<I, F>` など、明示的な式型も短くできる | 公開型・trait 制約・演算実装・export まで広く変更する | 明示的な型の負担が残る場合に再検討 |
+| 係数型を評価時まで決めない | 初期の primitive 構築で `C` を書かずに済む | 構築時に保持する係数の型、精度、演算の整合性を再設計する必要がある | 今回の改善には採用しない |
+
+構築用の値は、将来、実行時に変わる設定を保持する API には適する可能性がある。現在の対象では代数と係数型を型で選ぶだけなので、値の生成が不要な関連関数を第一候補とする。将来の設定や独自代数への適用を、この入口に先回りして追加しない。
+
+core の型引数を束ねる案では、束ねた型自体を式の同一性に含めるか、関連型を通じて既存の式へ展開するかも決める必要がある。前者では同じ `S, O, C` を指定した別の束ね方が合成できなくなる可能性があり、後者では関連型から元の束ねた型を推論できるかが論点になる。構築時の負担を減らすために、この判断まで必須にする必要はない。
+
+## 4. 推奨案の利用イメージ
+
+### 4.1. 型の関連付けと共通の構築メソッド
+
+```rust
+// 提案 API。State・Operator は primitive 型を表す。
+pub trait QuantumSystem: Sized {
+    type State;
+    type Operator;
+    type Coeff;
+
+    fn state(primitive: Self::State) -> LocalStateOf<Self> {
+        qmb_core::LocalState::primitive(primitive)
+    }
+
+    fn operator(primitive: Self::Operator) -> LocalOperatorOf<Self> {
+        qmb_core::LocalOperator::primitive(primitive)
+    }
+}
+
+pub type LocalStateOf<Q> = qmb_core::LocalState<
+    <Q as QuantumSystem>::State,
+    <Q as QuantumSystem>::Operator,
+    <Q as QuantumSystem>::Coeff,
+>;
+
+pub type LocalOperatorOf<Q> = qmb_core::LocalOperator<
+    <Q as QuantumSystem>::Operator,
+    <Q as QuantumSystem>::Coeff,
+>;
+```
+
+`SpinHalf<C>` の実装では、次のように関連型を指定する。
+
+```rust
+impl<C> QuantumSystem for SpinHalf<C> {
+    type State = SpinHalfState;
+    type Operator = SpinHalfOperator;
+    type Coeff = C;
+}
+```
+
+trait の既定メソッドを使い、`Spin::state(SpinHalfState::Up)`・`Spin::operator(SpinHalfOperator::Sx)` と構築する。これらの呼び出しでは trait の import が必要になる。
+
+trait は関連型の選択を表し、値として状態・演算子・係数を保持するわけではない。`Act`・`Product`・数値演算などの supertrait は課さず、実際の評価メソッドで対応する能力を要求する。`Q: QuantumSystem` だけで任意の評価ができることは保証しない。
+
+### 4.2. 局所式と 2 因子の系
+
+```rust
+// 提案 API。配置・合成・評価は現在の core API を使用する。
+use num_complex::Complex;
+use qmb_core::{HilbertSpace, QuantumSystem};
+use qmb_spin_half::{SpinHalf, SpinHalfState as Ket, SpinHalfOperator as Op};
+
+type Spin = SpinHalf<Complex<f64>>;
+
+let a = HilbertSpace::factor("a");
+let b = HilbertSpace::factor("b");
+let space = a.tensor_product(&b)?;
+
+let psi = Spin::state(Ket::Up).at(&a)?
+    .tensor_product(&Spin::state(Ket::Down).at(&b)?)?;
+let zz = Spin::operator(Op::Sz).at(&a)?
+    .product(&Spin::operator(Op::Sz).at(&b)?)?
+    .bind(&space)?;
+
+let value = psi.expectation(&zz)?; // -0.25 + 0i
+```
+
+すべての primitive を `state(primitive)`・`operator(primitive)` の同じ入口から構築する。zero・identity の補助を追加する場合も選択済みの `C` を持つ式を返す案だが、今回の基本の入口とは別の検討事項とする。
+
+### 4.3. モデル構築の関連関数（合意済みの方針）
+
+現在 `qmb_spin_half::utility` にある `xyz`・`heisenberg`・`neel` は、新しく実装する `SpinHalf<C>` の関連関数とする。いずれも `self` を受け取らず、係数型は `SpinHalf<C>` の `C` から決める。これらのモデル固有の関数を `QuantumSystem` trait へ追加しない。
+
+当面は Chain と明示的な `&HilbertSpace<I>` の両方を受け取る。呼び出し方は次のとおりとする。
+
+| 関連関数 | 引数 | 成功時の戻り値 |
+| --- | --- | --- |
+| `Spin::xyz` | `&chain, &space, jx, jy, jz` | `OperatorOf<Spin, I>` |
+| `Spin::heisenberg` | `&chain, &space, coupling` | `OperatorOf<Spin, I>` |
+| `Spin::neel` | `&chain, &space, first` | `StateOf<Spin, I>` |
+
+すべて失敗を表す `Result` を返す。既存の各 Site に一つの spin 因子があること、Chain の Index が指定空間の因子を過不足なく覆うことの検証を引き継ぐ。XYZ・Heisenberg の演算子は指定空間に束縛し、Neel 状態は指定空間と互換な因子順序で構築する。
+
+空間は利用側が構築・保持し、関連関数は既存の Factor を使う。Index の複製・再発行や内部での空間生成を前提とせず、Index には現在と同じ `I: Eq` を要求する。Space を省略して内部生成する入口は今回の範囲に含めない。
+
+```rust
+// 提案 API。Chain・空間・正規化は現在の API を使用する。
+use num_complex::Complex;
+use qmb_basic::Id128;
+use qmb_geometry::{Boundary, Chain, ToSpace};
+use qmb_normalize::NormalizedExpectation;
+use qmb_spin_half::{SpinHalf, SpinHalfState};
+
+type Spin = SpinHalf<Complex<f64>>;
+
+let chain = Chain::<Id128>::new(6, 1, Boundary::Open)?;
+let space = chain.to_space()?;
+let h = Spin::heisenberg(&chain, &space, 1.0)?;
+let psi = Spin::neel(&chain, &space, SpinHalfState::Up)?;
+let energy = psi.normalized_expectation(&h)?;
+```
+
+`C` は構築用の型から、`I` は Chain と空間から決まる。結合定数は現在と同じ実数型 `R` の引数として受け取り、型制約を各関数へ限定する。
+
+- `xyz` は `C: Clone + From<R> + Neg<Output = C>` を要求する。
+- `heisenberg` は同じ `C` の能力に加え `R: Clone` を要求し、等方的な XYZ として構築する。
+- `neel` は係数の数値演算や `Clone` を要求しない。
+
+`impl<C> SpinHalf<C>` 全体にこれらの能力を課さない。既存の utility に実装を委譲するか、別の実装用モジュールへ移すかは公開の呼び出し方から独立に決める。
+
+単精度へ切り替える際は `Spin` の定義を変更する。構築用の型に既定の `f64` を設定せず、意図しない精度選択を避ける。明示的に `f64` とした変数を `Complex<f32>` へ暗黙に変換する API は追加しない。
+
+### 4.4. 明示的な戻り値の型
+
+複合式も関連型を投影して、既存 core 型を指す別名を提供する。
+
+```rust
+pub type StateOf<Q, I> = qmb_core::State<
+    I,
+    <Q as QuantumSystem>::State,
+    <Q as QuantumSystem>::Operator,
+    <Q as QuantumSystem>::Coeff,
+>;
+
+pub type OperatorOf<Q, I> = qmb_core::Operator<
+    I,
+    <Q as QuantumSystem>::Operator,
+    <Q as QuantumSystem>::Coeff,
+>;
+```
+
+例えば、複数の関数で同じ精度を使うアプリケーションでは、次のように選択をモジュールに集約できる。
+
+```rust
+// 提案 API を使用する側の型別名。
+type Spin = qmb_spin_half::SpinHalf<num_complex::Complex<f64>>;
+type State<I> = qmb_core::StateOf<Spin, I>;
+type Operator<I> = qmb_core::OperatorOf<Spin, I>;
+```
+
+具体的な精度と primitive の組の選択を `Spin` の定義に集約し、戻り値型では `Spin` と Index 型だけを指定できる。汎用コードでも `Q: QuantumSystem` と `StateOf<Q, I>` を使える。ただし関連型の投影は逆向きの型推論を保証しないため、既存の式から元の `Q` を推論できることは前提にしない。入口の `Q` は明示的に選ぶ。
+
+### 4.5. スカラー値と数値出力
+
+スカラー値の型は `.scaled(...)` などの引数から推論できる。実数から `C` への変換を明示したい場合には、`Spin::coefficient(value)` を `C: From<R>` の範囲で提供する案がある。この補助は任意とし、数値変換の規則を追加しない。
+
+数値出力は、現在の `Exported<Vec<_>, _>`・`Exported<Array2<_>, _>` などの型指定で係数型を引き継げる。出力先コンテナの選択は残す。
+
+行列 export の `MatrixArgs::<SpinHalfState, _>` は別の型指定である。状態が既にある場面には、`MatrixArgs::for_state(&psi, &basis)` のように状態型を推論する補助を `qmb-export` 側に追加する候補がある。この場合、状態は型推論に使い、作用空間は現在と同じ束縛・明示指定に従う、と契約を明示する。状態から自動的に作用空間も選ぶかは別に判断する。
+
+この補助のために spin-half から export への依存を増やす必要はない。局所状態にも同じ補助を提供するか、状態が存在しない行列出力をどう案内するかは、export API の検討事項として残す。
+
+## 5. 実装する場合の境界と契約
+
+構築用の型は、`PhantomData<fn() -> C>` などで係数型だけを指定する。インスタンスの生成を必要とせず、各関数が既存の constructor・utility を呼ぶ構成にできる。
+
+| 項目 | 推奨案での扱い |
+| --- | --- |
+| 公開先 | `QuantumSystem` と投影した型別名を `qmb-core`、`SpinHalf<C>` とその実装を `qmb-spin-half` で提供する案。具体的な module 配置は実装時に決める |
+| 戻り値 | 既存の core の式型。新たな式ラッパーは保持しない |
+| 構築時の制約 | `state(primitive)`・`operator(primitive)` に数値演算や `Clone` を要求しない |
+| 評価時の制約 | 現在の式メソッドが必要とする能力を維持する |
+| モデル構築 | `xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数とし、Chain と明示空間を受け取る。その操作に必要な能力だけを要求する |
+| 空間と Index | 現在の `HilbertSpace<I>` と Chain を受け取る。構築用の型に登録・保持しない |
+| 同一性 | 構築用の型や値の識別子を式へ追加しない。同じ `S, O, C` なら従来どおり合成できる |
+| 数値精度 | `C` は構築時に確定する。異なる精度の式の暗黙変換は追加しない |
+| 独自代数 | `QuantumSystem` の関連型を指定すれば共通 constructor を使える。既存 core API の直接利用も維持する |
+| 依存関係 | 本案のための新たな production dependency は不要。spin-half の `no_std` を維持する |
+
+本案は、過去の LocalStructure が担っていた primitive の組の関連付けを、係数型とともに明示的な trait として再導入する側面がある。その責任を「関連型の選択と共通の式構築」として定義し直す。局所規則・次元・恒等元の数学的定義は、現在と同じ primitive と個別能力が担う。
+
+`QuantumSystem` という名前は全 Hilbert 空間やモデルの所有も連想させるため、正式な命名では責任の範囲を確認する。現案の trait には空間・幾何・Index 発行を含めない。
+
+## 6. 試作による確認と限界
+
+Rust 1.98.0 を使い、リポジトリ外の検討用パッケージから現行 crate を参照して、関連関数と値を使う構築 API の双方を試作した。製品ソース・依存設定は変更していない。初回の試作は個別 primitive 用メソッドを含む旧案で、`cargo test --offline --locked --jobs 1` に検証用の target directory 指定を加え、9 件のテストと 2 件の compile-fail doctest が成功した。
+
+確認した範囲は次のとおりである。
+
+- `Complex<f32>`・`Complex<f64>` の両方で、一度選んだ `C` から局所式と Heisenberg・Neel を構築できる。
+- 両精度で、接尾辞のない実数リテラル `1.0` を結合定数として使える。任意のユーザ定義係数でも同じ推論が必ず成立することまでは保証しない。
+- 2 因子の期待値が `-0.25`、6 Site の Neel 状態の Heisenberg エネルギーが `1.25` になる。
+- 密・疎行列 export に選択済みの係数型を引き継げる。状態から行列引数の型を推論する補助関数も試作できる。
+- 数値能力を持たない係数型、非 `Clone` の primitive でも保持・遅延構築できる。
+- 作成元の値の生存期間に依存せず、既存の式を返せる。
+- 単精度の状態と倍精度の演算子の作用は、関連関数・値の両案でコンパイル時に拒否される。
+
+試作ライブラリは `#![no_std]` とし、ホスト上でコンパイルした。MSRV 1.85 と専用の `no_std` target では検証していない。公開 API 全体の実装、利用者による評価、性能測定は未実施である。
+
+その後、`QuantumSystem` の既定 constructor と投影した 4 種類の型別名を追加試作した。数値・代数能力のない型での遅延構築、選択した係数型での既存演算、同じ関連型を持つ異なる trait 実装間での式の合成を、追加の対象テスト 3 件で確認した。
+
+## 7. 実装へ進む場合の範囲
+
+1. `QuantumSystem` と投影した型別名、`SpinHalf<C>` の実装を追加し、primitive の組と係数型を一箇所で選ぶ利用例を用意する。
+2. primitive の構築は `state(primitive)`・`operator(primitive)` を使い、数値能力の制約を各操作へ限定する。zero・identity の補助は別途範囲を決める。
+3. `xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数として提供し、Chain と Space の両方を受け取る。第4.3節の既存の構築・検証契約を引き継ぐ。
+4. 基底展開・数値出力まで一連の利用コードを確認し、型の再指定がどこに残るか記録する。
+5. 構築・精度不一致・既存 core 型との接続に回帰検証を付ける。
+6. 戻り値型を書く負担や独自代数での繰り返しがなお大きければ、core の型引数を束ねる案を再検討する。
+
+既存の式 constructor は維持する。モデル構築の公開入口は `SpinHalf<C>` の関連関数へ移す方針とし、旧 utility の自由関数を互換入口として残すか、削除・非推奨化するかは別途決める。実装時に、要件・設計文書へ正式な契約を反映する。
