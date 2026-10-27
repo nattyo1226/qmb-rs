@@ -1,6 +1,14 @@
 [workspace]
 resolver = "3"
-members = ["crates/qmb-core", "crates/qmb-spin-half", "crates/qmb-basic", "crates/qmb-geometry", "crates/qmb", "crates/qmb-normalize"]
+members = [
+    "crates/qmb-core",
+    "crates/qmb-spin-half",
+    "crates/qmb-basic",
+    "crates/qmb-geometry",
+    "crates/qmb",
+    "crates/qmb-normalize",
+    "crates/qmb-export",
+]
 
 [workspace.package]
 edition = "2024"
@@ -8,6 +16,9 @@ version = "0.1.0"
 rust-version = "1.85"
 
 [workspace.dependencies]
+qmb-export = { path = "crates/qmb-export" }
+ndarray = { version = "0.17.2", default-features = false, features = ["std"] }
+sprs = { version = "=0.11.4", default-features = false }
 qmb-normalize = { path = "crates/qmb-normalize" }
 qmb-core = { path = "crates/qmb-core" }
 qmb-basic = { path = "crates/qmb-basic" }

@@ -4,7 +4,7 @@
 
 ## 1. 目的と位置付け
 
-本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。段階1〜5は実装済み、段階6は未実装である。係数型のリファクタリングと qmb-normalize への分離は実装済みである。
+本書は、[要件](requirements.md)、[アーキテクチャ概要](architecture.md)、および[初期版の提供範囲と完成条件](design/initial-release.md)に基づき、合意した crate 分割・実装順序と進捗を記録する。**段階1〜6は完了（2026-10-27）**し、初期版の機能実装と受入確認を終えた。検証結果は第4.6節、利用者の依頼で省略した MSRV などの未実施の検証は第5.1節に記録する。係数型のリファクタリングと qmb-normalize への分離も実装済みである。
 
 2026-10-26 に LocalStructure の廃止と追加の定義ラベルを設けない方針を採用した。第2〜6節にある L を使う API は移行前の実装・設計記録であり、次の移行方針は第8節に記録する。全 crate の実装移行と検証を完了した。
 
@@ -12,7 +12,7 @@
 
 `qmb-core` は抽象契約と共通の代数処理を担当し、具体的な代数は専用 crate に分離する。文書中の「代数 core」は `qmb-core` を指す。共通表現と基本操作を同じ crate が所有し、内部の責任は module で分離する。
 
-Step 2 の局所構造と演算能力の分離、共通パーツと項型、基底 trait、評価経路、所有権、反復的な評価・破棄の方針は採用済みであり、本書の実装内容と完了条件に含める。Step 3 の型・共有・空間保持・エラー・評価方針は[空間の設計](design/hilbert-space.md)と[複合式の設計](design/composite-expression.md)にまとめる。現在の Chain・モデル utility の契約は[幾何の設計](design/geometry.md)、Norm・正規化の契約は[局所式の設計第4.1節](design/primitive-expression.md#41-norm正規化の-api-と-feature)にまとめる。それ以降の API の詳細・数値 backend・追加依存は、各段階で設計する。数学的契約と初期版の提供範囲は既存文書に従う。
+Step 2 の局所構造と演算能力の分離、共通パーツと項型、基底 trait、評価経路、所有権、反復的な評価・破棄の方針は採用済みであり、本書の実装内容と完了条件に含める。Step 3 の型・共有・空間保持・エラー・評価方針は[空間の設計](design/hilbert-space.md)と[複合式の設計](design/composite-expression.md)にまとめる。現在の Chain・モデル utility の契約は[幾何の設計](design/geometry.md)、Norm・正規化の契約は[局所式の設計第4.1節](design/primitive-expression.md#41-norm正規化の-api-と-feature)にまとめる。Step 6 の API・数値 backend・追加依存は[数値 export の設計](design/export.md)に従う。数学的契約と初期版の提供範囲は既存文書に従う。
 
 Step 5 の採用済み方針と公開 API は[基底の設計](design/basis.md)、実装・検証状況は[第4.5節](#45-段階5の実装検証状況)に記録する。2026-10-27に、複合基底は一つの局所基底を全因子へ共通に適用して導出し、因子ごとに異なる基底を指定しない方針を採用した。
 
@@ -24,9 +24,11 @@ Step 5 は既存の依存と `core`・`alloc` の機構で実装・検証し、�
 
 展開と座標取得の内部処理を共有し、基底番号をキーに疎に集約して基底順で返す。対象空間・共通局所基底・因子順序を座標に対応付け、空間・基底・overflow のエラーを区別する。型制約は操作ごとに要求し、局所式から複合式の順に実装した。
 
+2026-10-27に Step 6 の推奨案をすべて採用した。Export trait、Vec とメタデータへの密出力、それを経由する ndarray の直接・段階的な出力、Coordinates から sprs への疎出力、結果型・引数・エラー・feature・依存指定を[数値 export の設計](design/export.md)に統合した。同日に Step 6 を実装し、Rust 1.98.0 で受入確認を完了した。検証結果と省略した MSRV の確認は第4.6節に記録する。
+
 ## 2. crate の責任と依存関係
 
-係数型の採用方針を反映し、計画上は以下の7 crate を `crates/` 以下に配置する。package 名は表の名称とする。現時点で実装済みの crate は `qmb-core`・`qmb-spin-half`・`qmb-basic`・`qmb-geometry`・`qmb-normalize`・`qmb` であり、`qmb-export` は未実装である。
+係数型の採用方針を反映し、計画上は以下の7 crate を `crates/` 以下に配置する。package 名は表の名称とする。`qmb-core`・`qmb-spin-half`・`qmb-basic`・`qmb-geometry`・`qmb-normalize`・`qmb-export`・`qmb` はすべて実装済みである。
 
 | crate | 責任 | workspace 内の通常依存 |
 | --- | --- | --- |
@@ -34,7 +36,7 @@ Step 5 は既存の依存と `core`・`alloc` の機構で実装・検証し、�
 | `qmb-basic` | UUID による具体型 `Id128` と、seed 指定不要の new・Default による発行 API | `qmb-core` |
 | `qmb-spin-half` | spin-1/2 の局所構造・primitive・局所規則・基底、Heisenberg・Neel の構築 utility | `qmb-core`、`qmb-geometry` |
 | `qmb-geometry` | Site ごとの Index 列と境界条件を持つ Chain、近接関係、配置用 Index 発行の補助 | なし |
-| `qmb-export` | 外部数値ライブラリへの密・疎変換、空間・基底・精度情報との対応付け | `qmb-core` |
+| `qmb-export` | Export trait、Vec とメタデータへの密出力、ndarray・sprs への変換、空間・基底・精度情報との対応付け | `qmb-core` |
 | `qmb-normalize` | norm・状態の正規化・正規化期待値と NormalizationError を提供する。std を利用でき、実数型 R に Float を要求する | `qmb-core` |
 | `qmb` | 各 crate と構築 utility の再公開、利用例、縦断的な結合テスト | 上記6 crate |
 
@@ -59,7 +61,7 @@ graph TD
 
 `qmb` は core・共通代数処理・basic の具体型 Id128・spin-1/2・Chain・ChainError を再公開し、space module の ToSpace を root と prelude から提供する。既定の `normalize` feature が qmb-normalize と Norm・Normalize・NormalizedExpectation・NormalizedExpectationIn 拡張 trait を有効にし、prelude からも提供する。`--no-default-features` では正規化の拡張を除く代数 API を利用できる。旧 `qmb/libm` は `normalize` の互換 alias とし、`qmb-core/libm` は削除した。core は内積・期待値・norm squared・スカラー除算を保持し、単独で no_std + alloc を維持する。
 
-数値 export は後続の `export` feature で有効にし、代数計算だけでも利用できる構成とする。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
+数値 export は任意の `qmb/export` feature で両 backend を有効にする。`qmb-export` 単独では既定 feature を空にして Vec 出力を常時提供し、ndarray・sprs の API は個別の feature で選択する。`qmb::export` の再公開と root・prelude の Export trait も提供する。初期版の export は一つの crate にまとめ、backend ごとの crate 分割は行わない。
 
 ## 3. 抽象契約と共通実装の境界
 
@@ -116,7 +118,7 @@ crate ごとに完成させるのではなく、抽象契約と具体的代数�
 | 3. 空間と複合評価（実装済み） | [空間の設計](design/hilbert-space.md)と[複合式の設計](design/composite-expression.md)に従い、`qmb-core` にジェネリックな Index の照合、HilbertSpace の葉と入れ子 Tensor、互換性・部分系判定、配置・束縛、複合作用・内積・期待値・随伴・full trace・導出操作。`qmb-basic` に UUID の具体型と発行 API | Geometry なしで同種の複数因子を評価でき、zero・identity の空間保持、明示空間の優先、早期のエラー検出、深い空間の反復的な走査・破棄、総次元 overflow と空間構築の分離を検証できる。core は独自 Index 型で動作し、basic は seed 指定なしで発行できる |
 | 4. 最初の縦断例と導出操作の補完（実装済み） | Chain・近接関係、basic の Id128、spin-half の XYZ・Heisenberg・Neel utility、qmb の再公開・縦断例を提供する。局所式・複合式の norm・正規化・正規化期待値は、現在は qmb-normalize で提供する（第7〜9節）。bra・内部ラベルは初期版に導入しない | 行列化せず open chain の期待値 `J(L−1)/4` を得る。Neel の norm、zero-norm の拒否、0-site と periodic の小規模規約も確認する |
 | 5. 基底展開・座標取得（実装済み） | `qmb-core` に複合基底、式全体の展開・再展開・係数取得 | mixed-radix 順序、非正規直交基底、再展開と直接の展開の一致を正しく扱える |
-| 6. 数値接続と受入確認 | `qmb-export`。密ベクトル・密行列、続いて疎ベクトル・疎行列を接続し、利用例を完成させる | 代数計算・基底座標・密・疎の各経路が一致し、疎変換が密表現を中間生成せず、初期版の完成条件を満たす |
+| 6. 数値接続と受入確認（実装済み） | [数値 export の設計](design/export.md)に従い `qmb-export` を新設。Vec とメタデータ、ndarray の密ベクトル・密行列、sprs の疎ベクトル・CSC 行列、qmb の利用窓口と縦断例を提供する | 代数計算・基底座標・Vec・ndarray・疎の各経路が一致し、疎変換が密表現を中間生成せず、初期版の完成条件と feature 別の検証を満たす。MSRV の実確認は利用者の依頼により省略 |
 
 段階1で非公開テスト用の別の有限次元局所代数も用意し、契約が spin 固有になっていないことを確認する。段階2以降、その代数だけで構成する独立した系に対し、共通式・複合評価・基底展開・export の検証を順次追加する。spin と同じ系に混在させる検証は初期版に含めない。抽象化の問題を最終段階まで持ち越さない。
 
@@ -195,6 +197,35 @@ Rust 1.98.0 で以下の検証が成功した。
 
 MSRV 1.85、専用 no_std target、性能ベンチマークは未検証である。no_std + alloc はソースと通常依存の feature、およびホスト上の core 単独ビルドで確認した。これらの制限は Step 3〜4 の検証時から引き続き残る。
 
+### 4.6. 段階6の実装・検証状況
+
+**完了（2026-10-27）**。[数値 export の設計](design/export.md)に従い qmb-export を追加し、初期版の機能実装と受入確認を完了した。
+
+- Export・Exported・VectorMetadata・MatrixMetadata・MatrixArgs・ExportError を公開した。出力先は `Exported<数値コンテナ, メタデータ型>` で直接指定する。式は借用、所有する Coordinates・Vec は移動して変換する。
+- 局所・複合の状態と演算子から Vec とメタデータへ出力し、同じ処理を経由する ndarray の直接出力と取得済み Vec からの変換も提供する。密行列の shape と行優先配置はメタデータが保持する。
+- Coordinates から sprs の疎ベクトル、入力基底への作用結果から CSC 行列を構築する。公開された core API のみを使い、密な中間領域を作らない。演算子 Product や primitive・Index の Clone を追加要求しない。
+- 既定 feature は空で Vec 出力を提供し、ndarray・sprs を個別に有効にする。qmb の任意の export feature は両方を有効にし、crate・Export trait を再公開する。
+- sprs は既定 feature 無効の =0.11.4、ndarray は std のみの 0.17.2 に解決された。sprs 側と直接依存の ndarray の統一、export 無効時に backend 依存が入らないことを cargo tree で確認した。core の実装・通常依存は変更していない。
+- heisenberg の実行例を拡張し、6-site open chain の代数・密・疎の期待値がすべて 1.25、CSC 行列の shape が (64, 64)、非零成分が224で一致することを確認した。
+
+Rust 1.98.0 で次の検証が成功した（依存取得後は --offline を使用）。
+
+- `cargo test --workspace --all-features --offline -j 2 --quiet`（doc test を含む151テスト）。
+- `cargo test --workspace --no-default-features --offline -j 2 --quiet`（146テスト）。
+- `cargo test -p qmb-export --no-default-features --features ndarray --offline -j 2 --quiet`（15テスト）、同じ指定の sprs 構成（16テスト）。backend 両方無効の Vec 出力は workspace の default 無効構成で確認した。
+- `cargo test -p qmb --no-default-features --features export --offline -j 2 --quiet`（13テスト）。正規化を無効にした状態でも export を利用できる。
+- `cargo fmt --all -- --check`。
+- `cargo clippy --workspace --all-targets --all-features --offline -j 2 -- -D warnings`。
+- `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps --offline -j 2` と qmb-export の default 無効のドキュメント生成。
+- `cargo check -p qmb-core --no-default-features --offline -j 2`。
+- heisenberg の `--all-features`、`--no-default-features --features export`、`--no-default-features` の各構成での実行。
+
+新規テストは単精度・倍精度の独立な局所・二因子行列、Cartesian／Ladder 展開経路、三次元代数・非正規直交基底と Gram 行列、状態への作用・内積・期待値・trace、長さ0〜4の open／periodic chain を確認した。Vec・ndarray の各経路の成分・shape・メタデータ一致とポインタ維持、精度混在の拒否・明示変換、空・単因子・入れ子・zero・identity・spectator、明示空間の優先と不正入力・overflow、元のエラーが source として保持されることも検証した。
+
+保持に不要な primitive・Index の能力と、Product・Identity のない演算子、係数の能力を追加しない所有値変換を確認した。128 KiB スタック上の2万段の空間を処理できる。割り当てを64 KiB以下に制限した検証では、次元2^40で一成分の疎ベクトルと512次元の CSC 恒等行列が成功し、同じ巨大ベクトルの密出力は Allocation エラーを返した。
+
+MSRV（Rust 1.85）の実ビルド・テストは利用者の依頼により省略した。専用 no_std target と性能ベンチマークも未検証である。ホスト上の core 単独ビルドと依存分離の確認を、これらの実証に代えない。
+
 ## 5. 検証方針
 
 - `qmb-core` では共通型・契約・評価、具体的代数では局所規則、`qmb` では crate を横断する利用を検証する。
@@ -209,13 +240,23 @@ MSRV 1.85、専用 no_std target、性能ベンチマークは未検証である
 - 各段階で対象テストを実行した後、workspace の test・format check・Clippy で確認する。最終段階では export 無効と全 feature 有効の両構成を確認する。
 - 初期版の代表シナリオを実行可能な利用例として提供する。
 
+### 5.1. 未実施の検証
+
+段階1〜6の完了時点で、次の検証は未実施である。
+
+- MSRV（Rust 1.85）での実ビルド・テスト。Step 6 では利用者の依頼により省略した。
+- 専用 no_std target での実ビルド。core・geometry の no_std + alloc は、ソース・依存 feature・ホスト上の単独ビルドによる確認にとどまる。
+- 性能ベンチマーク。
+
+機能実装と受入確認の完了を、これらの実証に代えない。後続の設計検討は[アーキテクチャ第10節](architecture.md#10-将来の必須課題)に記録する。
+
 ## 6. 未決事項と延期するもの
 
 Step 2 の局所構造と演算能力の分離、共通パーツの公開、項型と走査の統合、基底の marker trait の削除と `Basis` の直接利用、評価の分担・メソッドごとの制約、所有権、反復的な評価・破棄と性能上の合格条件は採用済みとする。非公開の補助型・作業領域・数値演算を呼ぶ位置での制約は、この方針と検証条件の範囲で実装時に定める。
 
 Step 3 では、core の Index のジェネリック化と basic の UUID 発行、Dof の葉への統合、型 `L` による固定定義、`Arc` による空間・式の共有、反復的な走査・破棄、次元取得時の overflow 検出、常に空間を持つ状態、ハンドルに集約する演算子の束縛、fallible な複合操作、目的別の評価経路を採用した。現在の契約は[空間の設計](design/hilbert-space.md)と[複合式の設計](design/composite-expression.md)に従う。
 
-Step 3 では当時の具体型 `HilbertSpace<I, L>`・`State<I, L, C>`・`Operator<I, L, C>`、非公開の節点・作業スタック、`SpaceError`・`ExpressionError`、basic の UUID v4 による具体型・発行 API を実装した。現在の公開 API は[空間の設計第10節](design/hilbert-space.md#10-現在の公開-api)と[複合式の設計第10節](design/composite-expression.md#10-現在の公開-api)、実装・検証結果は第4.3節に記録する。Norm・正規化・正規化期待値は qmb-normalize に実装済みであり、[正規化 API の契約](design/primitive-expression.md#41-norm正規化の-api-と-feature)に従う。bra は初期版では導入せず、braket は内積で計算する。基底処理は段階5で実装済みとし、数値 backend は段階6で具体化する。Partial trace は future work とし、実施時期は未定とする。実行時の局所構造パラメータ・異なる実装型間の定義照合は後続へ延期する。速度比較・追加の割り当て最適化も別途検証する。新しい production 依存は、採用理由と用途を具体化してから確認する。
+Step 3 では当時の具体型 `HilbertSpace<I, L>`・`State<I, L, C>`・`Operator<I, L, C>`、非公開の節点・作業スタック、`SpaceError`・`ExpressionError`、basic の UUID v4 による具体型・発行 API を実装した。現在の公開 API は[空間の設計第10節](design/hilbert-space.md#10-現在の公開-api)と[複合式の設計第10節](design/composite-expression.md#10-現在の公開-api)、実装・検証結果は第4.3節に記録する。Norm・正規化・正規化期待値は qmb-normalize に実装済みであり、[正規化 API の契約](design/primitive-expression.md#41-norm正規化の-api-と-feature)に従う。bra は初期版では導入せず、braket は内積で計算する。基底処理は段階5で実装済みとし、数値 export の API・backend・依存指定も[採用済みの設計](design/export.md)に従って段階6で実装済みである。Partial trace は future work とし、実施時期は未定とする。実行時の局所構造パラメータ・異なる実装型間の定義照合は後続へ延期する。速度比較・追加の割り当て最適化も別途検証する。Step 6 の sprs・ndarray とその依存指定は採用済みである。それ以外の新しい production 依存は、採用理由と用途を具体化してから確認する。
 
 初期版は同種局所構造・ordinary・単一スレッドを対象とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加 Geometry、ML・tensor network などの接続は既存の初期版設計に従って延期する。これらのための crate は先に作らない。不変実体の共有と後続機能の数学的契約は維持する。
 
@@ -223,7 +264,7 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 同じリファクタリングで、core の係数型と数値能力を整理する。2026-10-25 の方針変更により `num-complex`・`num-traits` は core に含め、不足する能力 trait を `Complex<f32>`・`Complex<f64>` に直接実装し、必要な操作で必要な trait bound を課す。零・単位元には num-traits の Zero・One をそのまま使い、付随する能力も受け入れる。また、LocalStructure の必要性、操作的量子論に基づく Operator・State の一般の演算子の特別な形としての整理、Index と Grading だけによる HilbertSpace の構成、その構成から Grading を除いた Chain の内部表現について、議論して設計上の結論と根拠を記録する。これら五つの課題を必須課題とし、Step 4 の完了条件には追加しない。
 
-2026-10-26に、Operator と State の整理は検討事項が多いため、設計の検討と、それに基づくリファクタリングを初期版実装後へ延期した。初期版は現行の State／Operator の分離を維持し、段階5〜6の実装はこの整理の結論を前提条件にしない。HilbertSpace・Chain の検討も現行の分離を前提に行える。論点と再開時期は[整理メモの第2節](refactoring-notes.md#2-operator-と-state-の整理)に記録する。
+2026-10-26に、Operator と State の整理は検討事項が多いため、設計の検討と、それに基づくリファクタリングを初期版実装後へ延期した。初期版は現行の State／Operator の分離を維持し、段階5〜6の実装はこの整理の結論を前提条件にしない。HilbertSpace・Chain の検討も現行の分離を前提に行える。論点と再開方針は[アーキテクチャ第10.1節](architecture.md#101-operator-と-state-の整理)に記録する。
 
 HilbertSpace の最小構成のうち、ordinary の責任分離は第8節の LocalStructure 廃止で実装済みである。空間は Index と順序付き Tensor の構造だけを保持し、局所代数の情報は外部から得る。2026-10-26に、Grading の情報保持・API は fermion 系の実装時に具体化する方針とし、初期版向けの空間の整理を完了とした。Chain は同日に Index 列を直接保持する方針を採用し、第9節のとおり2026-10-27に実装移行を完了した。
 
@@ -231,7 +272,7 @@ HilbertSpace の最小構成のうち、ordinary の責任分離は第8節の Lo
 
 ## 7. 係数型のリファクタリング
 
-**完了（2026-10-26）**。実装・テストを採用方針と照合し、完了条件を満たすことを確認した。移行後の workspace 全体の検証結果は第9.2節、未実施の検証は[整理メモの第4節](refactoring-notes.md#4-未実施の検証)に記録する。
+**完了（2026-10-26）**。実装・テストを採用方針と照合し、完了条件を満たすことを確認した。移行後の workspace 全体の検証結果は第9.2節、未実施の検証は[第5.1節](#51-未実施の検証)に記録する。
 
 2026-10-25 に、薄い線型結合・共通パーツ・演算 trait・局所／複合式・共通評価・spin 規則・基底・モデル utility・利用例を係数全体 C へ移行した。保持・共有・構築に数値 bound はなく、必要な操作で標準演算、num-traits の Zero／One、独立した Conjugate・RealPart・ImaginaryUnit・Divide を要求する。実係数は From<R> で埋め込む。標準 Complex は core 内で直接接続し、正規化期待値では純実分母を不要に二乗しない。
 

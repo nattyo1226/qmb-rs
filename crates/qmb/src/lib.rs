@@ -3,6 +3,8 @@
 //! The default `normalize` feature enables norms and normalization extensions. Disable default
 //! features to keep algebraic operations, including scalar division.
 //! The legacy `libm` feature is an alias for `normalize`, which uses std.
+//! The optional `export` feature enables basis-aware Vec, ndarray and sprs
+//! exports through `qmb::export` and the `Export` extension trait.
 //!
 //! ```
 //! use num_complex::Complex;
@@ -45,6 +47,14 @@ pub use qmb_spin_half::{SpinHalfOperator, SpinHalfState};
 pub mod space;
 pub use space::ToSpace;
 
+/// Basis-aware dense and sparse numerical exports.
+#[cfg(feature = "export")]
+pub use qmb_export as export;
+#[cfg(feature = "export")]
+pub use qmb_export::{
+    Export, ExportError, Exported, Layout, MatrixArgs, MatrixMetadata, VectorMetadata,
+};
+
 /// Norm, normalization and normalized expectation extensions (uses std).
 #[cfg(feature = "normalize")]
 pub use qmb_normalize as normalize;
@@ -53,9 +63,11 @@ pub use qmb_normalize::{
     Norm, NormalizationError, Normalize, NormalizedExpectation, NormalizedExpectationIn,
 };
 
-/// Common expression types and optional normalization extension traits.
+/// Common expression types and optional normalization and export extension traits.
 pub mod prelude {
     pub use crate::{Basis, HilbertSpace, LocalOperator, LocalState, Operator, State, ToSpace};
+    #[cfg(feature = "export")]
+    pub use qmb_export::Export;
     #[cfg(feature = "normalize")]
     pub use qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn};
 }

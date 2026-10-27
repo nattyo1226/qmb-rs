@@ -38,6 +38,14 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 この分割は、共通型と基本演算を所有する [tensory-core](https://github.com/todo-group/tensory/blob/c84f091e5c65f1408dee91db3730bdb8729e966e/tensory-core/src/lib.rs)と、公開テンソル表現の所有先を集約しつつ実行系・演算群を分ける [tenferro-rs の crate 設計](https://github.com/tensor4all/tenferro-rs/blob/f1d4d8d961ff6b937768111888ad2a493314892a/docs/architecture/tenferro-crates.md)を参考にした。qmb では primitive の局所規則と共通合成則に基づく評価を core に含め、外部数値 backend との接続を分離する。
 
+### 2.2. 数値 export（実装済み）
+
+2026-10-27に Step 6 の数値 export を完了した。qmb-export の `Export<T, Args = ()>` と、数値データ・メタデータを持つ `Exported<D, M>` を共通の利用窓口にする。密表現は Vec と shape・格納順序のメタデータを出力し、ndarray の Array1／Array2 への直接出力・取得済み Vec 出力からの変換も提供する。密行列専用の数値コンテナは設けない。
+
+疎表現は core の Coordinates から sprs の疎ベクトル・CSC 行列を構築する。行列の列は状態基底への作用と座標取得から生成し、密・疎で共有する。空間・基底・因子順序・係数型の解釈を保持し、通常の式木に backend や基底識別情報を追加しない。
+
+qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs は個別の feature で有効化する。qmb の任意の export feature は両方を有効にする。公開 API・所有権・エラー・依存指定・未実施の検証は[数値 export の設計](design/export.md)に定める。Step 6 の実装と Rust 1.98.0 での受入確認は完了した。MSRV の実ビルドは利用者の依頼により省略している。
+
 ## 3. Index・自由度・局所構造・空間
 
 Index は識別子のみを表し、局所構造や次元を持たない。局所構造は、局所 Hilbert 空間と、その上で実現される代数・表現を定める。基本自由度は Index と局所構造を持つ `HilbertSpace` の葉（Factor）として表し、独立した `Dof` 型は設けない。葉も複合空間も同じ空間型で保持・合成する。同じ局所構造を持つ複数の因子を Index で区別する。
@@ -128,13 +136,15 @@ Chain の配置と順序は構築後に不変とする。空間の構築・既�
 
 ## 9. 初期版の提供範囲と完成条件
 
+**段階1〜6完了（2026-10-27）**。初期版の機能実装と受入確認を完了した。検証結果は[実装計画第4.6節](implementation-plan.md#46-段階6の実装検証状況)、MSRV・専用 no_std target・性能ベンチマークの未実施事項は[同第5.1節](implementation-plan.md#51-未実施の検証)に記録する。
+
 初期版は、spin-1/2 の 1D Chain を代数的に構築・評価して密・疎の数値表現へ変換する版とする。ユーザ定義の有限次元局所構造の単独利用、同種の基本因子による ordinary な入れ子空間、状態・演算子の演算と full trace、指定基底への展開・再展開・係数取得、および単精度・倍精度の複素数を提供する。
 
 2026-10-27に、partial trace と写像の表現行列・表現係数を future work とし、Step 5 の担当範囲と初期版の必須機能・検証項目から外した。基底処理と数値接続の実装は、これらの機能を前提条件にしない。
 
 標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
 
-完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。詳細は [初期版の提供範囲と完成条件](design/initial-release.md)に定める。API・内部表現・数値 backend の具体的な選択は別途行う。
+完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。詳細は [初期版の提供範囲と完成条件](design/initial-release.md)に定める。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として実装済みであり、検証結果と MSRV 等の制限は実装計画第4.6節に記録する。その他の API・内部表現は各機能の採用済み方針に従って具体化する。
 
 ## 10. 将来の必須課題
 
@@ -142,7 +152,7 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 
 このリファクタリングと併せて、以下を必須課題として扱う。
 
-1. **core の係数型・数値能力の整理**：`qmb-core` に `num-complex`・`num-traits` を含め、係数型には必要な操作で必要な trait bound を課す。零・単位元には `num_traits::Zero`・`One` をそのまま使い、付随する能力も受け入れる。不足する能力 trait は core で定義し、`Complex<f32>`・`Complex<f64>` に直接実装できる構成にする。保持・構築へ不要な数値能力を要求せず、係数表現・演算・norm・正規化の責任を整理する。
+1. **core の係数型・数値能力の整理（実装移行完了）**：`qmb-core` に `num-complex`・`num-traits` を含め、係数型には必要な操作で必要な trait bound を課す。零・単位元には `num_traits::Zero`・`One` をそのまま使い、付随する能力も受け入れる。不足する能力 trait は core で定義し、`Complex<f32>`・`Complex<f64>` に直接実装できる構成にする。保持・構築へ不要な数値能力を要求せず、係数表現・演算・norm・正規化の責任を整理する。
 2. **LocalStructure の必要性（実装移行完了）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
 3. **Operator と State の整理（初期版実装後）**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。2026-10-26に、検討事項が多いため初期版実装後へ延期した。初期版では現行の分離を維持し、この整理の結論を実装の前提条件にしない。
 4. **HilbertSpace の最小構成（初期版の範囲は完了）**：LocalStructure 廃止により、Index と順序付き Tensor の構造だけを保持する構成へ移行した。primitive 型・次元・局所規則は式・取得時の入力・個別能力が担う。Grading の具体的な保持方法・API は、2026-10-26の判断により、fermion 系の実装時に具体化する。
@@ -155,3 +165,26 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を直接指定する。次元は primitive 型全体の span の次元（S は d、O は d²）、恒等元は係数型に依存せず生成する O の値とする。空間・Geometry／Chain から L を外し、因子構造と局所規則を分離する。採用した契約と移行前の仕様の扱いは[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)に記録する。全 crate の製品コード・テスト・利用例を移行済みである。
 
 この見直しは Step 4 の完了条件には追加しない。具体的な移行範囲と検証は[実装計画第8節](implementation-plan.md#8-localstructure-の廃止)に記録する。
+
+### 10.1. Operator と State の整理
+
+2026-10-26に初期版実装後へ延期した設計検討である。再開時期と実装範囲は別途決める。
+
+操作的量子論の枠組みで両者を一般の演算子の特別な形として扱えるかを検討し、数学的意味と API の対応を決める。現在の State は ket であり、`ℂ→H` として始域・終域を参照できる。束縛済み Operator は `H→H` として参照できる。ただし、局所・複合それぞれに状態用と演算子用の式木・評価処理があり、一般の `U→V` の写像を表す型はない。
+
+再開時には次の論点を検討する。
+
+- 「一般の演算子」が表す数学的対象と、扱う状態の意味。Ket、密度演算子、量子操作を同じ対象として扱う前提を置かない。
+- 合成、tensor product、随伴、内積、trace、zero・identity と始域・終域の対応。
+- 数学的な共通化を公開型、内部表現、共通処理のどこまで反映するか。公開型を統合するかは別に判断する。
+- 未束縛の配置式と、始域・終域が確定した写像の関係。
+
+空間・幾何との境界を再確認し、型と評価器の統合を伴う実装は責任分担が定まってから範囲を決める。Grading の情報保持・API の具体化とは独立に検討する。完了条件は、採用する数学的対象、対応する API、共通化する範囲、別に維持する範囲を理由とともに記録することとし、統合を採用しない結論も含む。
+
+### 10.2. Grading の情報保持と API
+
+2026-10-26の判断に従い、後続の fermion 系の実装に合わせて具体化する。
+
+Tensor の積の種類と状態・演算子成分の parity を区別し、どの情報を空間・primitive・合成則が担うかを、既存の graded 演算の数学的契約と具体的な実装要件を踏まえて決める。ToSpace で Grading に必要な情報を渡す方法も、この時点で具体化する。
+
+検討時は[Hilbert 空間の設計](design/hilbert-space.md)、[複合式の数学的契約](design/composite-expression.md)、[ToSpace の契約](design/geometry.md#61-空間への変換能力-tospace)に従う。
