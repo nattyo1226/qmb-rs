@@ -3,7 +3,7 @@
 作成日・更新日: 2026-10-28
 状態: 実装予定。`scaled` の引数を `impl Into<C>` に広げ、失敗し得る項を集約する `try_sum` を追加する方針を採用する。本書の新 API は未実装であり、コンパイル・回帰検証も未実施。
 
-後続の合意として、利用者向けの構築・集約の入口を QuantumSystem に揃える。メソッド候補と優先順位は[QuantumSystem の構築 API](quantum-system-construction.md)に記録する。本書は scaled と try_sum の基礎処理・検証を扱い、関連関数の転送入口も合わせて実装する。
+後続の合意として、利用者向けの構築・集約の入口を QuantumSystem に揃える。メソッド候補と優先順位は[QuantumSystem の構築 API](quantum-system-construction.md)に記録する。本書は scaled と try_sum の基礎処理・検証を扱い、関連関数の転送入口も合わせて実装する。初回の範囲は scaled の変更と構築 API 計画の優先順位1〜3までとすることで2026-10-28に合意した。
 
 ## 1. 目的と対象
 
@@ -12,7 +12,7 @@
 - 実数のスカラー倍にも `Complex::new(value, 0.0)` を書く必要がある。
 - 配置・積が `Result` を返すため、項を生成して和にする際に、利用側で `Vec` や `collect::<Result<...>>()?` を挟む必要がある。
 
-既存の式型・評価器・精度選択・空間の契約を維持し、共通の構築 API を改善する。配置込みの state_product／operator_product、tensor・積の try 版、零・単位元などの追加候補は別の構築 API 計画に記録し、本書の scaled・try_sum の実装段階とは分ける。個別 primitive 用メソッド、DSL、構築用 builder は対象に含めない。macro と Mul の入力拡張は保留とする。`scaled_real` や `QuantumSystem::coefficient` も追加せず、変換を `scaled` の入口へ集約する。
+既存の式型・評価器・精度選択・空間の契約を維持し、共通の構築 API を改善する。配置込みの積、構築済みの式の tensor・積と try 版も初回の範囲に含め、その契約と命名の比較・推奨案は別の構築 API 計画に記録する。零・単位元、単独配置、QuantumSystem の局所式集約用の転送メソッドは後続候補とする。個別 primitive 用メソッド、DSL、構築用 builder は対象に含めない。macro と Mul の入力拡張は保留とする。`scaled_real` や `QuantumSystem::coefficient` も追加せず、変換を `scaled` の入口へ集約する。
 
 ## 2. scaled の引数を impl Into<C> にする
 
@@ -43,7 +43,11 @@ pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
 
 変換先は式の C であり、入力によって式の精度を変更しない。標準 `Complex<f32>` に対する f32、`Complex<f64>` に対する f64 と、同じ C の入力を検証する。接尾辞なしの `0.5` も両精度で確認する。一方、明示的な f64 を `Complex<f32>` に渡す場合や、単精度・倍精度の複素係数を混ぜる場合は、対応する既存の Into がない限りコンパイル時に拒否する。整数を含む任意の数値から変換できるとは約束しない。
 
-`scaled(C)` によって C 自体を推論していたコードは、引数が `impl Into<C>` になると推論できなくなる可能性がある。これは単に受け入れる値が増えるだけの互換変更とは扱わない。次を実装の初期段階で調べる。
+`scaled(C)` によって C 自体を推論していたコードは、引数が `impl Into<C>` になると推論できなくなる可能性がある。これは単に受け入れる値が増えるだけの互換変更とは扱わない。
+
+2026-10-28 に、利用者と型推論の変化を許容して `scaled(impl Into<C>)` で進める方針を合意した。従来の型推論との完全互換は実装の条件にせず、必要な構築入口・入力値の型注釈や、余分な `.into()` の除去で対応する。QuantumSystem で primitive と係数型を先に選ぶ使い方を基本とする。既存の C を直接渡す経路、選択した精度、数学的な結果、最小能力の契約は維持する。
+
+以下は移行箇所を把握して調整するために確認し、推論差があること自体を理由に API の変更を差し戻す条件にはしない。
 
 - QuantumSystem から C が確定している状態・演算子の、実数リテラル・複素係数によるスカラー倍。
 - 直接の constructor で C を省略し、scaled の引数や後段の評価・戻り値注釈から推論する既存コード。
@@ -53,6 +57,46 @@ pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
 注釈が必要になった場合は、構築入口の QuantumSystem 選択や既存式型の注釈で補い、移行方法を記録する。推論のために既定精度や新たな数値能力の bound を導入しない。構築時の最小能力と no_std + alloc を維持する。
 
 `*` のスカラー演算、`scalar`・`term` など別の constructor の引数は今回広げない。従来どおり `scaled` を任意の係数入力に対する基本の入口とする。
+
+### 2.3. 型推論の変化と移行例
+
+以下は変更後の scaled を想定した移行案内である。`Spin = SpinHalf<Complex<f64>>`、Op は SpinHalfOperator とする。
+
+1. scaled の引数から式の C を決めていたコードは、構築入口で C を指定する。
+
+   ```rust
+   // 現行では C = Complex<f64> と推論できるが、変更後は推論できない。
+   let op = LocalOperator::primitive(Op::Sz)
+       .scaled(Complex::new(0.5_f64, 0.0));
+
+   // 移行後の案。QuantumSystem で先に C を選択する。
+   let op = Spin::operator(Op::Sz).scaled(0.5);
+   // 直接 constructor を使う場合は型引数や戻り値注釈でも指定できる。
+   let op = LocalOperator::<Op, Complex<f64>>::primitive(Op::Sz)
+       .scaled(Complex::new(0.5, 0.0));
+   ```
+
+2. 引数側の `.into()` は変換先の期待型を失う場合がある。既に C が選択済みでも発生するため、不要な事前変換を外して入力を直接渡す。
+
+   ```rust
+   // 現行では成功。変更後は内側の into() の変換先が曖昧になる。
+   Spin::operator(Op::Sz).scaled(0.5_f64.into());
+   // 移行後の案。
+   Spin::operator(Op::Sz).scaled(0.5_f64);
+   ```
+
+3. `Default::default()` のように引数の期待型で生成型を決めていた場合は、その入力型を明示する。
+
+   ```rust
+   // 現行では C の default。変更後は入力型を推論できない。
+   Spin::operator(Op::Sz).scaled(Default::default());
+   // 移行後の案。
+   Spin::operator(Op::Sz).scaled(Complex::<f64>::default());
+   ```
+
+これらは Rust 1.98.0 で、製品コードを変更せず、実際の LocalOperator に `scaled_into(&self, value: impl Into<C>)` という補助メソッドを実装して確認した。上記3件は現行 scaled ではコンパイルでき、補助メソッドでは推論エラーになり、記載した移行方法ではコンパイルできた。
+
+また、SpinHalf<Complex<f32>>／SpinHalf<Complex<f64>> で C を選択済みなら、`.scaled_into(0.5)` と `.scaled_into(Complex::new(0.5, 0.0))` は両精度とも追加の型注釈なしでコンパイルできた。この確認は引数型の変更を模した小規模な検証であり、製品実装や workspace 全体の回帰検証を完了したことは意味しない。
 
 ## 3. try_sum を追加する
 
