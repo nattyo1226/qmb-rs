@@ -9,7 +9,17 @@
 
 ### 先行する構造整理
 
-以下の3機能の実装に先立ち、各 crate 内のモジュール構造を整理する。具体的な分割・配置と公開範囲は今後決定する。
+以下の3機能の実装に先立ち、各 crate 内のモジュール構造を整理する。具体的な分割・配置と公開範囲は順次決定する。
+
+現在のモジュール構成と責任範囲は[モジュール構造整理：現状調査](module-structure.md)に記録する。
+
+構造整理の[決定事項と構成案](module-structure-plan.md)に、primitive の次元能力を `Dimension` へ改名して `Identity` とともに `ops` へ移す方針、恒等元の扱い、および core 全体の配置方針を記録する。有限線型結合・共通列は `expr::parts`、評価処理はトップレベルの `evaluate`、基底処理は `basis` にまとめる。
+
+geometry は `boundary`・`geometry`・`relation`・`connection` に責任を分ける。幾何の種類は `geometry`、関係の種類は `relation` 配下で拡張する。
+
+export は公開データ型・出力引数・変換手順・backend を分離する。spin-half は `utility` を `models` に改名し、既存の primitive・基底の分離を維持する。
+
+normalize は `norm`・`expectation`・`error` に分け、既存の公開 API を crate root から提供する。
 
 ### 追加機能
 
