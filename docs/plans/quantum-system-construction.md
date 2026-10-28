@@ -102,6 +102,8 @@ state_tensor_from_primitives／operator_product_from_primitives は primitive �
 
 空入力・単項・空間互換性・束縛の選択は既存 constructor に合わせる。state_sum の明示空間は、空の和の所属空間を確定するためにも維持する。try 版は、最初の入力 Err で停止し、全入力が Ok の場合に合成を検証する。[try_sum のエラー順序](expression-construction.md#32-入力の集約とエラーの順序)を tensor・積にも適用する。
 
+2026-10-28 に、try 版の入力エラー型は ExpressionError に固定し、最初の入力 Err をそのまま返し、全入力が成功した後に合成を検証する契約を利用者と合意した。入力エラーは合成時の空間不整合などに優先する。短絡は Err より後の要素を Iterator から取り出さない保証であり、先に作った配列・Vec の生成処理の停止や副作用の巻き戻しは保証しない。具体例・任意のエラー型を受け取らない方針・短絡範囲は[try_sum の契約](expression-construction.md#3-try_sum-を追加する)に記録する。これらを実装基準とし、製品 API の検証結果とは区別する。
+
 Operator の和・積では、全項が束縛済みかどうかを見て束縛の整合性を判断する。二項演算の fold へ単純に置き換えてこの契約を変えない。式の構築は遅延し、項の簡約や暗黙の因子順序変更は行わない。
 
 ```rust
