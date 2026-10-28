@@ -1,130 +1,71 @@
-# Geometry・Site と自由度の配置
+# Chain・Site と自由度の配置
 
-更新日: 2026-10-17
+更新日: 2026-10-28
 
 ## 1. 対象と責任分担
 
-本書は、[要件](../requirements.md)と[アーキテクチャ概要](../architecture.md)に基づき、Geometry の Site・関係と、Site への自由度の配置に関する契約を定める。具体的な Rust の型・公開 API・内部表現は定めない。
+`qmb-geometry` の `Chain` はサイト数と境界条件だけを保持する純粋な幾何である。Index・Factor・HilbertSpace・局所代数・係数型を保持せず、Index を発行しない。Site は `0..site_count` の位置番号であり、専用の SiteId や所属トークンは設けない。
 
-| 対象 | 責任 |
-| --- | --- |
-| Geometry | 有限の Site 集合、Site の同一性と順序、近接関係を定める。自由度の配置規則と Index 発行の補助能力を提供する |
-| 配置情報 | Site と順序付き Index 列、対応する Hilbert 空間、および任意の内部ラベルの対応を保持する |
-| Hilbert 空間 | Index・局所構造・因子順序・積の種類・grouping を保持し、既存の構成要素と所属 Index を列挙する |
-| モデル構築 | 関係と配置情報から、作用させる内部自由度・演算子・係数を選び、状態や Hamiltonian を構築する |
-
-Geometry は局所代数の種類や ordinary / graded の合成を決めない。Geometry と配置情報を別の型にするか、まとめて保持するかは未決とする。代数 core は引き続き Geometry を必須としない。
-
-## 2. Site の同一性と順序
-
-Site 識別子は Geometry 内で一意とし、Site の同一性は所属する Geometry とその中の識別子の組で定める。Index と同じ全体的な一意性は要求しない。
-
-- 独立に構築した異なる Geometry の同じ番号・座標の Site は、別の Site とする。
-- 同じ Geometry を複製・共有して利用する場合は、Site の同一性を保持する。
-- Site 識別子と Site の列挙順序を区別し、順序は明示する。
-- 同じ Geometry に対して、Index の異なる配置を別々に構築してよい。
-
-この契約は論理的な同一性について定めるものであり、メモリ上の同一実体や具体的な識別方式は要求しない。
-
-## 3. Site と Hilbert 空間・Index の対応
-
-Site に対応付ける空間は Factor・Tensor のどちらでもよい。その空間に属するすべての葉の Index を、そのまま Site に所属させる。入れ子の Tensor も同じ規則で扱い、新しい Index を発行したり、局所構造・因子順序・grouping を変更したりしない。
-
-| 対応付ける空間 | Site に属する Index |
-| --- | --- |
-| Factor | その一つの Index |
-| Tensor | 葉を左からたどったすべての Index |
-| 空の Tensor | ゼロ個 |
-
-一つの配置内では、入力された各 Index をちょうど一つの Site に割り当てる。異なる Site の Index 集合は互いに素とし、共通の Index を含む空間を複数 Site に割り当てた配置は拒否する。空間の内部での Index 重複も、[Hilbert 空間の構築契約](hilbert-space.md)に従って拒否する。
-
-この制限は配置ごとに適用する。同じ Index を別の配置で利用することは認め、Index と Site の対応をランタイム全体で登録・固定する機構は設けない。
-
-## 4. 二つの構築経路と既定の配置規則
-
-次の二つの経路を扱う。
-
-| 経路 | 契約 |
-| --- | --- |
-| 既存空間からの配置 | Hilbert 空間の構成要素・Index の列挙を利用し、既存の Index を保持して Site に対応付ける |
-| Site 側からの Index 発行 | Geometry と Site ごとの自由度数から順序付き Index 列を発行し、その対応を保持する。発行済み Index に局所構造を対応付け、Hilbert 空間を構成する |
-
-後者は [Index の独立した発行](index.md)を補助する操作である。局所構造を指定せずに Index を先に発行し、自由度の構築ではその Index を明示的に利用する。発行した列の参照・列挙では再発行しない。自由度数は Index の個数であり、Hilbert 空間の次元や Tensor の直下の子の個数ではない。局所構造と積の種類は、空間を構成する側が別途指定する。
-
-入力列の順序と Site への割り当て方は、各 Geometry が既定の規則を定める。ライブラリ全体で一つの配置順序に固定しない。各 Geometry は次を明示する。
-
-- 受け取る自由度列の順序の意味と、各 Site への割り当て方
-- Site 内の自由度の順序
-- Site ごとの必要な自由度数と、その指定値・既定値
-- 入力数が合わない場合の扱い。完全な配置を作れない過不足はエラーとする
-
-Site ordering・tensor ordering・fermion の mode ordering は区別し、対応を明示する。配置によって既存の Hilbert 空間の因子順序を暗黙に変更しない。
-
-### 4.1. 初期版の 1D Chain の配置規則
-
-初期版の Geometry の標準実装は 1D Chain のみとし、open / periodic を扱う。Site は先頭から `0,1,…,N−1` の順とする。Site ごとに区切った Index の列を受け取り、外側の順序を Site 順序、内側の順序を Site 内の自由度順序とする。
-
-```text
-入力: [[a, b], [c, d]]
-site 0 → [a, b]
-site 1 → [c, d]
+```rust
+struct Chain {
+    site_count: usize,
+    boundary: Boundary,
+}
 ```
 
-外側の要素数は Site 数に一致させ、Site ごとの自由度数は内側の列の長さから得る。必要数が別途指定されている場合は、その数とも一致させる。平坦な列を暗黙に分割する規則や、すべての Site を同じ自由度数に固定する規則は要求しない。
+`Chain::new(site_count, boundary)` は検証エラーなしで Self を返し、0 Site も認める。`site_count()` と `boundary()` で保持内容を取得する。構築後に変更しない。
 
-空の内側列は自由度数 `0` の Site を表し、空の外側列は `0-site` chain を表す。例えば `[[],[a]]` は二 Site の配置であり、空の Site を削除しない。
+2026-10-28 に Index 所有型の `Chain<I>`、`from_sites`・`with_sites`・Index 発行付き `new`、`ToSpace`、Index ペア用 `NearestNeighborRelation`・`index_pairs` を撤去し、以下の借用 API へ移行した。空間の構築・保持と Index 発行は利用側が担当する。core は geometry に依存せず、geometry は接続補助のため core に依存する。
 
-Index を新規発行する経路では、Site ごとの自由度数の列を受け取り、同じ入れ子の形で生成する。例えば `[2,2]` に対して `[[a,b],[c,d]]` を発行し、既存 Index を受け取る経路と同じ順序・対応を用いる。参照・列挙で再発行しない。
+## 2. 関係の列挙
 
-この配置から全 Hilbert 空間を新しく構成する際は、外側から順に内側をたどる Site 優先の順序を基本因子順序とする。上記の例では `[a,b,c,d]` となる。既存の Factor・Tensor を Site に対応付ける経路も保持し、既存空間の因子順序は変更しない。局所構造と積の種類は空間を構成する側が指定する。
+`nn_site_pairs()` は正規化された番号対 `(i,j)`（i < j）を辞書順で遅延列挙する。open は隣接位置、periodic はさらに先頭と末尾を接続する。self-loop・重複辺は作らず、0・1 Site は辺なし、2 Site はどちらの境界条件でも一辺だけとする。
 
-## 5. 配置の完全性と空の場合
+| メソッド | 入力と返すペア |
+| --- | --- |
+| `nn_site_pairs_with(&values)` | Site 順の任意の要素列から、要素をそのまま借用 |
+| `nn_pairs_with(&factors)` | Site 順の局所空間列から、最近接 Site 間の葉の全組み合わせ |
+| `nn_pairs_by_pos_with(&factors)` | 同じ葉位置同士を短い方まで zip |
+| `nn_site_pairs_on(&space)` | トップレベル因子を Site として、その局所空間を借用 |
+| `nn_pairs_on(&space)` | トップレベル Site 間の葉の全組み合わせ |
+| `nn_pairs_by_pos_on(&space)` | トップレベル Site 間の葉の位置対応 |
 
-すべての Site の自由度数を指定値または Geometry の既定値に一致させ、入力された Index の未配置や重複配置を許さない。
+`_with` は入力列の長さと site_count の一致を Iterator を返す前に検証し、過不足を `ChainError::SiteCountMismatch` とする。0・1 Site でも省略しない。葉ペアの入口は `nn_site_pairs_with` へ委譲し、`leaves()` で実際の葉を借用する。全組み合わせは左の葉を外側・右を内側とし、Site 対順を保つ。空 Site は位置を保ち、葉ペアを生成せず前後を直接接続し直さない。
 
-- 自由度数 `0` の Site を認め、対応する Hilbert 空間は空の Tensor と解釈する。
-- 入力不足を理由に、暗黙に空の Site を作らない。
-- 空の Geometry を認め、対応する Index 列も空とする。
+`_on` は保存されたトップレベルの分割を読み取り、収集や Index の複製なしで `_with` へ委譲する。葉入力は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site、単項 Tensor は一 Site と読む。局所空間内の grouping は保持する。全葉数から Site 数を決めない。
 
-自由度数は幾何の Site 数・関係と区別する。空の Site を認めても、それだけを理由に Site や近接関係を削除しない。
+任意の要素 T に Clone・Eq・Default などを要求せず、葉ペアの列挙も Index の Clone・Eq を必要としない。Chain は入力列を保持しない。Index 重複は空間・モデル構築側の検証であり、幾何の列挙は重複を検証しない。
 
-## 6. 内部ラベル
+## 3. 空間と Index
 
-Site 内の自由度は順序番号で指定でき、必要なら `spin`・`orbital`・`up`・`down` などの内部ラベルを付けられるものとする。内部ラベルは任意とし、ラベルがない自由度も扱う。
+局所空間列 `&[HilbertSpace<I>]` の一要素を一 Site に対応させる。葉・複数葉・入れ子・単項 Tensor・空の空間を使える。利用側は既存の空間ハンドルを共有して列を構成でき、Index の Clone・再発行は不要である。
 
-- 一つの Site 内で、同じラベルを複数の Index に割り当てない。
-- 異なる Site では同じラベルを使用してよい。各 Site の `up` などは、それぞれの Index を指す。
-- ラベルは Index を指定するための情報とし、局所構造や parity をラベルから推測しない。
-- ラベルの有無や名前によって、自由度の順序を変更しない。
+Site 順序と別途存在する全空間の因子順序を区別する。接続補助は空間・状態・行列を暗黙に並べ替えない。任意の因子集合から部分系を抽出する API や、必須の配置ラッパーは導入しない。
 
-具体的なラベルの型や参照方法は未決とする。
+## 4. SpinHalf のモデル構築
 
-## 7. 関係の列挙とモデル構築の境界
+モデル構築の公開入口は `qmb_spin_half::SpinHalf<C>` の関連関数である。旧 `utility` の自由関数は残さず、エラー型 `UtilityError` を crate root から公開する。
 
-Geometry は隣接 Site ペアを列挙し、配置情報を組み合わせて、両 Site に所属する Index 列の組を得られるようにする。向きのない二 Site 関係の正規化・列挙順序と、chain の境界条件・小規模系の規約は要件の 7.1–7.2 節に従う。
+| 呼び出し | 成功時の戻り値 |
+| --- | --- |
+| `Spin::xyz(&chain, &factors, jx, jy, jz)` | `OperatorOf<Spin, I>` |
+| `Spin::heisenberg(&chain, &factors, coupling)` | `OperatorOf<Spin, I>` |
+| `Spin::neel(&chain, &factors, first)` | `StateOf<Spin, I>` |
 
-例えば隣接 Site `i,j` に `[a,b]`, `[c,d]` が属する場合、得られる対応は `([a,b],[c,d])` である。Site 内の順序を保持し、すべての Index の直積を暗黙に相互作用項へ変換しない。どの内部自由度を結ぶか、どの演算子・係数を使うかはモデル構築側が決める。空の Site の Index 列は空のまま扱う。
+全関数は Result を返し、列長と全葉の Index 重複を、辺がなくても検証する。列長の不一致は `UtilityError::Chain(ChainError::SiteCountMismatch)`、重複は `UtilityError::Space(SpaceError::DuplicateIndex)`、配置・束縛エラーは `UtilityError::Expression` とし、元エラーを source として保持する。Index には Eq のみを要求する。
 
-幾何学的な関係と Hamiltonian の項を同一視しない。Geometry は局所構造の選択や fermion の符号処理を担当せず、後者は [複合 Hilbert 空間の合成・埋め込み規則](composite-expression.md)に従う。
+XYZ は `−Σ_(i,j) Σ_(a∈Li,b∈Lj) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)` を構築する。Li は Site i の葉集合であり、`nn_pairs_with` の全組み合わせを使う。Site 内の葉間結合は追加しない。Heisenberg は三結合を J に揃え、正の J を強磁性的とする。標準モデルは位置対応を暗黙に選ばない。
 
-## 8. 構築後の不変性
+XYZ・Heisenberg の全作用空間は、入力の局所空間ハンドルを共有し、列順に tensor した空間である。局所 grouping と相互作用に現れない Site も保持し、返す演算子をその空間に bind する。別途存在する全空間の root・上位 grouping・異なる因子順序は保存しない。
 
-Geometry の Site・関係・順序と、確定した Index 配置・内部ラベルの対応は構築後に変更しない。別の幾何や配置が必要なら新しい対象を構築し、既存の Hilbert 空間・状態・演算子を変更しない。
+Neel は Site 位置と first から向きを交互に決め、その Site の全葉に同じ向きを置く。空 Site も偶奇に含める。状態の因子順は Site 順に局所空間の葉をたどった順とし、奇数長 periodic も認める。例えば `[(a,b), c]`、first=Up は `Up_a ⊗ Up_b ⊗ Down_c` となる。
 
-同じ Geometry に別の配置を構築することは認める。新しい配置で Index を新規発行するか、既存 Index を再利用するかは明示的に選ぶ。Geometry の複製や、配置情報の参照だけで Index を暗黙に発行し直さない。
+0 Site は単位空間に束縛した zero Hamiltonian と単位状態を返す。全 Site が空でも同様であり、Hamiltonian の空間には空 Site の grouping を残す。
 
-## 9. 検証対象と未決事項
+数値能力は個別関数へ限定する。xyz は `C: Clone + From<R> + Neg<Output=C>`、heisenberg はさらに `R: Clone` を要求する。neel の C に Clone・数値演算は不要である。モデル固有関数は QuantumSystem trait に追加しない。
 
-配置では、少なくとも次を不正として検出する。
+## 5. 検証対象
 
-- 重複・不正・別 Geometry の Site 識別子の使用
-- 存在しない Site または Site 内にない Index・内部ラベルの指定
-- 同じ配置内の Index の重複、未配置、および必要数に対する入力の過不足
-- 一つの Site 内で同じラベルを複数の Index に割り当てること
-- 一つの積状態で、同一 Index に矛盾する局所状態を割り当てること。異なる Index なら同じ Site 内にもそれぞれの状態を割り当てられる
+geometry のテストは 0・1・2・3 以上の open／periodic、列長過不足、非 Clone・非 Eq 要素、借用の同一性、入れ子・空・可変長局所空間の順序、全組み合わせと位置対応、トップレベル分割の解釈と `_with`／`_on` の一致を検証する。
 
-検証では、Factor・入れ子 Tensor・空の Tensor の配置、Index の重複拒否、Geometry ごとの既定規則、Index 発行から空間構築までの対応保持、空の Geometry と自由度数 `0` の Site、Site とラベルの識別範囲、隣接 Site ごとの Index 列の順序、および複製時の同一性の保持を確認する。既存の chain・Hamiltonian・Neel 状態の検証も要件に従って維持する。
-
-Chain の入れ子入力について、外側の要素数と Site 数、内側の長さと自由度数、可変長・空の内側列、および Index 発行経路との一致を検証する。全空間を新規構成するときの因子順序が外側から内側をたどる順序であることも確認する。
-
-Site の論理的な同一性の実現方式、具体的な型・公開 API・内部表現・共有方式は未決とする。初期版の Chain の配置規則は本書で定め、追加の Geometry の規則はそれぞれの設計時に定める。提供範囲と完成条件は [初期版の設計](initial-release.md)に従う。
+spin-half のテストは複数葉の全組み合わせ結合、Site ごとの向き、空 Site の偶奇と辺、全空・0 Site、重複と列長拒否、非 Clone Index、深い grouping、最小の係数能力を検証する。examples の縦断テストは両精度の独立な Pauli 行列との一致、符号・norm・期待値、および密疎 export を検証する。

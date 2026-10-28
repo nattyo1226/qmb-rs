@@ -1,9 +1,30 @@
 [workspace]
 resolver = "3"
-members = []
+members = [
+    "crates/qmb-core",
+    "crates/qmb-spin-half",
+    "crates/qmb-basic",
+    "crates/qmb-geometry",
+    "crates/qmb-normalize",
+    "crates/qmb-export",
+    "examples",
+]
 
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
+rust-version = "1.85"
 
 [workspace.dependencies]
+qmb-export = { path = "crates/qmb-export" }
+ndarray = { version = "0.17.2", default-features = false, features = ["std"] }
+sprs = { version = "=0.11.4", default-features = false }
+qmb-normalize = { path = "crates/qmb-normalize" }
+qmb-core = { path = "crates/qmb-core" }
+qmb-basic = { path = "crates/qmb-basic" }
+qmb-geometry = { path = "crates/qmb-geometry" }
+qmb-spin-half = { path = "crates/qmb-spin-half" }
+num-complex = { version = "0.4.6", default-features = false }
+num-traits = { version = "0.2.19", default-features = false }
+thiserror = { version = "2.0.21", default-features = false }
+uuid = { version = "1.18.1", features = ["v4"] }

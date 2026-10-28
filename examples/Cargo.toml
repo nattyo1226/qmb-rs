@@ -1,0 +1,24 @@
+[package]
+name = "examples"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[features]
+default = ["normalize"]
+normalize = ["dep:qmb-normalize"]
+export = ["dep:qmb-export"]
+libm = ["normalize"]
+
+[dependencies]
+qmb-basic.workspace = true
+qmb-core.workspace = true
+qmb-geometry.workspace = true
+qmb-spin-half.workspace = true
+qmb-normalize = { workspace = true, optional = true }
+qmb-export = { workspace = true, optional = true, features = ["ndarray", "sprs"] }
+num-complex.workspace = true
+
+[dev-dependencies]
+num-traits.workspace = true

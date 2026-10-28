@@ -1,0 +1,10 @@
+[package]
+name = "qmb-basic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "UUID indices and standard conveniences for qmb-rs"
+
+[dependencies]
+qmb-core.workspace = true
+uuid.workspace = true
