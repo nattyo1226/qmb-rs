@@ -17,6 +17,10 @@
 
 各機能の詳細仕様、公開 API、crate 構成、および3機能間の実装順序は今後決定する。
 
+## 詳細検討
+
+- [Ordinary / graded tensor product の実装修正案](tensor-products.md)：現行実装との差分、情報の保持、評価・基底・export の変更、移行方針と受入条件。
+
 ## 関連文書
 
 - [アーキテクチャ概要](../../architecture.md#22-crate-内のモジュール構造)：実装済みのモジュール構成
