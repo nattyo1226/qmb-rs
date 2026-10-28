@@ -96,7 +96,9 @@ import の行数削減は優先課題にしない。prelude や統合窓口の�
 
 現行契約は [空間の実装](../../crates/qmb-core/src/space.rs)、[Chain から空間への変換](../../crates/qmb-geometry/src/space.rs)、[モデル utility](../../crates/qmb-spin-half/src/utility.rs)を参照する。
 
-モデル構築 API は、`xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数とし、当面は Chain と Space の両方を受け取る方針とする。具体的な引数・契約は [型引数と係数型の指定を集約する API 案の第4.3節](api-type-parameters.md)に記録する。
+モデル構築 API は、`xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数とし、Chain と Site 順の局所空間列を受け取る方針とする。入力要素は葉に限定せず、そこから実際の葉を取得して `at()` に渡す。全空間の引数は不要で、モデルが局所空間を列順に tensor して構築する。具体的な引数・契約は [型引数と係数型の指定を集約する API 案の第4.3節](api-type-parameters.md)に記録する。
+
+Chain と HilbertSpace の責任分担は、[接続・保持構造の検討](space-geometry-connection.md)に記録する。Chain はサイト数と境界条件だけを保持する方針で合意し、外部の Factor 列を受け取る近接ペア補助を設ける。Factor・配置・空間は利用側で管理する。製品実装は未変更である。
 
 ### 3.5. 配置と束縛、作用空間の選択
 

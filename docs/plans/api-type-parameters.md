@@ -133,36 +133,43 @@ let value = psi.expectation(&zz)?; // -0.25 + 0i
 
 現在 `qmb_spin_half::utility` にある `xyz`・`heisenberg`・`neel` は、新しく実装する `SpinHalf<C>` の関連関数とする。いずれも `self` を受け取らず、係数型は `SpinHalf<C>` の `C` から決める。これらのモデル固有の関数を `QuantumSystem` trait へ追加しない。
 
-当面は Chain と明示的な `&HilbertSpace<I>` の両方を受け取る。呼び出し方は次のとおりとする。
+Chain と Site 順の局所空間列 `&[HilbertSpace<I>]` を受け取る。各要素は葉に限定せず、`leaves()` 相当から配置先の葉を取得できるものとする。モデル関数への全空間 `&space` の引数は不要とする。呼び出し方は次のとおりとする。
 
 | 関連関数 | 引数 | 成功時の戻り値 |
 | --- | --- | --- |
-| `Spin::xyz` | `&chain, &space, jx, jy, jz` | `OperatorOf<Spin, I>` |
-| `Spin::heisenberg` | `&chain, &space, coupling` | `OperatorOf<Spin, I>` |
-| `Spin::neel` | `&chain, &space, first` | `StateOf<Spin, I>` |
+| `Spin::xyz` | `&chain, &factors, jx, jy, jz` | `OperatorOf<Spin, I>` |
+| `Spin::heisenberg` | `&chain, &factors, coupling` | `OperatorOf<Spin, I>` |
+| `Spin::neel` | `&chain, &factors, first` | `StateOf<Spin, I>` |
 
-すべて失敗を表す `Result` を返す。既存の各 Site に一つの spin 因子があること、Chain の Index が指定空間の因子を過不足なく覆うことの検証を引き継ぐ。XYZ・Heisenberg の演算子は指定空間に束縛し、Neel 状態は指定空間と互換な因子順序で構築する。
+すべて失敗を表す `Result` を返す。`factors.len() == chain.site_count()` と、全要素の葉にわたる Index の重複がないことを検証する。一要素を一 Site の局所空間とし、列順を Site 順とする。複数葉・空・単項 Tensor も入力として受け入れ、配置先は中の葉から取得する。葉数による制限は設けない。ペアがない 0・1 Site でも検証を省略しない。
 
-空間は利用側が構築・保持し、関連関数は既存の Factor を使う。Index の複製・再発行や内部での空間生成を前提とせず、Index には現在と同じ `I: Eq` を要求する。Space を省略して内部生成する入口は今回の範囲に含めない。
+XYZ・Heisenberg は `nn_pairs_with(&factors)` を使い、最近接 Site 間の葉の全組み合わせへ結合を与える。Site 内の葉同士には結合を自動追加しない。Neel の向きは Site ごとに交互に決め、その Site の全葉に同じ向きを割り当てる。空 Site は位置を保持し、その Site から項・状態を生成せず、前後を直接接続し直さない。詳細は [空間・幾何の計画第3.2節](space-geometry-connection.md#32-モデルは全空間ではなく-factor-列を受け取る)に記録する。
+
+全空間は各局所空間のハンドルを共有し、列順に tensor してモデル側で構築する。内部の grouping はそのまま保持する。XYZ・Heisenberg はその空間に束縛した演算子を返し、Neel 状態も Site 順に葉をたどった因子順序で構築する。Index の Clone・再発行は不要で、現在と同じ `I: Eq` を要求する。0 Site は単位空間に束縛した zero Hamiltonian と単位状態を返す。
+
+Chain と HilbertSpace の責任分担は [接続・保持構造の検討](space-geometry-connection.md)に記録する。Chain はサイト数と境界条件だけを保持し、外部の Factor 列から近接ペアを列挙する。モデルは元の全空間を受け取らないため、その root・grouping や列順と異なる全空間順序を保存する契約は持たない。既存の状態や行列を暗黙に並べ替える機能は追加しない。
 
 ```rust
-// 提案 API。Chain・空間・正規化は現在の API を使用する。
+// 提案 API。QuantumSystem / SpinHalf と、純粋な Chain の案を組み合わせる。
 use num_complex::Complex;
 use qmb_basic::Id128;
-use qmb_geometry::{Boundary, Chain, ToSpace};
+use qmb_core::HilbertSpace;
+use qmb_geometry::{Boundary, Chain};
 use qmb_normalize::NormalizedExpectation;
 use qmb_spin_half::{SpinHalf, SpinHalfState};
 
 type Spin = SpinHalf<Complex<f64>>;
 
-let chain = Chain::<Id128>::new(6, 1, Boundary::Open)?;
-let space = chain.to_space()?;
-let h = Spin::heisenberg(&chain, &space, 1.0)?;
-let psi = Spin::neel(&chain, &space, SpinHalfState::Up)?;
+let chain = Chain::new(6, Boundary::Open);
+let factors: Vec<_> = (0..6)
+    .map(|_| HilbertSpace::factor(Id128::default()))
+    .collect();
+let h = Spin::heisenberg(&chain, &factors, 1.0)?;
+let psi = Spin::neel(&chain, &factors, SpinHalfState::Up)?;
 let energy = psi.normalized_expectation(&h)?;
 ```
 
-`C` は構築用の型から、`I` は Chain と空間から決まる。結合定数は現在と同じ実数型 `R` の引数として受け取り、型制約を各関数へ限定する。
+`C` は構築用の型から、`I` は Factor 列から決まる。結合定数は現在と同じ実数型 `R` の引数として受け取り、型制約を各関数へ限定する。
 
 - `xyz` は `C: Clone + From<R> + Neg<Output = C>` を要求する。
 - `heisenberg` は同じ `C` の能力に加え `R: Clone` を要求し、等方的な XYZ として構築する。
@@ -222,8 +229,8 @@ type Operator<I> = qmb_core::OperatorOf<Spin, I>;
 | 戻り値 | 既存の core の式型。新たな式ラッパーは保持しない |
 | 構築時の制約 | `state(primitive)`・`operator(primitive)` に数値演算や `Clone` を要求しない |
 | 評価時の制約 | 現在の式メソッドが必要とする能力を維持する |
-| モデル構築 | `xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数とし、Chain と明示空間を受け取る。その操作に必要な能力だけを要求する |
-| 空間と Index | 現在の `HilbertSpace<I>` と Chain を受け取る。構築用の型に登録・保持しない |
+| モデル構築 | `xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数とし、Chain と Site 順の局所空間列を受け取る。配置先は各要素の葉から取得し、その操作に必要な能力だけを要求する |
+| 空間と Index | Factor 列の `HilbertSpace<I>` を共有して空間を構築する。構築用の型や Chain に登録・保持しない |
 | 同一性 | 構築用の型や値の識別子を式へ追加しない。同じ `S, O, C` なら従来どおり合成できる |
 | 数値精度 | `C` は構築時に確定する。異なる精度の式の暗黙変換は追加しない |
 | 独自代数 | `QuantumSystem` の関連型を指定すれば共通 constructor を使える。既存 core API の直接利用も維持する |
@@ -255,7 +262,7 @@ Rust 1.98.0 を使い、リポジトリ外の検討用パッケージから現�
 
 1. `QuantumSystem` と投影した型別名、`SpinHalf<C>` の実装を追加し、primitive の組と係数型を一箇所で選ぶ利用例を用意する。
 2. primitive の構築は `state(primitive)`・`operator(primitive)` を使い、数値能力の制約を各操作へ限定する。zero・identity の補助は別途範囲を決める。
-3. `xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数として提供し、Chain と Space の両方を受け取る。第4.3節の既存の構築・検証契約を引き継ぐ。
+3. `xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数として提供し、Chain と Site 順の局所空間列を受け取る。第4.3節の構築・重複検証・複数葉と空 Site・列順の契約に合わせて移行する。
 4. 基底展開・数値出力まで一連の利用コードを確認し、型の再指定がどこに残るか記録する。
 5. 構築・精度不一致・既存 core 型との接続に回帰検証を付ける。
 6. 戻り値型を書く負担や独自代数での繰り返しがなお大きければ、core の型引数を束ねる案を再検討する。
