@@ -40,7 +40,7 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 ### 2.2. crate 内のモジュール構造
 
-[構造整理の決定事項](plans/v2/module-structure-plan.md)に従い、core は `ops` に `Dimension::dim()`・`Identity` と代数契約、`expr::parts` に有限線型結合と共通構文パーツ、`expr::traversal` に内部走査を置く。式の保持・構築は `expr`、評価・内積・trace は非公開のトップレベル `evaluate`、基底列挙・展開・座標取得は `basis` が担当する。旧 `primitive` とトップレベル `linear_combination` は廃止し、主要型・trait の crate root からの再公開は維持する。
+core は `ops` に `Dimension::dim()`・`Identity` と代数契約、`expr::parts` に有限線型結合と共通構文パーツ、`expr::traversal` に内部走査を置く。式の保持・構築は `expr`、評価・内積・trace は非公開のトップレベル `evaluate`、基底列挙・展開・座標取得は `basis` が担当する。旧 `primitive` とトップレベル `linear_combination` は廃止し、主要型・trait の crate root からの再公開は維持する。
 
 geometry は `boundary`・`geometry::chain`・`relation::nearest_neighbor`・`connection` に分け、Chain の既存メソッドから委譲する。export は `output`・`metadata`・`args`・共通の `coordinates` と `vector`・`matrix`、storage 契約と Vec・ndarray・sprs の `backend` に分ける。spin-half は `models`、normalize は `norm`・`expectation`・`error` に責任をまとめる。これらの crate の公開窓口は引き続き crate root とし、basic の構成は維持する。
 
