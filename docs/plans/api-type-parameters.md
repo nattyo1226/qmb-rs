@@ -6,9 +6,9 @@
 
 実装先は `qmb_core::system`（crate root から再公開）と `qmb_spin_half::SpinHalf<C>`。公開モデル入口は関連関数へ統一し、旧 utility 自由関数は撤去した。`UtilityError` は spin-half の crate root から公開する。純粋な Chain・with/on の接続・leaves と併せて移行し、正式な契約は[要件](../requirements.md#11-型選択の構築-api)と[Chain の設計](../design/geometry.md)に反映した。
 
-`coefficient`・zero/identity 補助・`MatrixArgs::for_state`・`find_factor` は今回追加しない。既存の `.scaled(C)` と constructor を使い、MatrixArgs の状態 primitive 型と出力先コンテナは引き続き明示する。式型全体の型引数を束ね直す変更は行わず、戻り値には投影別名を使う。
+`coefficient`・zero/identity 補助・`MatrixArgs::for_state`・`find_factor` は今回追加しない。当初は `.scaled(C)` と constructor を利用していた。後続の実装では `.scaled(impl Into<C>)` に変更し、MatrixArgs の状態 primitive 型と出力先コンテナは引き続き明示する。式型全体の型引数を束ね直す変更は行わず、戻り値には投影別名を使う。
 
-後続の改善として、`scaled` の引数を `impl Into<C>` に広げ、失敗し得る項を集約する `try_sum` を追加する方針を採用した。未実装の計画と検証項目は[式構築 API の実装計画](expression-construction.md)に分離し、本書の実装済み API と区別する。
+後続の改善として、`scaled` の引数を `impl Into<C>` に広げ、失敗し得る項を集約する `try_sum` を追加する方針を採用した。実装と検証項目は[式構築 API の実装計画](expression-construction.md)に分離した。2026-10-28に scaled と try_sum、および QuantumSystem の初回範囲の構築・集約メソッドを実装した。
 
 構築・集約の関連関数を QuantumSystem に揃える方針と、配置・積・和・tensor・零・単位元の追加候補は[QuantumSystem の構築 API](quantum-system-construction.md)に記録する。本書冒頭の「補助を追加しない」は当初の実装範囲を指し、後続候補とその追加順は新しい計画で扱う。
 

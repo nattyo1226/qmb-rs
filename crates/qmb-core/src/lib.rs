@@ -38,6 +38,37 @@
 //! let _ = single.scaled(Complex::<f64>::new(2.0, 0.0));
 //! ```
 
+//! Scaling accepts inputs convertible into the coefficient type selected at
+//! construction. Numeric literals can be real while the stored C stays complex:
+//!
+//! ```
+//! use num_complex::Complex;
+//! use qmb_core::LocalOperator;
+//! let op = LocalOperator::<u8, Complex<f32>>::primitive(0).scaled(0.5);
+//! let same = op.scaled(Complex::new(1.0, 0.0));
+//! ```
+//!
+//! Choosing C explicitly (or through [`QuantumSystem`]) replaces inference from
+//! the scalar argument. Remove redundant `.into()` calls at the call site and
+//! specify inputs such as `Complex::<f32>::default()` when needed.
+//!
+//! Real inputs also preserve precision; f64 is not narrowed to `Complex<f32>`:
+//!
+//! ```compile_fail
+//! use num_complex::Complex;
+//! use qmb_core::LocalState;
+//! let state = LocalState::<u8, u8, Complex<f32>>::primitive(0);
+//! let _ = state.scaled(0.5_f64);
+//! ```
+//!
+//! ```compile_fail
+//! use num_complex::Complex;
+//! use qmb_core::{HilbertSpace, LocalOperator};
+//! let factor = HilbertSpace::factor(0);
+//! let op = LocalOperator::<u8, Complex<f32>>::primitive(0).at(&factor).unwrap();
+//! let _ = op.scaled(Complex::<f64>::new(0.5, 0.0));
+//! ```
+
 #![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

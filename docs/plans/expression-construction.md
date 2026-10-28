@@ -1,7 +1,7 @@
 # scaled の変換対応と try_sum の実装計画
 
 作成日・更新日: 2026-10-28
-状態: 実装予定。`scaled` の引数を `impl Into<C>` に広げ、失敗し得る項を集約する `try_sum` を追加する方針を採用する。本書の新 API は未実装であり、コンパイル・回帰検証も未実施。
+状態: 初回範囲を2026-10-28に実装。scaled の impl Into<C> 対応、4式型の try_sum、State::try_tensor、Operator::try_product_all、および QuantumSystem の構築・集約入口を追加した。検証結果は末尾に記録する。
 
 後続の合意として、利用者向けの構築・集約の入口を QuantumSystem に揃える。メソッド候補と優先順位は[QuantumSystem の構築 API](quantum-system-construction.md)に記録する。本書は scaled と try_sum の基礎処理・検証を扱い、関連関数の転送入口も合わせて実装する。初回の範囲は scaled の変更と構築 API 計画の優先順位1〜3までとすることで2026-10-28に合意した。
 
@@ -20,7 +20,7 @@
 
 次の全公開 `scaled` を対象とする。局所式・複合式だけでなく、同名 API の一貫性のため `LinearCombination` も揃える。
 
-| 型 | 計画するシグネチャ | 係数型に必要な能力 |
+| 型 | 実装したシグネチャ | 係数型に必要な能力 |
 | --- | --- | --- |
 | `LocalState<S,O,C>` | `scaled(&self, coefficient: impl Into<C>) -> Self` | 変換以外は不要 |
 | `LocalOperator<O,C>` | 同上 | 同上 |
@@ -31,7 +31,7 @@
 入力を入口で一度だけ `.into()` し、以後は既存の C を受け取る処理へ渡す。式の内部 `into_scaled`・節点・保持する係数型は変更しない。`LinearCombination` は変換後の C を使って従来どおり各項の係数を乗算する。元の入力型に Clone を要求しない。
 
 ```rust
-// 実装予定の形。式ハンドル4型に同じ方針を適用する。
+// 実装した形。式ハンドル4型に同じ方針を適用する。
 pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
     self.clone().into_scaled(coefficient.into())
 }
@@ -60,12 +60,12 @@ pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
 
 ### 2.3. 型推論の変化と移行例
 
-以下は変更後の scaled を想定した移行案内である。`Spin = SpinHalf<Complex<f64>>`、Op は SpinHalfOperator とする。
+以下は scaled の引数変更に対する移行案内である。`Spin = SpinHalf<Complex<f64>>`、Op は SpinHalfOperator とする。
 
 1. scaled の引数から式の C を決めていたコードは、構築入口で C を指定する。
 
    ```rust
-   // 現行では C = Complex<f64> と推論できるが、変更後は推論できない。
+   // 移行前は C = Complex<f64> と推論できるが、変更後は推論できない。
    let op = LocalOperator::primitive(Op::Sz)
        .scaled(Complex::new(0.5_f64, 0.0));
 
@@ -79,7 +79,7 @@ pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
 2. 引数側の `.into()` は変換先の期待型を失う場合がある。既に C が選択済みでも発生するため、不要な事前変換を外して入力を直接渡す。
 
    ```rust
-   // 現行では成功。変更後は内側の into() の変換先が曖昧になる。
+   // 移行前は成功。変更後は内側の into() の変換先が曖昧になる。
    Spin::operator(Op::Sz).scaled(0.5_f64.into());
    // 移行後の案。
    Spin::operator(Op::Sz).scaled(0.5_f64);
@@ -88,19 +88,19 @@ pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
 3. `Default::default()` のように引数の期待型で生成型を決めていた場合は、その入力型を明示する。
 
    ```rust
-   // 現行では C の default。変更後は入力型を推論できない。
+   // 移行前は C の default。変更後は入力型を推論できない。
    Spin::operator(Op::Sz).scaled(Default::default());
    // 移行後の案。
    Spin::operator(Op::Sz).scaled(Complex::<f64>::default());
    ```
 
-これらは Rust 1.98.0 で、製品コードを変更せず、実際の LocalOperator に `scaled_into(&self, value: impl Into<C>)` という補助メソッドを実装して確認した。上記3件は現行 scaled ではコンパイルでき、補助メソッドでは推論エラーになり、記載した移行方法ではコンパイルできた。
+これらは Rust 1.98.0 で、製品コードを変更せず、実際の LocalOperator に `scaled_into(&self, value: impl Into<C>)` という補助メソッドを実装して確認した。上記3件は移行前の scaled ではコンパイルでき、補助メソッドでは推論エラーになり、記載した移行方法ではコンパイルできた。
 
 また、SpinHalf<Complex<f32>>／SpinHalf<Complex<f64>> で C を選択済みなら、`.scaled_into(0.5)` と `.scaled_into(Complex::new(0.5, 0.0))` は両精度とも追加の型注釈なしでコンパイルできた。この確認は引数型の変更を模した小規模な検証であり、製品実装や workspace 全体の回帰検証を完了したことは意味しない。
 
 ## 3. try_sum を追加する
 
-2026-10-28 に、try 版のエラー契約を「ExpressionError 固定・最初の入力 Err で停止・全入力成功後に合成検証」とする方針を利用者と合意した。本節は未決の比較案ではなく、実装・回帰検証の基準とする。製品 API 自体は未実装である。
+2026-10-28 に、try 版のエラー契約を「ExpressionError 固定・最初の入力 Err で停止・全入力成功後に合成検証」とする方針を利用者と合意した。本節は未決の比較案ではなく、実装・回帰検証の基準とする。製品 API へ実装済みである。
 
 ### 3.1. 対象とシグネチャ
 
@@ -109,7 +109,7 @@ pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
 try という接頭辞は入力要素が Result であることを表す。通常の sum も複合式では合成検証により Result を返すため、try は「このメソッドだけが失敗し得る」という意味ではない。
 
 ```rust
-// 実装予定の API。各型の inherent impl に置く。
+// 実装済みの API。各型の inherent impl に置く。
 // LocalState / LocalOperator: primitive・係数の能力は要求しない。
 pub fn try_sum(
     operands: impl IntoIterator<Item = Result<Self, ExpressionError>>,
@@ -169,7 +169,7 @@ pub fn try_sum(
 
 ## 4. 利用例の移行
 
-以下は two_spins の a・b・space・up_down・down_up を使う実装予定の記述である。
+以下は two_spins の a・b・space・up_down・down_up を使う実装済み API の記述である。
 
 ```rust
 let singlet = (&up_down - &down_up)?
@@ -179,8 +179,7 @@ let triplet = (&up_down + &down_up)?
 
 let h = Spin::try_operator_sum(
     [Op::Sx, Op::Sy, Op::Sz].into_iter().map(|axis| {
-        let local = Spin::operator(axis);
-        local.at(&a)?.product(&local.at(&b)?)
+        Spin::operator_product_at([(&a, axis), (&b, axis)])
     }),
 )?.bind(&space)?;
 ```
@@ -220,7 +219,7 @@ let h = Spin::try_operator_sum(
 
 ### 横断確認
 
-リポジトリの devShell（必要なら `direnv exec .`）で次を実施する。これは実装時の予定であり、本書の追加だけでは実施済みとしない。
+リポジトリの devShell（必要なら `direnv exec .`）で次を実施する。下記は実装時の検証項目であり、実施結果は末尾で区別して記録する。
 
 ```sh
 cargo fmt --all -- --check
@@ -235,3 +234,22 @@ cargo run -p examples --bin basis_expansion --offline --locked
 ```
 
 two_spins の一重項・三重項のエネルギー −0.75・0.25、単位ノルム、固有状態の残差と内積、および basis_expansion の座標を維持する。既存の正規化・密疎 export の回帰テストも通し、検証環境と未実施のチェックを区別して記録する。新規の production dependency や式ラッパーを追加せず、上記の契約・検証・利用例と移行案内が揃った時点を完了とする。
+
+## 7. 実装結果と検証（2026-10-28）
+
+初回範囲を実装した。QuantumSystem の配置込み入口は `state_tensor_at`・`operator_product_at` とし、構築済みの式は `state_sum`・`operator_sum`・`state_tensor`・`operator_product` と各 `try_` 版から集約する。4式型の `try_sum`、`State::try_tensor`、`Operator::try_product_all` を基礎 API として提供し、同じ検証・構築処理を共有する。後続候補の zero／identity・単独配置・局所式転送メソッド、macro、Mul の拡張は追加していない。
+
+新規・追加の回帰検証は core の `tests/fallible_construction.rs`・`tests/systems.rs`・`tests/coefficient_contracts.rs`・`tests/allocation.rs`、内部の局所／複合式テスト、spin-half の `tests/systems.rs`、core の compile-fail doctest に置いた。全10個の QuantumSystem 追加メソッド、入力エラー優先と短絡、全入力に基づく束縛、最小能力、借用期間と共有、順序・重複・零係数、両精度、変換一回、単項の一時割り当て不要を確認した。
+
+型推論の調整は core と spin-half の generic な代数則テストで必要になった。`LinearCombination::primitive(...).scaled(...)` の係数型と、一部の generic な係数生成関数の型引数を明示した。新たな数値制約や既定精度は導入していない。
+
+Rust 1.98.0 の devShell で次を確認した（Cargo は offline・locked）。
+
+- workspace の全 feature、および default feature 無効のテスト・doctest が成功。
+- 全 target・全 feature の Clippy（`-D warnings`）、format、警告をエラー扱いにしたドキュメント生成が成功。
+- core・geometry・spin-half の default feature 無効の単独 check が成功。
+- two_spins を default／default feature 無効で実行し、エネルギー −0.75・0.25、単位ノルム、ゼロの残差と内積を確認。
+- basis_expansion を実行し、状態座標 1:5・2:−1 と ladder 基底の一成分を確認。
+- 既存の独立行列比較・正規化・密疎 export の両精度の回帰テストが成功。
+
+MSRV 1.85 と専用 no_std target は今回も未検証であり、no_std crate の確認はホストでの単独 check とソースの契約にとどまる。依存 manifest と lockfile は変更していない。

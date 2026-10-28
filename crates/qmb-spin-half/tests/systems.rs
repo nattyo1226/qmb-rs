@@ -257,3 +257,112 @@ fn model_errors_preserve_sources_and_messages() {
         );
     }
 }
+
+macro_rules! construction_precision {
+    ($name:ident, $real:ty) => {
+        #[test]
+        fn $name() {
+            type Q = SpinHalf<Complex<$real>>;
+            let a = H::factor(0u8);
+            let b = H::factor(1);
+            let space = a.tensor_product(&b).unwrap();
+            let state = Q::state_tensor_at([(&a, Ket::Up), (&b, Ket::Down)]).unwrap();
+            let explicit = Q::state_tensor([
+                Q::state(Ket::Up).at(&a).unwrap(),
+                Q::state(Ket::Down).at(&b).unwrap(),
+            ])
+            .unwrap();
+            let fallible =
+                Q::try_state_tensor([Q::state(Ket::Up).at(&a), Q::state(Ket::Down).at(&b)])
+                    .unwrap();
+            assert_eq!(
+                state.inner_product(&explicit).unwrap(),
+                Complex::new(1., 0.)
+            );
+            assert_eq!(
+                state.inner_product(&fallible).unwrap(),
+                Complex::new(1., 0.)
+            );
+            let h = Q::try_operator_sum(
+                [Op::Sx, Op::Sy, Op::Sz]
+                    .into_iter()
+                    .map(|axis| Q::operator_product_at([(&a, axis), (&b, axis)])),
+            )
+            .unwrap()
+            .bind(&space)
+            .unwrap();
+            assert_eq!(state.expectation(&h).unwrap(), Complex::new(-0.25, 0.));
+            let sum = Q::state_sum(&space, [state.scaled(2.0), state.scaled(-1.0)]).unwrap();
+            let tried = Q::try_state_sum(&space, [Ok(sum)]).unwrap();
+            assert_eq!(state.inner_product(&tried).unwrap(), Complex::new(1., 0.));
+            // Both scalar input forms retain the precision selected by Q.
+            let half = Q::state(Ket::Up).scaled(0.5);
+            let complex = Q::state(Ket::Up).scaled(Complex::new(0.5, 0.0));
+            assert_eq!(half.inner_product(&complex), Complex::new(0.25, 0.));
+            let placed = state.scaled(0.5);
+            assert_eq!(placed.inner_product(&state).unwrap(), Complex::new(0.5, 0.));
+            let sx = Q::operator(Op::Sx).scaled(0.5);
+            assert_eq!(sx.trace(), Complex::new(0., 0.));
+            assert_eq!(
+                state.expectation(&h.scaled(0.5)).unwrap(),
+                Complex::new(-0.125, 0.)
+            );
+            let lc = qmb_core::LinearCombination::<_, Complex<$real>>::primitive(0u8).scaled(0.5);
+            assert_eq!(
+                lc.terms().next().unwrap().coefficient,
+                Complex::new(0.5, 0.)
+            );
+            // Same-index products preserve order: Sx Sy = i Sz / 2.
+            let up = Q::state(Ket::Up).at(&a).unwrap();
+            let xy = Q::operator_product_at([(&a, Op::Sx), (&a, Op::Sy)]).unwrap();
+            let yx = Q::operator_product_at([(&a, Op::Sy), (&a, Op::Sx)]).unwrap();
+            assert_eq!(up.expectation(&xy).unwrap(), Complex::new(0., 0.25));
+            assert_eq!(up.expectation(&yx).unwrap(), Complex::new(0., -0.25));
+            let explicit = Q::operator_product([
+                Q::operator(Op::Sx).at(&a).unwrap(),
+                Q::operator(Op::Sy).at(&a).unwrap(),
+            ])
+            .unwrap();
+            let fallible =
+                Q::try_operator_product([Q::operator(Op::Sx).at(&a), Q::operator(Op::Sy).at(&a)])
+                    .unwrap();
+            assert_eq!(
+                up.expectation(&explicit).unwrap(),
+                up.expectation(&xy).unwrap()
+            );
+            assert_eq!(
+                up.expectation(&fallible).unwrap(),
+                up.expectation(&xy).unwrap()
+            );
+            for unit in [
+                Q::state_tensor::<u8>([]),
+                Q::try_state_tensor::<u8>([]),
+                Q::state_tensor_at::<u8>([]),
+            ] {
+                let unit = unit.unwrap();
+                assert_eq!(unit.inner_product(&unit).unwrap(), Complex::new(1., 0.));
+            }
+            for zero in [Q::state_sum(&space, []), Q::try_state_sum(&space, [])] {
+                assert_eq!(zero.unwrap().norm_squared().unwrap(), 0.);
+            }
+            for zero in [Q::operator_sum::<u8>([]), Q::try_operator_sum::<u8>([])] {
+                assert_eq!(
+                    zero.unwrap().bind(&space).unwrap().trace().unwrap(),
+                    Complex::new(0., 0.)
+                );
+            }
+            for identity in [
+                Q::operator_product::<u8>([]),
+                Q::try_operator_product::<u8>([]),
+                Q::operator_product_at::<u8>([]),
+            ] {
+                assert_eq!(
+                    identity.unwrap().bind(&space).unwrap().trace().unwrap(),
+                    Complex::new(4., 0.)
+                );
+            }
+        }
+    };
+}
+construction_precision!(construction_f32, f32);
+construction_precision!(construction_f64, f64);

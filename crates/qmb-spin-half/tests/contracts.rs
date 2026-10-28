@@ -284,9 +284,12 @@ fn check_algebra_laws<T: Real>() {
     }
     // Non-real coefficients exercise conjugate-linearity as well as the rules
     // on the two basis states, whose own inner products are entirely real.
-    let x = Lc::primitive(Up).scaled(c::<T>(0.3, -0.7)) + Lc::primitive(Down).scaled(c(1.2, 0.4));
-    let y = Lc::primitive(Up).scaled(c::<T>(-0.2, 0.6)) + Lc::primitive(Down).scaled(c(0.1, -0.4));
-    let op = Lc::primitive(SPlus).scaled(c::<T>(0.4, -0.8)) + Lc::primitive(Sy).scaled(c(0.3, 0.2));
+    let x = Lc::<_, Complex<T>>::primitive(Up).scaled(c::<T>(0.3, -0.7))
+        + Lc::<_, Complex<T>>::primitive(Down).scaled(c::<T>(1.2, 0.4));
+    let y = Lc::<_, Complex<T>>::primitive(Up).scaled(c::<T>(-0.2, 0.6))
+        + Lc::<_, Complex<T>>::primitive(Down).scaled(c::<T>(0.1, -0.4));
+    let op = Lc::<_, Complex<T>>::primitive(SPlus).scaled(c::<T>(0.4, -0.8))
+        + Lc::<_, Complex<T>>::primitive(Sy).scaled(c::<T>(0.3, 0.2));
     assert_complex::<T>(
         complex64(inner(&x, &y)),
         dot(state_value(&x), state_value(&y)),
@@ -328,7 +331,8 @@ fn check_spin_relations<T: Real>() {
     }
     for (primitive, sign) in [(SPlus, 1.0), (SMinus, -1.0)] {
         let direct = Lc::<_, Complex<T>>::primitive(primitive);
-        let decomposition = Lc::primitive(Sx) + Lc::primitive(Sy).scaled(c(0.0, sign));
+        let decomposition =
+            Lc::primitive(Sx) + Lc::<_, Complex<T>>::primitive(Sy).scaled(c(0.0, sign));
         assert_matrix::<T>(operator_value(&decomposition), matrix(primitive));
         for op in OPS {
             let op = Lc::primitive(op);

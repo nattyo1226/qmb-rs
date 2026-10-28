@@ -1,7 +1,7 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::LinearCombination;
+use crate::{ExpressionError, LinearCombination};
 
 /// A shared local state over state primitive S, operator primitive O and coefficient C.
 ///
@@ -117,10 +117,22 @@ impl<S, O, C> LocalState<S, O, C> {
     }
     /// Constructs an ordered sum; one operand is returned unchanged.
     pub fn sum(operands: impl IntoIterator<Item = Self>) -> Self {
-        match operands.into_iter().collect() {
+        Self::sum_collected(operands.into_iter().collect())
+    }
+    fn sum_collected(operands: SumExpr<Self>) -> Self {
+        match operands {
             SumExpr::One(value) => value,
             values => Self::new(StateNode::Sum(values)),
         }
+    }
+    /// Collects fallible operands in order, stopping at the first input error.
+    /// No primitive rules are evaluated and errors are returned unchanged.
+    pub fn try_sum(
+        operands: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        Ok(Self::sum_collected(
+            operands.into_iter().collect::<Result<_, _>>()?,
+        ))
     }
     /// Incorporates mapped terms as ordinary scale and sum nodes.
     pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
@@ -137,8 +149,9 @@ impl<S, O, C> LocalState<S, O, C> {
         }))
     }
     /// Constructs a scale node sharing this expression, even for zero or one.
-    pub fn scaled(&self, coefficient: C) -> Self {
-        self.clone().into_scaled(coefficient)
+    /// Converts the input to C exactly once without changing coefficient precision.
+    pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
+        self.clone().into_scaled(coefficient.into())
     }
     pub(super) fn into_act(self, operator: LocalOperator<O, C>) -> Self {
         Self::new(StateNode::Act(ActExpr {
@@ -171,10 +184,22 @@ impl<O, C> LocalOperator<O, C> {
     }
     /// Constructs an ordered sum; one operand is returned unchanged.
     pub fn sum(operands: impl IntoIterator<Item = Self>) -> Self {
-        match operands.into_iter().collect() {
+        Self::sum_collected(operands.into_iter().collect())
+    }
+    fn sum_collected(operands: SumExpr<Self>) -> Self {
+        match operands {
             SumExpr::One(value) => value,
             values => Self::new(OperatorNode::Sum(values)),
         }
+    }
+    /// Collects fallible operands in order, stopping at the first input error.
+    /// No primitive rules are evaluated and errors are returned unchanged.
+    pub fn try_sum(
+        operands: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        Ok(Self::sum_collected(
+            operands.into_iter().collect::<Result<_, _>>()?,
+        ))
     }
     /// Incorporates mapped terms as ordinary scale and sum nodes.
     pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
@@ -191,8 +216,9 @@ impl<O, C> LocalOperator<O, C> {
         }))
     }
     /// Constructs a scale node sharing this expression, even for zero or one.
-    pub fn scaled(&self, coefficient: C) -> Self {
-        self.clone().into_scaled(coefficient)
+    /// Converts the input to C exactly once without changing coefficient precision.
+    pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
+        self.clone().into_scaled(coefficient.into())
     }
     /// Constructs a symbolic identity, without invoking the identity rule.
     pub fn identity() -> Self {

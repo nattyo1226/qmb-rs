@@ -146,3 +146,13 @@ Primitive が線型独立でないため、同じ数学的対象に複数の式�
 これらの等式は数学的な意味について要求し、浮動小数点計算のビット単位の一致とは区別する。数値精度、特殊値、および近似比較は既存要件の規約に従う。
 
 局所構造と演算能力の分離、共通パーツの公開と項型の統合、薄い `LinearCombination` と関連型 `Term` による規則の出力、Step 2 での `map` と式木への接続は確定事項とする。`StateBasis`・`OperatorBasis` の削除と、利用側での `Basis<S, C>`・`Basis<O, C>` の直接指定、メソッドごとの制約、所有権、反復的な評価・破棄、および `Arc` による不変共有と `act`・`evaluate` の役割も採用済みとする。非公開の作業領域・補助関数と、具体的な数値演算の呼び出し位置に必要な制約は実装時に定める。線型結合の保持・変換と選択基底の条件、共有によって deep copy が生じないことも検証対象に含める。局所構造の一致契約は、[局所構造の一致条件](local-structure.md#4-局所構造の一致条件)に定める。
+
+## 7. 式構築の入口と係数変換（2026-10-28）
+
+構築・集約の基本の入口は qmb_core::QuantumSystem とし、構築済みの式の操作・計算はインスタンスメソッドで行う。LocalStateOf・LocalOperatorOf・StateOf・OperatorOf は主に型注釈で使う。既存の core constructor は維持し、QuantumSystem の既定メソッドと同じ基礎処理へ委譲する。具体的な配置・合成の契約は[複合式の設計](composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
+
+局所・複合の4式型と LinearCombination の scaled は `impl Into<C>` を受け取り、入口で一度だけ C に変換する。式型は係数を保持するだけで数値能力・Clone を要求せず、LinearCombination は従来の `C: Clone + Mul<Output=C>` を維持する。変換元の Clone は不要で、空の LinearCombination でも変換は一度行う。C の精度は維持し、新たなキャストや精度変換は導入しない。Mul・scalar・term の引数は広げない。
+
+旧 scaled(C) の期待型に依存していたコードでは、構築入口の係数型や Default の入力型を明示し、不要な into() を外す。推論の完全互換は条件とせず、選択済みの C と最小能力の契約を維持する。[移行例](../plans/expression-construction.md#23-型推論の変化と移行例)を参照する。
+
+LocalState::try_sum・LocalOperator::try_sum は `Result<式,ExpressionError>` の列を集約し、最初の入力 Err 以降を取り出さずに、そのまま返す。全成功時は既存 sum と同じ項順・重複・零係数・空／単項の扱いを保ち、primitive を評価しない。QuantumSystem の局所式用転送メソッドは後続候補であり、今回追加していない。

@@ -10,16 +10,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     type Spin = SpinHalf<Complex<f64>>;
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let up_down = Spin::state(Ket::Up)
-        .at(&a)?
-        .tensor_product(&Spin::state(Ket::Down).at(&b)?)?;
-    let down_up = Spin::state(Ket::Down)
-        .at(&a)?
-        .tensor_product(&Spin::state(Ket::Up).at(&b)?)?;
-    let state = up_down
-        .scaled(Complex::new(2.0, 0.0))
-        .add(&up_down.scaled(Complex::new(3.0, 0.0)))?
-        .add(&down_up.scaled(Complex::new(-1.0, 0.0)))?;
+    let up_down = Spin::state_tensor_at([(&a, Ket::Up), (&b, Ket::Down)])?;
+    let down_up = Spin::state_tensor_at([(&a, Ket::Down), (&b, Ket::Up)])?;
+    let space = a.tensor_product(&b)?;
+    let state = Spin::state_sum(
+        &space,
+        [
+            up_down.scaled(2.0),
+            up_down.scaled(3.0),
+            down_up.scaled(-1.0),
+        ],
+    )?;
 
     // The result remains an ordinary State with the original space.
     let expanded = state.expand_in(&SzBasis)?;

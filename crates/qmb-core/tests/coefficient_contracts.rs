@@ -148,3 +148,63 @@ complex_regressions!(
     1e-100_f64,
     1e-12
 );
+
+#[test]
+fn every_scaled_entry_converts_a_non_clone_source_exactly_once() {
+    use core::cell::Cell;
+    type C = Complex<f64>;
+    struct Input<'a>(&'a Cell<usize>);
+    // Deliberately implement Into directly: the API must not require From.
+    #[allow(clippy::from_over_into)]
+    impl Into<C> for Input<'_> {
+        fn into(self) -> C {
+            self.0.set(self.0.get() + 1);
+            C::new(2.0, 0.0)
+        }
+    }
+    let calls = Cell::new(0);
+    let s = LocalState::<Primitive, Primitive, C>::primitive(Primitive);
+    let op = LocalOperator::<Primitive, C>::primitive(Primitive);
+    let h = HilbertSpace::factor(0u8);
+    let expected = C::new(4.0, 0.0);
+    let scaled = s.scaled(Input(&calls));
+    assert_eq!(calls.get(), 1);
+    assert_eq!(scaled.inner_product(&scaled), expected);
+    let scaled_op = op.scaled(Input(&calls));
+    assert_eq!(calls.get(), 2);
+    assert_eq!(s.expectation(&scaled_op), C::new(2.0, 0.0));
+    let placed = s.at(&h).unwrap().scaled(Input(&calls));
+    assert_eq!(calls.get(), 3);
+    assert_eq!(placed.inner_product(&placed).unwrap(), expected);
+    let placed_op = op.at(&h).unwrap().scaled(Input(&calls));
+    assert_eq!(calls.get(), 4);
+    assert_eq!(
+        s.at(&h).unwrap().expectation(&placed_op).unwrap(),
+        C::new(2.0, 0.0)
+    );
+    // Conversion occurs once per call, including empty and many-term inputs.
+    for count in 0..=3 {
+        let before = calls.get();
+        let terms = LinearCombination::<_, C>::from_terms((0..count).map(|i| qmb_core::Term {
+            coefficient: C::new(f64::from(i), 0.0),
+            operand: i,
+        }));
+        let scaled = terms.clone().scaled(Input(&calls));
+        assert_eq!(calls.get(), before + 1);
+        assert_eq!(scaled, terms.scaled(C::new(2.0, 0.0)));
+    }
+    // Numeric operations and Clone remain unnecessary for expression storage.
+    struct Opaque;
+    struct OpaqueInput;
+    impl From<OpaqueInput> for Opaque {
+        fn from(_: OpaqueInput) -> Self {
+            Self
+        }
+    }
+    let state =
+        LocalState::<Primitive, Primitive, Opaque>::primitive(Primitive).scaled(OpaqueInput);
+    let op = LocalOperator::<Primitive, Opaque>::primitive(Primitive).scaled(OpaqueInput);
+    let _ = state.scaled(Opaque).act(&op);
+    let _ = state.at(&h).unwrap().scaled(OpaqueInput);
+    let _ = op.at(&h).unwrap().scaled(OpaqueInput);
+}

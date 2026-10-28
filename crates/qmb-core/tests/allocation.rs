@@ -103,3 +103,24 @@ fn empty_and_single_term_mapping_do_not_allocate() {
         assert_eq!(term.coefficient, Complex::new(0.0, 1.0));
     });
 }
+
+#[test]
+fn singleton_fallible_collections_need_no_temporary_allocation() {
+    use qmb_core::{HilbertSpace, LocalOperator, LocalState, Operator, State};
+    // Construction of the existing nodes is outside the observation window.
+    // Primitives and coefficients provide no capabilities, including Clone.
+    struct Primitive;
+    struct Coeff;
+    let local_state = LocalState::<Primitive, Primitive, Coeff>::primitive(Primitive);
+    let local_op = LocalOperator::<Primitive, Coeff>::primitive(Primitive);
+    let space = HilbertSpace::factor(0u8);
+    let state = local_state.at(&space).unwrap();
+    let op = local_op.at(&space).unwrap();
+    without_allocation(|| {
+        let _ = LocalState::try_sum([Ok(local_state)]).unwrap();
+        let _ = LocalOperator::try_sum([Ok(local_op)]).unwrap();
+        let _ = State::try_sum(&space, [Ok(state)]).unwrap();
+        let _ = Operator::try_sum([Ok(op.clone())]).unwrap();
+        let _ = Operator::try_product_all([Ok(op)]).unwrap();
+    });
+}

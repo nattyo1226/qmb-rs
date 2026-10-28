@@ -1,7 +1,7 @@
 //! Build singlet/triplet states and an exchange Hamiltonian using QuantumSystem.
 
 use num_complex::Complex;
-use qmb_core::{HilbertSpace, OperatorOf, QuantumSystem};
+use qmb_core::{HilbertSpace, QuantumSystem};
 use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket};
 
 // Choose primitives and coefficient precision once for states and operators.
@@ -12,26 +12,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let b = HilbertSpace::factor("b");
     let space = a.tensor_product(&b)?;
 
-    let up = Spin::state(Ket::Up);
-    let down = Spin::state(Ket::Down);
-    let up_down = up.at(&a)?.tensor_product(&down.at(&b)?)?;
-    let down_up = down.at(&a)?.tensor_product(&up.at(&b)?)?;
-    let amplitude = Complex::new(1.0 / 2.0_f64.sqrt(), 0.0);
+    let up_down = Spin::state_tensor_at([(&a, Ket::Up), (&b, Ket::Down)])?;
+    let down_up = Spin::state_tensor_at([(&a, Ket::Down), (&b, Ket::Up)])?;
+    let amplitude = 1.0 / 2.0_f64.sqrt();
     // |singlet> = (|up,down> - |down,up>) / sqrt(2)
     // |triplet> = (|up,down> + |down,up>) / sqrt(2)
-    let singlet = up_down
-        .add(&down_up.scaled(Complex::new(-1.0, 0.0)))?
-        .scaled(amplitude);
-    let triplet = up_down.add(&down_up)?.scaled(amplitude);
+    let singlet = (&up_down - &down_up)?.scaled(amplitude);
+    let triplet = (&up_down + &down_up)?.scaled(amplitude);
 
     // H = S_a . S_b, with positive exchange coupling J = 1.
-    // Build the interaction explicitly from local operators.
-    let mut terms = Vec::new();
-    for axis in [Op::Sx, Op::Sy, Op::Sz] {
-        let local = Spin::operator(axis);
-        terms.push(local.at(&a)?.product(&local.at(&b)?)?);
-    }
-    let h = OperatorOf::<Spin, _>::sum(terms)?.bind(&space)?;
+    // Each axis builds a placed product; try_operator_sum collects the terms.
+    let h = Spin::try_operator_sum(
+        [Op::Sx, Op::Sy, Op::Sz]
+            .into_iter()
+            .map(|axis| Spin::operator_product_at([(&a, axis), (&b, axis)])),
+    )?
+    .bind(&space)?;
 
     for (name, state, expected_energy) in
         [("singlet", &singlet, -0.75), ("triplet", &triplet, 0.25)]
@@ -39,9 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let norm_squared = state.norm_squared()?;
         let energy = state.expectation(&h)?;
         // act constructs H|state>; the residual checks the eigenstate relation.
-        let residual = state
-            .act(&h)?
-            .add(&state.scaled(Complex::new(-expected_energy, 0.0)))?;
+        let residual = (state.act(&h)? - state.scaled(expected_energy))?;
         let residual_norm_squared = residual.norm_squared()?;
         println!(
             "{name}: norm squared = {norm_squared:.6}, <H> = {:.6}, \

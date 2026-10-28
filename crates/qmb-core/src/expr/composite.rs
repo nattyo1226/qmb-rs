@@ -240,8 +240,9 @@ impl<I, S, O, C> State<I, S, O, C> {
         &self.space
     }
     /// Constructs a coefficient node sharing this state.
-    pub fn scaled(&self, coefficient: C) -> Self {
-        self.clone().into_scaled(coefficient)
+    /// Converts the input to C exactly once without changing coefficient precision.
+    pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
+        self.clone().into_scaled(coefficient.into())
     }
     pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self {
@@ -271,6 +272,18 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
             expression: StateExpr::sum(expressions),
         })
     }
+    /// Collects fallible states before checking compatibility with `space`.
+    ///
+    /// The first input error stops iteration and takes precedence over space
+    /// errors in earlier successful operands. Empty input is zero on `space`.
+    /// Errors do not roll back work already performed by the input producer.
+    pub fn try_sum(
+        space: &HilbertSpace<I>,
+        states: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        let states: SumExpr<Self> = states.into_iter().collect::<Result<_, _>>()?;
+        Self::sum(space, states)
+    }
     /// Adds states on compatible ordered spaces, without evaluating local rules.
     pub fn add(&self, rhs: &Self) -> Result<Self, ExpressionError> {
         self.clone().into_add(rhs.clone())
@@ -286,7 +299,17 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     }
     /// Forms a tensor product in input order. Empty input is the unit state.
     pub fn tensor(states: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
-        let states: SumExpr<Self> = states.into_iter().collect();
+        Self::tensor_collected(states.into_iter().collect())
+    }
+    /// Collects fallible states before forming their ordered tensor product.
+    /// The first input error takes precedence over duplicate-index errors.
+    /// Empty input is the unit state; no operands after an input error are pulled.
+    pub fn try_tensor(
+        states: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        Self::tensor_collected(states.into_iter().collect::<Result<_, _>>()?)
+    }
+    fn tensor_collected(states: SumExpr<Self>) -> Result<Self, ExpressionError> {
         let space = HilbertSpace::tensor(states.iter().map(|s| s.space.clone()))?;
         let parts: SumExpr<_> = states.into_iter().map(|s| s.expression).collect();
         let expression = match parts {
@@ -388,8 +411,9 @@ impl<I, O, C> Operator<I, O, C> {
         self.space()
     }
     /// Constructs a coefficient node, preserving the optional binding.
-    pub fn scaled(&self, coefficient: C) -> Self {
-        self.clone().into_scaled(coefficient)
+    /// Converts the input to C exactly once without changing coefficient precision.
+    pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
+        self.clone().into_scaled(coefficient.into())
     }
     pub(super) fn into_scaled(self, coefficient: C) -> Self {
         Self {
@@ -425,7 +449,19 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     }
     /// Constructs an ordered sum. A single unbound operand makes the result unbound.
     pub fn sum(operators: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
-        let operators: SumExpr<_> = operators.into_iter().collect();
+        Self::sum_collected(operators.into_iter().collect())
+    }
+    /// Collects fallible operators before validating the whole sum's binding.
+    ///
+    /// Stops at the first input error and returns it unchanged, ahead of any
+    /// binding errors in successful operands. Empty input is unbound zero.
+    /// An unbound operand makes the entire sum unbound, just as in [`Self::sum`].
+    pub fn try_sum(
+        operators: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        Self::sum_collected(operators.into_iter().collect::<Result<_, _>>()?)
+    }
+    fn sum_collected(operators: SumExpr<Self>) -> Result<Self, ExpressionError> {
         let ambient = Self::combined_space(operators.as_slice())?;
         let parts: SumExpr<_> = operators.into_iter().map(|o| o.expression).collect();
         let expression = match parts {
@@ -446,7 +482,19 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     }
     /// Constructs a product in input order; the empty product is unbound identity.
     pub fn product_all(operators: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
-        let operators: SumExpr<_> = operators.into_iter().collect();
+        Self::product_collected(operators.into_iter().collect())
+    }
+    /// Collects fallible operators before validating the whole product's binding.
+    ///
+    /// The first input error stops iteration and takes precedence over binding
+    /// errors. Order is preserved, with the right operand acting first.
+    /// Empty input is unbound identity. No primitive rules are evaluated.
+    pub fn try_product_all(
+        operators: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        Self::product_collected(operators.into_iter().collect::<Result<_, _>>()?)
+    }
+    fn product_collected(operators: SumExpr<Self>) -> Result<Self, ExpressionError> {
         let ambient = Self::combined_space(operators.as_slice())?;
         let mut parts = operators.into_iter().map(|o| o.expression);
         let expression = match parts.next() {

@@ -1037,3 +1037,11 @@ Fermion などについて本文書で定める合成・評価・検証規約は
 `qmb_core::QuantumSystem` は `State`・`Operator`（primitive 型）・`Coeff` を関連型とし、`state(primitive)`・`operator(primitive)` の既定メソッドで既存の局所式を返す。構築時に Clone・数値演算・Act などを要求せず、評価の能力は各操作で要求する。空間・幾何・Index 発行は担わず、選択した系の識別子を式へ加えない。既存 constructor の直接利用も維持する。
 
 `LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は関連型を既存の core 式型へ投影する別名である。`qmb_spin_half::SpinHalf<C>` は精度の既定値を持たず、C を一度選んで状態・演算子・モデルの戻り値へ引き継ぐ。異なる係数精度の暗黙変換や個別 primitive 用メソッドは追加しない。選択済みの Q は入口で指定し、投影を逆向きに推論できることは前提にしない。
+
+### 11.1. 構築・集約の共通入口（2026-10-28）
+
+QuantumSystem は state_tensor_at・operator_product_at、state_sum・operator_sum・state_tensor・operator_product と各集約の try_ 版を既定メソッドとして提供する。構築は選択した Q から、構築後の操作・評価は式から行う。_at は葉と primitive の組を受け取って配置・合成する入口とし、裸の基本名は構築済みの式を集約する。既存の core constructor は維持する。
+
+scaled は4式型と LinearCombination で `impl Into<C>` を受け取り、入口で一度だけ変換する。式の保持に数値能力・Clone を追加せず、LinearCombination の既存の乗算用制約は維持する。選択済みの精度を変更しない。型推論の完全互換は要求せず、構築入口の型注釈や不要な into() の除去で移行する。
+
+try_ の入力エラーは ExpressionError に固定し、最初の入力 Err で Iterator の消費を止める。全入力が成功した後に空間・束縛を検証する。既に行った入力生成の副作用は巻き戻さず、部分的な和・積は返さない。順序・重複・零係数を保存し、合成時に primitive を評価しない。空・単項、状態の重複拒否、演算子の重複受理、束縛の選択は既存 constructor の規約を維持する。詳細は[複合式の構築 API](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に定める。
