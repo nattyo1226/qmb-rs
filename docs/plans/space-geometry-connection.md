@@ -1,7 +1,7 @@
 # HilbertSpace と Geometry の接続・保持構造の見直し
 
 作成日・更新日: 2026-10-28
-状態: 採用方針確定・未実装。Chain の保持、with／on の命名と委譲関係、局所空間からの葉の列挙、および複数葉・空 Site を受け入れる標準モデルの定義を採用する。以下のシグネチャは実装予定の形を示し、製品コードは未変更。
+状態: 2026-10-28 実装済み。以下は採用した設計の記録であり、実装予定と表記したシグネチャも製品 API に反映した。正式な契約は[Chain の設計](../design/geometry.md)と[Hilbert 空間の設計](../design/hilbert-space.md)を参照する。Index 所有 API・ToSpace・Index ペア trait は外部列を借用する Chain のメソッドへ移行した。find_factor は任意候補として未追加。
 
 ## 1. 採用する方針と API
 
@@ -193,15 +193,15 @@ XYZ・Heisenberg は局所空間を共有して Site 順の全空間を構築し
 
 移行作業としては、ToSpace の Chain 実装の撤去、既存の Index ベースの関係 trait の見直し、Index 発行の利用側への移動、例・要件・回帰テストの更新が必要になる。これらは今回の責任分担から生じる作業範囲であり、それ自体を新たな幾何の意味の未決事項にはしない。
 
-## 2. 確認した現行実装と要件
+## 2. 設計時に確認した移行前実装と要件
 
 ### 2.1. 実装から確認できること
 
 - [HilbertSpace](../../crates/qmb-core/src/space.rs) は `Arc<Node<I>>` を共有する不変な木であり、葉の `Factor(I)` と、順序付きの子空間を持つ `Tensor` がある。公開型はどちらも `HilbertSpace<I>` である。
-- `children()` は直下の子、`indices()` は全葉の Index を左から順に列挙する。現時点で葉ハンドルを列挙する公開 `factors()` はない。
+- `children()` は直下の子、`indices()` は全葉の Index を左から順に列挙する。当時は葉ハンドルを列挙する公開 API はなく、今回 `leaves()` を追加した。
 - ordinary な空間の互換性は順序付きの Index 列で決まり、grouping、空 Tensor、単項 Tensor の違いを同一視する。構築した木そのものは保存する。
 - [Chain](../../crates/qmb-geometry/src/lib.rs) は `Vec<Vec<I>>` と境界条件を所有する。Site 順と Site 内の Index 順を保持し、全空間は保持しない。
-- [ToSpace](../../crates/qmb-geometry/src/space.rs) は `I: Clone + Eq` で葉を作り直し、Site ごとの空間を Site 順に tensor する。既存の全空間へ戻す逆変換ではない。
+- `ToSpace`（撤去済み） は `I: Clone + Eq` で葉を作り直し、Site ごとの空間を Site 順に tensor する。既存の全空間へ戻す逆変換ではない。
 - [spin utility](../../crates/qmb-spin-half/src/utility.rs) は Chain と明示 Space を受け取り、Index の Eq で指定空間の葉に接続する。Neel の向きは Site 順、状態の因子順は指定空間に従う。
 
 したがって、今回問題となる `space → geometry` は既存の自動変換 API の不具合ではなく、新しい構築 API にどの契約を与えるかという論点である。
@@ -230,7 +230,7 @@ XYZ・Heisenberg は局所空間を共有して Site 順の全空間を構築し
 ### 3.1. 子空間と葉の名前を分ける
 
 - `space.children()`：保持された直下の tensor 因子を列挙する既存 API。
-- `space.leaves()`：全葉の Factor ハンドルを tensor 順に遅延列挙する追加予定の API。入力自身が葉の場合も一要素として列挙する。
+- `space.leaves()`：全葉の Factor ハンドルを tensor 順に遅延列挙する実装済み API。入力自身が葉の場合も一要素として列挙する。
 - `space.find_factor(&index)` 相当：Index の Eq で実際の葉を検索する提案。
 
 全葉列挙・検索は geometry と独立に core に置ける。任意の因子集合から新しい部分系を抽出する API は今回の前提にしない。
@@ -267,4 +267,4 @@ Neel の向きは Site 順、状態の tensor 順は Site 順に局所空間の�
 5. 空間構築・Factor の共有・Index の重複検証を利用側へ移し、必要な core の読み取り補助は独立に検討する。
 6. 要件・geometry／HilbertSpace の設計・architecture・examples を新しい責任分担へ揃え、既存のモデルの符号・norm・因子順序・数値結果を回帰検証する。標準モデルの複数葉・空 Site の受理、全組み合わせの相互作用、Site ごとの Neel の向き、一葉の場合との一致も確認する。
 
-本書は採用する設計の記録であり、製品実装・新しい API のコンパイルや回帰テストは未実施である。Iterator の具体型、内部ヘルパーの配置、既存の関係 trait の移行などは、この契約を保って実装時に整理する。
+本書は採用する設計の記録である。製品実装と回帰テストは geometry・spin-half・examples に反映した。Iterator は借用の impl Iterator とし、_on はトップレベル slice を取り出して _with へ委譲する。

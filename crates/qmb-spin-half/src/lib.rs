@@ -3,7 +3,8 @@
 //! With `hbar = 1`, the Cartesian spins are half the Pauli matrices and
 //! `SPlus = Sx + i Sy`, `SMinus = Sx - i Sy`. States are ordered `Up, Down`.
 //! Primitive types carry no numeric precision; the coefficient type is inferred
-//! from the result or specified through a qualified trait call.
+//! from the result, specified through a qualified trait call, or selected once
+//! using [`SpinHalf<C>`] and [`qmb_core::QuantumSystem`].
 //!
 //! ```
 //! use num_complex::Complex;
@@ -44,11 +45,12 @@
 //!
 //! ```
 //! use num_complex::Complex;
-//! use qmb_core::{LocalState, LocalOperator};
-//! use qmb_spin_half::{SpinHalfState as State, SpinHalfOperator as Op};
-//! let up = LocalState::<State, Op, Complex<f64>>::primitive(State::Up);
-//! let sx = LocalOperator::primitive(Op::Sx);
-//! let down = LocalState::primitive(State::Down);
+//! use qmb_core::QuantumSystem;
+//! use qmb_spin_half::{SpinHalf, SpinHalfState as State, SpinHalfOperator as Op};
+//! type Spin = SpinHalf<Complex<f64>>;
+//! let up = Spin::state(State::Up);
+//! let sx = Spin::operator(Op::Sx);
+//! let down = Spin::state(State::Down);
 //! let result = up.act(&sx).evaluate();
 //! assert_eq!(down.inner_product(&result), Complex::new(0.5, 0.0));
 //! assert_eq!(sx.product(&sx).trace(), Complex::new(0.5, 0.0));
@@ -58,16 +60,17 @@
 //!
 //! ```
 //! use num_complex::Complex;
-//! use qmb_core::{HilbertSpace, LocalOperator, LocalState};
-//! use qmb_spin_half::{SpinHalfOperator as Op, SpinHalfState as Ket};
+//! use qmb_core::{HilbertSpace, QuantumSystem};
+//! use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket};
+//! type Spin = SpinHalf<Complex<f64>>;
 //!
 //! let a = HilbertSpace::<_>::factor("a");
 //! let b = HilbertSpace::factor("b");
 //! let h = a.tensor_product(&b)?;
-//! let up = LocalState::<Ket, Op, Complex<f64>>::primitive(Ket::Up).at(&a)?;
-//! let down = LocalState::primitive(Ket::Down).at(&b)?;
+//! let up = Spin::state(Ket::Up).at(&a)?;
+//! let down = Spin::state(Ket::Down).at(&b)?;
 //! let state = up.tensor_product(&down)?;
-//! let sz = LocalOperator::primitive(Op::Sz);
+//! let sz = Spin::operator(Op::Sz);
 //! let zz = sz.at(&a)?.product(&sz.at(&b)?)?.bind(&h)?;
 //! assert_eq!(state.expectation(&zz)?, Complex::new(-0.25, 0.0));
 //! assert_eq!(zz.trace()?, Complex::new(0.0, 0.0));
@@ -83,10 +86,44 @@ extern crate alloc;
 pub mod basis;
 pub mod operator;
 pub mod state;
-pub mod utility;
+mod utility;
+pub use utility::UtilityError;
 
 mod coefficient;
 
 pub use basis::{CartesianBasis, LadderBasis, SzBasis};
 pub use operator::SpinHalfOperator;
 pub use state::SpinHalfState;
+
+/// Selects spin-1/2 primitives and a coefficient type without storing any values.
+///
+/// Import [`qmb_core::QuantumSystem`] to use `state` and `operator`.
+/// There is no default precision; select `C` once in an application type alias.
+///
+/// ```
+/// use num_complex::Complex;
+/// use qmb_core::QuantumSystem;
+/// use qmb_spin_half::{SpinHalf, SpinHalfState as Ket, SpinHalfOperator as Op};
+/// type Spin = SpinHalf<Complex<f32>>;
+/// let up = Spin::state(Ket::Up);
+/// let sx = Spin::operator(Op::Sx);
+/// assert_eq!(up.act(&sx).inner_product(&Spin::state(Ket::Down)), Complex::new(0.5, 0.0));
+/// ```
+///
+/// Different coefficient precisions cannot be mixed implicitly:
+///
+/// ```compile_fail
+/// use num_complex::Complex;
+/// use qmb_core::QuantumSystem;
+/// use qmb_spin_half::{SpinHalf, SpinHalfState as Ket, SpinHalfOperator as Op};
+/// let up = SpinHalf::<Complex<f32>>::state(Ket::Up);
+/// let sx = SpinHalf::<Complex<f64>>::operator(Op::Sx);
+/// let _ = up.act(&sx);
+/// ```
+pub struct SpinHalf<C>(core::marker::PhantomData<fn() -> C>);
+
+impl<C> qmb_core::QuantumSystem for SpinHalf<C> {
+    type State = SpinHalfState;
+    type Operator = SpinHalfOperator;
+    type Coeff = C;
+}

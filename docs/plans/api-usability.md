@@ -1,6 +1,9 @@
 # API の使いやすさに関する検討事項
 
 作成日: 2026-10-27
+更新日: 2026-10-28
+
+本書の「現状」は設計検討開始時のスナップショットである。型引数・係数型の集約と Chain の責任分離は2026-10-28に実装した。現在の API と移行結果は[型選択の計画](api-type-parameters.md)と[Chain の設計](../design/geometry.md)を参照する。その他の候補は未採用の検討事項として残す。
 
 ## 1. 目的と位置づけ
 
@@ -68,7 +71,7 @@ import の行数削減は優先課題にしない。prelude や統合窓口の�
 
 係数型の指定回数と、利用者が把握する必要のある型引数の両方で比較する。係数型の短い別名を用意するだけでは、指定箇所の分散は解消しない。また、保持・遅延構築に評価用の能力を要求しない現在の契約との両立を確認する。構築用の入口を検討することは、HilbertSpace や Chain 自体に係数型を持たせる決定を意味しない。
 
-候補の具体的な比較、関連型と共通 constructor を持つ `QuantumSystem` trait、試作による確認結果は [型引数と係数型の指定を集約する API 案](api-type-parameters.md)に記録する。関連型名は `State`・`Operator`・`Coeff` とし、個別 primitive 用メソッドは今回追加しない。製品 API への実装は未実施である。
+候補の具体的な比較、関連型と共通 constructor を持つ `QuantumSystem` trait、試作による確認結果は [型引数と係数型の指定を集約する API 案](api-type-parameters.md)に記録する。関連型名は `State`・`Operator`・`Coeff` とし、個別 primitive 用メソッドは今回追加しない。製品 API へ実装済みである。
 
 ### 3.3. primitive から式を作るまでの手順
 
@@ -94,11 +97,11 @@ import の行数削減は優先課題にしない。prelude や統合窓口の�
 - Site 順序、Site 内の Index 順序、全空間の因子順序、grouping の違いをどう提示するか。
 - 接続補助を追加する場合、同じ自由度の Index を維持し、既存の因子順序・grouping を尊重できるか。
 
-現行契約は [空間の実装](../../crates/qmb-core/src/space.rs)、[Chain から空間への変換](../../crates/qmb-geometry/src/space.rs)、[モデル utility](../../crates/qmb-spin-half/src/utility.rs)を参照する。
+現行契約は [空間の実装](../../crates/qmb-core/src/space.rs)、[Chain と空間の接続](../design/geometry.md)、[モデル utility](../../crates/qmb-spin-half/src/utility.rs)を参照する。
 
 モデル構築 API は、`xyz`・`heisenberg`・`neel` を `SpinHalf<C>` の関連関数とし、Chain と Site 順の局所空間列を受け取る方針とする。入力要素は葉に限定せず、そこから実際の葉を取得して `at()` に渡す。全空間の引数は不要で、モデルが局所空間を列順に tensor して構築する。具体的な引数・契約は [型引数と係数型の指定を集約する API 案の第4.3節](api-type-parameters.md)に記録する。
 
-Chain と HilbertSpace の責任分担は、[接続・保持構造の検討](space-geometry-connection.md)に記録する。Chain はサイト数と境界条件だけを保持する方針で合意し、外部の Factor 列を受け取る近接ペア補助を設ける。Factor・配置・空間は利用側で管理する。製品実装は未変更である。
+Chain と HilbertSpace の責任分担は、[接続・保持構造の検討](space-geometry-connection.md)に記録する。Chain はサイト数と境界条件だけを保持する方針で合意し、外部の Factor 列を受け取る近接ペア補助を設ける。Factor・配置・空間は利用側で管理する。この責任分離は製品実装へ反映済みである。
 
 ### 3.5. 配置と束縛、作用空間の選択
 

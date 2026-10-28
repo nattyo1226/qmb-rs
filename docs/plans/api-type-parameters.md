@@ -2,14 +2,18 @@
 
 作成日: 2026-10-27
 更新日: 2026-10-28
-状態: 設計検討。関連型名・個別 primitive 用メソッドを追加しない方針、および第4.3節のモデル構築 API の方針は合意済み。製品 API への実装は未実施。
+状態: 2026-10-28 実装済み。以下は採用理由と API の設計記録であり、「提案」の表記を含むコードも、任意の補助候補を除いて製品 API に反映した。
+
+実装先は `qmb_core::system`（crate root から再公開）と `qmb_spin_half::SpinHalf<C>`。公開モデル入口は関連関数へ統一し、旧 utility 自由関数は撤去した。`UtilityError` は spin-half の crate root から公開する。純粋な Chain・with/on の接続・leaves と併せて移行し、正式な契約は[要件](../requirements.md#11-型選択の構築-api)と[Chain の設計](../design/geometry.md)に反映した。
+
+`coefficient`・zero/identity 補助・`MatrixArgs::for_state`・`find_factor` は今回追加しない。既存の `.scaled(C)` と constructor を使い、MatrixArgs の状態 primitive 型と出力先コンテナは引き続き明示する。式型全体の型引数を束ね直す変更は行わず、戻り値には投影別名を使う。
 
 ## 1. 推奨する方向
 
-状態・演算子 primitive と係数型を関連付ける `QuantumSystem` trait を用意し、primitive を受け取って既存の式木を返す既定メソッドを提供する案を推奨する。spin-1/2 では、仮称 `SpinHalf<C>` がその trait を実装する。
+状態・演算子 primitive と係数型を関連付ける `QuantumSystem` trait を用意し、primitive を受け取って既存の式木を返す既定メソッドを提供する案を推奨する。spin-1/2 では、`SpinHalf<C>` がその trait を実装する。
 
 ```rust
-// 提案 API。現行の qmb-core・qmb-spin-half にはまだ存在しない。
+// 実装済みの API。
 use qmb_core::QuantumSystem;
 use qmb_spin_half::{SpinHalfState, SpinHalfOperator};
 
@@ -24,9 +28,9 @@ let result = up.act(&sx);
 
 `LocalStateOf<Q>`・`StateOf<Q, I>` などの汎用の型別名で、戻り値の型も選択済みの `Q` から書けるようにする。式木・評価器を変更せずに導入できる範囲から着手し、型引数そのものを core 全体で組み替える案は、残る負担を確認してから判断する。
 
-[使いやすさの論点一覧](api-usability.md)のうち、型引数と係数型の指定に対象を絞った検討である。関連型名は `State`・`Operator`・`Coeff` とし、これらは状態 primitive・演算子 primitive・係数の型を表す。構築の入口は `state(primitive)`・`operator(primitive)` とし、`up()`・`sx()` など個別 primitive 用メソッドは今回追加しない。その他の公開名とシグネチャは提案段階である。
+[使いやすさの論点一覧](api-usability.md)のうち、型引数と係数型の指定に対象を絞った検討である。関連型名は `State`・`Operator`・`Coeff` とし、これらは状態 primitive・演算子 primitive・係数の型を表す。構築の入口は `state(primitive)`・`operator(primitive)` とし、`up()`・`sx()` など個別 primitive 用メソッドは今回追加しない。基本 API とモデルの公開名・シグネチャは製品実装へ反映し、任意の補助候補は未採用のままとする。
 
-## 2. 現行 API で負担が生じる理由
+## 2. 移行前 API で負担が生じる理由
 
 型指定には、役割の違う情報が混在している。
 
@@ -240,7 +244,7 @@ type Operator<I> = qmb_core::OperatorOf<Spin, I>;
 
 `QuantumSystem` という名前は全 Hilbert 空間やモデルの所有も連想させるため、正式な命名では責任の範囲を確認する。現案の trait には空間・幾何・Index 発行を含めない。
 
-## 6. 試作による確認と限界
+## 6. 実装前の試作による確認と限界
 
 Rust 1.98.0 を使い、リポジトリ外の検討用パッケージから現行 crate を参照して、関連関数と値を使う構築 API の双方を試作した。製品ソース・依存設定は変更していない。初回の試作は個別 primitive 用メソッドを含む旧案で、`cargo test --offline --locked --jobs 1` に検証用の target directory 指定を加え、9 件のテストと 2 件の compile-fail doctest が成功した。
 
@@ -267,4 +271,12 @@ Rust 1.98.0 を使い、リポジトリ外の検討用パッケージから現�
 5. 構築・精度不一致・既存 core 型との接続に回帰検証を付ける。
 6. 戻り値型を書く負担や独自代数での繰り返しがなお大きければ、core の型引数を束ねる案を再検討する。
 
-既存の式 constructor は維持する。モデル構築の公開入口は `SpinHalf<C>` の関連関数へ移す方針とし、旧 utility の自由関数を互換入口として残すか、削除・非推奨化するかは別途決める。実装時に、要件・設計文書へ正式な契約を反映する。
+既存の式 constructor は維持した。モデル構築の公開入口は `SpinHalf<C>` の関連関数へ統一し、旧 utility の自由関数は撤去した。要件・設計文書へ正式な契約を反映済みである。
+
+## 8. 製品実装の検証
+
+回帰テストは core の `tests/systems.rs`、geometry の `tests/geometry.rs`・`tests/space.rs`、spin-half の `tests/systems.rs`、examples の `tests/chain.rs` に置いた。非 Clone primitive・数値能力のない係数の構築、同じ関連型を持つ別の系との合成、既存 core 型との接続、f32/f64、深い入れ子、複数葉・空 Site、借用の同一性、Index 重複拒否を確認する。精度不一致は SpinHalf の compile-fail doctest で拒否する。
+
+基底展開の bin は一つの Spin 別名から状態・演算子を構築し、Heisenberg の bin はその係数選択を密疎 export まで引き継ぐ。MatrixArgs の状態 primitive 型、出力コンテナ、スカラー値は引き続き指定する。後段の期待値や戻り値注釈なしでも入口で式の係数型が確定する。
+
+製品実装は Rust 1.98.0 の devShell で、`cargo test --workspace --all-features --offline --locked`、`cargo test --workspace --no-default-features --offline --locked`、全 target・全 feature の Clippy（`-D warnings`）、format、ドキュメント生成、および core・geometry・spin-half の `--no-default-features` check を確認した。実行例では基底座標 `[5, -1]` と6 Site のエネルギー `1.25`、密疎 export の一致を確認した。MSRV 1.85 と専用 no_std target の検証は今回も未実施であり、ホストでの no_std crate の確認にとどまる。

@@ -61,6 +61,7 @@ pub mod linear_combination;
 pub mod ops;
 pub mod primitive;
 pub mod space;
+pub mod system;
 
 pub use basis::{Basis, BasisError, Coordinates, operator_basis_len, state_basis_len};
 pub use coefficient::{Conjugate, Divide, ImaginaryUnit, RealPart};
@@ -70,3 +71,4 @@ pub use linear_combination::{IntoTerms, LinearCombination, Term};
 pub use ops::{Act, Adjoint, InnerProduct, Product, Trace};
 pub use primitive::{Identity, SpanDimension};
 pub use space::{HilbertSpace, SpaceError};
+pub use system::{LocalOperatorOf, LocalStateOf, OperatorOf, QuantumSystem, StateOf};
