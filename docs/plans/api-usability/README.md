@@ -1,11 +1,11 @@
 # API の使いやすさに関する残る検討事項
 
 作成日: 2026-10-27
-更新日: 2026-10-28
+更新日: 2026-10-29
 
 未解決の使いやすさの論点と、今回のリファクタリングでは実装しなかった補助 API の候補を記録する。以下は追加を決めた機能の一覧ではなく、公開名・シグネチャ・実施時期は未確定である。
 
-現在の構築 API は [QuantumSystem の rustdoc](../../crates/qmb-core/src/system.rs)、[局所式の設計](../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)、[複合式の設計](../design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)、幾何と配置は [Chain の設計](../design/geometry.md)を参照する。実装済みの API・移行経緯を未完了の計画として重ねて管理しない。State／Operator の統合、Grading、延期した機能と未実施の検証は [今後の課題](../future-work.md)で管理する。
+現在の構築 API は [QuantumSystem の rustdoc](../../../crates/qmb-core/src/system.rs)、[局所式の設計](../../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)、[複合式の設計](../../design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)、幾何と配置は [Chain の設計](../../design/geometry.md)を参照する。実装済みの API・移行経緯を未完了の計画として重ねて管理しない。State／Operator の統合、Grading、延期した機能と未実施の検証は [今後の課題](../../future-work.md)で管理する。
 
 ## 1. QuantumSystem の追加補助
 
@@ -44,13 +44,13 @@
 - 戻り値で選ぶ出力コンテナと、状態型の推論補助をどう説明するか。
 - 戻り値型によるコンテナ選択に加え、名前付きの出力補助が必要か。
 
-実装は qmb-export 側で検討し、この補助のために spin-half から export への依存を追加しない。既存の export 契約は [数値 export の設計](../design/export.md)に従う。
+実装は qmb-export 側で検討し、この補助のために spin-half から export への依存を追加しない。既存の export 契約は [数値 export の設計](../../design/export.md)に従う。
 
 ## 3. 作用空間・評価の案内
 
 配置先と spectator を含む全作用空間、bind、明示空間の優先、合成時に未束縛になる条件は、計算結果の解釈に関わる。現在の単一 Operator 型と説明で十分に理解できるか、利用例を通じて確認する。束縛状態を型で区別する案を採用するかは未決である。
 
-明示的な evaluate が必要な場面と、内積・期待値へそのまま渡せる場面、通常の評価と基底展開による集約の違いを、利用者向けの説明で整理する余地がある。これは評価器の変更を決めるものではない。構造表示や計算量・メモリ使用の診断を追加する場合は、[延期した式の管理・性能の課題](../future-work.md)との範囲を整理する。
+明示的な evaluate が必要な場面と、内積・期待値へそのまま渡せる場面、通常の評価と基底展開による集約の違いを、利用者向けの説明で整理する余地がある。これは評価器の変更を決めるものではない。構造表示や計算量・メモリ使用の診断を追加する場合は、[延期した式の管理・性能の課題](../../future-work.md)との範囲を整理する。
 
 ## 4. エラーの診断情報
 
@@ -60,11 +60,11 @@
 
 ## 5. 利用開始と独自代数への導線
 
-[examples](../../examples/README.md) には手作業の式構築、基底展開、Chain モデル、数値 export の実行例がある。一方、次の説明の配置・充実は引き続き検討する。
+[examples](../../../examples/README.md) には手作業の式構築、基底展開、Chain モデル、数値 export の実行例がある。一方、次の説明の配置・充実は引き続き検討する。
 
 - 典型的な用途の依存設定・feature・trait import を最初に確認できる案内。trait の import 不足と feature 不足によるエラーを区別できるか。
 - crate root の案内と各 rustdoc・設計文書・実行例のつなぎ方。リポジトリ直下の README は未作成。
-- テスト内の [3準位系](../../crates/qmb-core/tests/support/three_level.rs) を、独自の QuantumSystem・能力 trait・Basis を実装する利用者向けの最小例へ整理すること。
+- テスト内の [3準位系](../../../crates/qmb-core/tests/support/three_level.rs) を、独自の QuantumSystem・能力 trait・Basis を実装する利用者向けの最小例へ整理すること。
 - 因子・基底・コンテナの順序、メタデータの共有・借用、非正規直交基底での内積の解釈を、数値出力の利用者へどう案内するか。
 
 import の行数削減自体は優先課題とせず、prelude や統合窓口の追加は採用しない。共通の構築入口と、能力ごとに拡張する API の関係を説明する。

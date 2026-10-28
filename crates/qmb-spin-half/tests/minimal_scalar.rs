@@ -5,8 +5,8 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use num_complex::Complex;
 use num_traits::{One, Zero};
 use qmb_core::{
-    Act, Adjoint, Basis, Divide, Identity, ImaginaryUnit, InnerProduct, LinearCombination as Lc,
-    Product, SpanDimension, Trace,
+    Act, Adjoint, Basis, Dimension, Divide, Identity, ImaginaryUnit, InnerProduct,
+    LinearCombination as Lc, Product, Trace,
 };
 use qmb_spin_half::{
     CartesianBasis, LadderBasis, SpinHalfOperator as Op, SpinHalfState as State, SzBasis,
@@ -281,8 +281,8 @@ fn local_metadata_identity_and_bases_accept_minimal_fractional_scalars() {
     state_basis(SzBasis);
     operator_basis(CartesianBasis);
     operator_basis(LadderBasis);
-    assert_eq!(State::span_dimension().unwrap().get(), 2);
-    assert_eq!(Op::span_dimension().unwrap().get(), 4);
+    assert_eq!(State::dim().unwrap().get(), 2);
+    assert_eq!(Op::dim().unwrap().get(), 4);
     assert_eq!(terms(Lc::primitive(Op::identity())), [((1, 1), (0, 1), I)]);
     let trace = <Op as Trace<Coefficient<Rational>>>::trace(&I);
     assert_eq!(trace.re.parts(), (2, 1));

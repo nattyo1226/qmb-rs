@@ -63,7 +63,7 @@ p=\sum_{\mu=0}^{n-1}c_\mu(p)b_\mu.
 
 Basis に独立した要素数の提供を要求しない。要素数を得る便利な操作を設ける場合も、上記の情報から導出する。primitive の個数や、列挙を完走して数えた値を要素数の定義にはしない。
 
-この契約は対象空間全体に完全な基底を前提とする。部分空間基底・射影、および fermion の even 部分だけへの制限は初期版で扱わない。`state_basis_len<S>()`・`operator_basis_len<O>()` は対象 primitive の SpanDimension を参照して `Result<usize, DimensionOverflow>` を返す。O の span の次元は既に d² なので、この関数でさらに二乗しない。整数化できない次元のエラーは取得時に返し、基底や式の保持・構築には次元の能力を要求しない。
+この契約は対象空間全体に完全な基底を前提とする。部分空間基底・射影、および fermion の even 部分だけへの制限は初期版で扱わない。`state_basis_len<S>()`・`operator_basis_len<O>()` は対象 primitive の Dimension を参照して `Result<usize, DimensionOverflow>` を返す。O の span の次元は既に d² なので、この関数でさらに二乗しない。整数化できない次元のエラーは取得時に返し、基底や式の保持・構築には次元の能力を要求しない。
 
 ## 4. 能力間の整合性
 
@@ -173,7 +173,7 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 
 `HilbertSpace::basis_states::<S, O, C, B>(&basis)` と `basis_operators::<O, C, B>(&basis)` は、同じ局所基底から導出した通常の状態式・束縛済み演算子式を順序付きで遅延列挙する。戻り値は `Result<impl Iterator<Item = Result<式, BasisError>>, BasisError>` とする。利用者が別の複合基底オブジェクトを構築する必要はない。
 
-要素の生成には SpanDimension と Basis を使い、Index の Eq・Clone、primitive の Clone、作用・積・随伴・恒等元の局所規則、係数の算術を必須にしない。生成した式に対し、Index を照合する操作には引き続き Eq を要求する。全要素数を整数化せず、番号列を進めるため、大きな空間でも必要な先頭要素だけを取得できる。Grouping は列挙順序を変えず、空の空間は一要素の単位基底を返す。
+要素の生成には Dimension と Basis を使い、Index の Eq・Clone、primitive の Clone、作用・積・随伴・恒等元の局所規則、係数の算術を必須にしない。生成した式に対し、Index を照合する操作には引き続き Eq を要求する。全要素数を整数化せず、番号列を進めるため、大きな空間でも必要な先頭要素だけを取得できる。Grouping は列挙順序を変えず、空の空間は一要素の単位基底を返す。
 
 ### 8.4. エラー・再公開・利用例
 

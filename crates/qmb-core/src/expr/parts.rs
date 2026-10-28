@@ -1,5 +1,8 @@
 //! Reusable syntax containers, independent of local structures and evaluation.
 
+pub mod linear_combination;
+pub use linear_combination::{IntoTerms, LinearCombination, Term};
+
 use alloc::{vec, vec::Vec};
 use core::{iter::FusedIterator, slice};
 

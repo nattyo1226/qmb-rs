@@ -2,8 +2,8 @@
 
 use num_traits::{One, Zero};
 use qmb_core::{
-    Act, Adjoint, Basis, BasisError, Conjugate, DimensionOverflow, HilbertSpace, LinearCombination,
-    LocalState, SpanDimension, State,
+    Act, Adjoint, Basis, BasisError, Conjugate, Dimension, DimensionOverflow, HilbertSpace,
+    LinearCombination, LocalState, State,
 };
 use std::{
     cell::Cell,
@@ -15,8 +15,8 @@ use std::{
 // operator implements Adjoint but deliberately has no Product or Identity.
 struct Ket(bool);
 struct Action;
-impl SpanDimension for Ket {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl Dimension for Ket {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(2).unwrap())
     }
 }
@@ -356,8 +356,8 @@ fn placed_expansion_shares_nonclone_indices_and_does_not_enumerate_all_basis_ele
 }
 
 struct Large;
-impl SpanDimension for Large {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl Dimension for Large {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Err(DimensionOverflow)
     }
 }

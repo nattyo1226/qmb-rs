@@ -3,7 +3,7 @@
 use alloc::{sync::Arc, vec, vec::Vec};
 use core::{iter::FusedIterator, slice};
 
-use crate::{DimensionOverflow, SpanDimension, expr::parts::SumExpr};
+use crate::{Dimension, DimensionOverflow, expr::parts::SumExpr};
 
 /// Errors constructing a tensor space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -102,12 +102,12 @@ impl<I> HilbertSpace<I> {
     /// Use a state primitive for a state-space dimension, and an operator
     /// primitive for an operator-space dimension. The empty tensor has dimension
     /// one even when P's local dimension cannot be represented.
-    pub fn dimension<P: SpanDimension>(&self) -> Result<usize, DimensionOverflow> {
+    pub fn dimension<P: Dimension>(&self) -> Result<usize, DimensionOverflow> {
         let mut indices = self.indices();
         if indices.next().is_none() {
             return Ok(1);
         }
-        let local = P::span_dimension()?.get();
+        let local = P::dim()?.get();
         indices.try_fold(local, |d, _| d.checked_mul(local).ok_or(DimensionOverflow))
     }
 

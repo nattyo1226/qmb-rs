@@ -5,7 +5,7 @@ use std::{fmt::Debug, hash::Hash, ops::Neg};
 use num_complex::Complex;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb_core::{
-    Act, Adjoint, Basis, Identity, InnerProduct, LinearCombination as Lc, Product, SpanDimension,
+    Act, Adjoint, Basis, Dimension, Identity, InnerProduct, LinearCombination as Lc, Product,
     Trace, operator_basis_len, state_basis_len,
 };
 use qmb_spin_half::{
@@ -449,8 +449,8 @@ fn basis_contracts_and_round_trips_at_both_precisions() {
 }
 #[test]
 fn precision_independent_primitives_and_public_type_contracts() {
-    assert_eq!(State::span_dimension().unwrap().get(), 2);
-    assert_eq!(Op::span_dimension().unwrap().get(), 4);
+    assert_eq!(State::dim().unwrap().get(), 2);
+    assert_eq!(Op::dim().unwrap().get(), 4);
     fn discrete<T: Clone + Copy + Debug + Eq + Hash>() {}
     fn parameter_free<T: Default + Clone + Copy + Debug + Eq + Hash>() {}
     discrete::<State>();

@@ -1,7 +1,7 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::{ExpressionError, LinearCombination};
+use crate::{ExpressionError, Identity, LinearCombination};
 
 /// A shared local state over state primitive S, operator primitive O and coefficient C.
 ///
@@ -35,10 +35,10 @@ use crate::{ExpressionError, LinearCombination};
 /// needs_send::<LocalState<Rc<()>, (), ()>>();
 /// ```
 pub struct LocalState<S, O, C> {
-    pub(super) root: Option<Arc<StateNode<S, O, C>>>,
+    pub(crate) root: Option<Arc<StateNode<S, O, C>>>,
     // A structural property, not an evaluation cache. It permits O(1) reuse of
     // already evaluated subtrees without rescanning long expression chains.
-    pub(super) has_action: bool,
+    pub(crate) has_action: bool,
 }
 
 /// A shared local operator over primitive O and coefficient C.
@@ -48,23 +48,22 @@ pub struct LocalState<S, O, C> {
 /// ```compile_fail
 /// use qmb_core::{LocalOperator, LocalState};
 /// let state = LocalState::<(), u8, ()>::zero();
-/// let other = LocalOperator::<u16, ()>::identity();
+/// let other = LocalOperator::<u16, ()>::primitive(0);
 /// let _ = state.act(&other);
 /// ```
 pub struct LocalOperator<O, C> {
-    pub(super) root: Option<Arc<OperatorNode<O, C>>>,
+    pub(crate) root: Option<Arc<OperatorNode<O, C>>>,
 }
 
-pub(super) enum StateNode<S, O, C> {
+pub(crate) enum StateNode<S, O, C> {
     Primitive(S),
     Scale(ScaleExpr<LocalState<S, O, C>, C>),
     Sum(SumExpr<LocalState<S, O, C>>),
     Act(ActExpr<LocalState<S, O, C>, LocalOperator<O, C>>),
 }
 
-pub(super) enum OperatorNode<O, C> {
+pub(crate) enum OperatorNode<O, C> {
     Primitive(O),
-    Identity,
     Scale(ScaleExpr<LocalOperator<O, C>, C>),
     Sum(SumExpr<LocalOperator<O, C>>),
     Product(ProductExpr<LocalOperator<O, C>>),
@@ -91,7 +90,7 @@ impl<S, O, C> LocalState<S, O, C> {
     pub(crate) fn has_pending_action(&self) -> bool {
         self.has_action
     }
-    pub(super) fn new(node: StateNode<S, O, C>) -> Self {
+    pub(crate) fn new(node: StateNode<S, O, C>) -> Self {
         let has_action = match &node {
             StateNode::Primitive(_) => false,
             StateNode::Scale(s) => s.operand.has_action,
@@ -103,7 +102,7 @@ impl<S, O, C> LocalState<S, O, C> {
             has_action,
         }
     }
-    pub(super) fn node(&self) -> &StateNode<S, O, C> {
+    pub(crate) fn node(&self) -> &StateNode<S, O, C> {
         self.root.as_deref().expect("live state handle")
     }
 
@@ -142,7 +141,7 @@ impl<S, O, C> LocalState<S, O, C> {
                 .map(|term| term.operand.into_scaled(term.coefficient)),
         )
     }
-    pub(super) fn into_scaled(self, coefficient: C) -> Self {
+    pub(crate) fn into_scaled(self, coefficient: C) -> Self {
         Self::new(StateNode::Scale(ScaleExpr {
             coefficient,
             operand: self,
@@ -153,7 +152,7 @@ impl<S, O, C> LocalState<S, O, C> {
     pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
         self.clone().into_scaled(coefficient.into())
     }
-    pub(super) fn into_act(self, operator: LocalOperator<O, C>) -> Self {
+    pub(crate) fn into_act(self, operator: LocalOperator<O, C>) -> Self {
         Self::new(StateNode::Act(ActExpr {
             state: self,
             operator,
@@ -166,12 +165,12 @@ impl<S, O, C> LocalState<S, O, C> {
 }
 
 impl<O, C> LocalOperator<O, C> {
-    pub(super) fn new(node: OperatorNode<O, C>) -> Self {
+    pub(crate) fn new(node: OperatorNode<O, C>) -> Self {
         Self {
             root: Some(Arc::new(node)),
         }
     }
-    pub(super) fn node(&self) -> &OperatorNode<O, C> {
+    pub(crate) fn node(&self) -> &OperatorNode<O, C> {
         self.root.as_deref().expect("live operator handle")
     }
     /// Stores a primitive without generating a coefficient or running a rule.
@@ -209,7 +208,7 @@ impl<O, C> LocalOperator<O, C> {
                 .map(|term| term.operand.into_scaled(term.coefficient)),
         )
     }
-    pub(super) fn into_scaled(self, coefficient: C) -> Self {
+    pub(crate) fn into_scaled(self, coefficient: C) -> Self {
         Self::new(OperatorNode::Scale(ScaleExpr {
             coefficient,
             operand: self,
@@ -220,11 +219,14 @@ impl<O, C> LocalOperator<O, C> {
     pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
         self.clone().into_scaled(coefficient.into())
     }
-    /// Constructs a symbolic identity, without invoking the identity rule.
-    pub fn identity() -> Self {
-        Self::new(OperatorNode::Identity)
+    /// Constructs the identity primitive without generating numeric coefficients.
+    pub fn identity() -> Self
+    where
+        O: Identity,
+    {
+        <Self as Identity>::identity()
     }
-    pub(super) fn into_product(self, rhs: Self) -> Self {
+    pub(crate) fn into_product(self, rhs: Self) -> Self {
         Self::new(OperatorNode::Product(ProductExpr { lhs: self, rhs }))
     }
     /// Constructs the ordered product `self * rhs`; `rhs` acts first.
@@ -232,14 +234,17 @@ impl<O, C> LocalOperator<O, C> {
         self.clone().into_product(rhs.clone())
     }
     /// Constructs a product in input order. The empty product is identity.
-    pub fn product_all(operands: impl IntoIterator<Item = Self>) -> Self {
+    pub fn product_all(operands: impl IntoIterator<Item = Self>) -> Self
+    where
+        O: Identity,
+    {
         let mut iter = operands.into_iter();
         match iter.next() {
             None => Self::identity(),
             Some(first) => iter.fold(first, Self::into_product),
         }
     }
-    pub(super) fn into_adjoint(self) -> Self {
+    pub(crate) fn into_adjoint(self) -> Self {
         Self::new(OperatorNode::Adjoint(AdjointExpr { operand: self }))
     }
     /// Constructs a delayed adjoint, without distribution or primitive rules.
@@ -307,7 +312,7 @@ fn release<S, O, C>(root: Pending<S, O, C>) {
             Pending::Operator(root) => {
                 if let Some(node) = Arc::into_inner(root) {
                     match node {
-                        OperatorNode::Primitive(_) | OperatorNode::Identity => {}
+                        OperatorNode::Primitive(_) => {}
                         OperatorNode::Scale(s) => operator_child(s.operand, &mut stack),
                         OperatorNode::Sum(s) => {
                             for child in s {
@@ -340,5 +345,17 @@ impl<O, C> Drop for LocalOperator<O, C> {
             // no concrete state primitive when releasing an operator root.
             release::<core::convert::Infallible, O, C>(Pending::Operator(root))
         }
+    }
+}
+
+impl<O: Identity, C> Identity for OperatorNode<O, C> {
+    fn identity() -> Self {
+        Self::Primitive(O::identity())
+    }
+}
+
+impl<O: Identity, C> Identity for LocalOperator<O, C> {
+    fn identity() -> Self {
+        Self::new(OperatorNode::identity())
     }
 }

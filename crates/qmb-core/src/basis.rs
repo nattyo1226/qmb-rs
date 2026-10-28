@@ -1,9 +1,12 @@
 //! Local basis expansion, indexing, and lazy enumeration.
 
-use crate::{DimensionOverflow, LinearCombination, SpanDimension};
+use crate::LinearCombination;
 
 mod coordinates;
+mod enumeration;
+mod expansion;
 pub use coordinates::{BasisError, Coordinates};
+pub use enumeration::{operator_basis_len, state_basis_len};
 
 /// Expansion, indexing and enumeration of a complete, ordered basis.
 ///
@@ -26,16 +29,4 @@ pub trait Basis<P, C> {
     /// Elements are owned; allocation and an exact-size iterator are not required.
     /// Use a qualified call when `C` cannot be inferred from context.
     fn elements(&self) -> impl Iterator<Item = P> + '_;
-}
-
-/// Returns the state basis size from the span of state primitive S.
-pub fn state_basis_len<S: SpanDimension>() -> Result<usize, DimensionOverflow> {
-    Ok(S::span_dimension()?.get())
-}
-
-/// Returns the operator basis size from the span of operator primitive O.
-///
-/// This is already the operator-space dimension, not a value to square again.
-pub fn operator_basis_len<O: SpanDimension>() -> Result<usize, DimensionOverflow> {
-    Ok(O::span_dimension()?.get())
 }

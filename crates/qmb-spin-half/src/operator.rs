@@ -4,7 +4,7 @@ use core::ops::{Add, Div, Neg};
 
 use num_traits::{One, Zero};
 use qmb_core::{
-    Adjoint, DimensionOverflow, Identity, ImaginaryUnit, LinearCombination, Product, SpanDimension,
+    Adjoint, Dimension, DimensionOverflow, Identity, ImaginaryUnit, LinearCombination, Product,
     Trace,
 };
 
@@ -99,8 +99,8 @@ impl Identity for SpinHalfOperator {
         Self::I
     }
 }
-impl SpanDimension for SpinHalfOperator {
-    fn span_dimension() -> Result<core::num::NonZeroUsize, DimensionOverflow> {
+impl Dimension for SpinHalfOperator {
+    fn dim() -> Result<core::num::NonZeroUsize, DimensionOverflow> {
         Ok(core::num::NonZeroUsize::new(4).unwrap())
     }
 }

@@ -1,10 +1,11 @@
-//! Primitive capabilities implemented by concrete local algebras.
+//! Dimension queries and algebraic capabilities of primitives and expressions.
 //!
 //! Rules are infallible for valid primitives. Concrete types must reject invalid
 //! values at construction. Numeric bounds and algebraic laws are the concrete
 //! implementation's responsibility, rather than blanket bounds on these traits.
 
-use crate::LinearCombination;
+use crate::{DimensionOverflow, LinearCombination};
+use core::num::NonZeroUsize;
 
 /// The inner product, conjugate-linear on the left and linear on the right.
 pub trait InnerProduct<C> {
@@ -60,4 +61,24 @@ pub trait Adjoint<C> {
 pub trait Trace<C> {
     /// Returns the trace without dividing by the local dimension.
     fn trace(&self) -> C;
+}
+
+/// Construction of a value representing the identity operator.
+///
+/// The value must act as identity and be a multiplicative unit. It need not be
+/// part of a chosen basis; basis expansion may return a sum of basis primitives.
+/// Both operator primitives and expression types can implement this contract.
+pub trait Identity: Sized {
+    /// Returns the identity without constructing numeric coefficients.
+    fn identity() -> Self;
+}
+
+/// Dimension of the linear space spanned by all values of a primitive type.
+///
+/// For a complete state space this is `d`; for its full operator space it is
+/// `d²`. It is not the number of primitive variants or the span of one value.
+/// Dimensions must agree with the algebra, action, and complete basis contracts.
+pub trait Dimension {
+    /// Returns the positive dimension, or an error if it does not fit in usize.
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow>;
 }

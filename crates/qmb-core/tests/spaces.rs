@@ -1,12 +1,12 @@
 use core::num::NonZeroUsize;
-use qmb_core::{DimensionOverflow, HilbertSpace, SpaceError, SpanDimension};
+use qmb_core::{Dimension, DimensionOverflow, HilbertSpace, SpaceError};
 
 // No Clone, Hash, Ord, Debug or generation implementation.
 #[derive(PartialEq, Eq)]
 struct Index(u32);
 struct Structure<const D: usize>;
-impl<const D: usize> SpanDimension for Structure<D> {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl<const D: usize> Dimension for Structure<D> {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(D).unwrap())
     }
 }

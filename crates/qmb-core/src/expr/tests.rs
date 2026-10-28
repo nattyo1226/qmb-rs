@@ -108,7 +108,7 @@ fn construction_shares_without_numeric_or_clone_bounds() {
         Complex::new(Scalar, Scalar),
         state.clone(),
     ));
-    let _ = O::<Scalar>::identity().adjoint();
+    let _ = op.adjoint();
     let unrelated = S::<Scalar>::primitive(State(1, &counts));
     assert!(!Arc::ptr_eq(
         state.root.as_ref().unwrap(),
@@ -175,12 +175,19 @@ fn constructor_cardinality_sharing_and_single_final_drop() {
         S::<f64>::zero().node(),
         StateNode::Sum(SumExpr::Empty)
     ));
+    struct Unit;
+    impl crate::Identity for Unit {
+        fn identity() -> Self {
+            Self
+        }
+    }
+    type UnitOperator = LocalOperator<Unit, Complex<f64>>;
     assert!(matches!(
-        O::<f64>::product_all([]).node(),
-        OperatorNode::Identity
+        UnitOperator::product_all([]).node(),
+        OperatorNode::Primitive(Unit)
     ));
-    let op = O::<f64>::primitive(Operator(0, &counts));
-    let single = O::product_all([op.clone()]);
+    let op = UnitOperator::identity();
+    let single = UnitOperator::product_all([op.clone()]);
     assert!(Arc::ptr_eq(
         op.root.as_ref().unwrap(),
         single.root.as_ref().unwrap()
@@ -279,13 +286,13 @@ fn deep_action_product_scale_sum_and_adjoint_chains_use_work_stacks() {
             let counts = Counts::default();
             let leaf = S::primitive(State(1, &counts));
             let mut chain = leaf.clone();
-            let mut product = O::identity();
-            let mut adjoint = O::identity();
+            let mut product = O::primitive(Operator(0, &counts));
+            let mut adjoint = O::primitive(Operator(0, &counts));
             let mut scaled = leaf.clone();
             let mut sum = leaf.clone();
             for _ in 0..20_000 {
-                chain = chain.act(&O::identity());
-                product = product.product(&O::identity());
+                chain = chain.act(&O::primitive(Operator(0, &counts)));
+                product = product.product(&O::primitive(Operator(0, &counts)));
                 adjoint = adjoint.adjoint();
                 scaled = scaled.scaled(Complex::new(1.0, 0.0));
                 sum = &sum + S::zero();
@@ -295,7 +302,7 @@ fn deep_action_product_scale_sum_and_adjoint_chains_use_work_stacks() {
                 leaf.act(&product).evaluate(),
                 leaf.act(&adjoint).evaluate(),
                 scaled.act(&O::primitive(Operator(0, &counts))).evaluate(),
-                sum.act(&O::identity()).evaluate(),
+                sum.act(&O::primitive(Operator(0, &counts))).evaluate(),
             ] {
                 assert_eq!(coefficients(&state), vec![(1, Complex::new(1.0, 0.0))]);
             }
@@ -475,4 +482,28 @@ fn try_sums_preserve_duplicate_and_zero_nodes_without_evaluating() {
         O::<f64>::try_sum([]).unwrap().node(),
         OperatorNode::Sum(SumExpr::Empty)
     ));
+}
+
+#[test]
+fn local_identity_trait_and_constructor_store_the_primitive() {
+    struct Unit;
+    struct Opaque;
+    impl crate::Identity for Unit {
+        fn identity() -> Self {
+            Self
+        }
+    }
+    fn identity<T: crate::Identity>() -> T {
+        T::identity()
+    }
+
+    let node: OperatorNode<Unit, Opaque> = identity();
+    assert!(matches!(node, OperatorNode::Primitive(Unit)));
+    for op in [
+        identity::<LocalOperator<Unit, Opaque>>(),
+        LocalOperator::identity(),
+        LocalOperator::product_all([]),
+    ] {
+        assert!(matches!(op.node(), OperatorNode::Primitive(Unit)));
+    }
 }

@@ -49,7 +49,7 @@ qmb-rs は、量子系の Hilbert 空間、状態、および演算子を代数�
 
 局所構造は空間の情報を保持し、状態・演算子 primitive が持つ数学的能力を関連付け、その整合性を要求する。状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供し、core の共通の式木が線型結合などへ拡張する。詳細は [局所構造の設計](design/local-structure.md)と[局所 primitive・式木の数学的能力](design/primitive-expression.md)に定める。
 
-Rust API は演算子式に O・C、状態式に S・O・C を指定する。恒等元は O の Identity、次元は S・O の SpanDimension とし、LocalStructure は公開しない。各演算能力と入出力の対応は必要なメソッドで要求し、式の単なる保持・構築に演算の数値制約を波及させない。
+Rust API は演算子式に O・C、状態式に S・O・C を指定する。恒等元は O の Identity、次元は S・O の Dimension とし、LocalStructure は公開しない。各演算能力と入出力の対応は必要なメソッドで要求し、式の単なる保持・構築に演算の数値制約を波及させない。
 
 局所構造は、同じ定義・定義パラメータを持つ場合に一致とする。別々に構築・復元した場合も一致し、選択基底・表示名・メモリ上の object identity は一致条件に含めない。次元や trait の種類の一致だけでは一致とみなさず、数学的同型の判定や primitive の自動対応付けは導入しない。詳細は[局所構造の一致条件](design/local-structure.md#4-局所構造の一致条件)に定める。数値精度の互換性は 4.1 節の規約に従って別途検証する。
 

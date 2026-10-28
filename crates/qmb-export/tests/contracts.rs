@@ -1,8 +1,8 @@
 #[cfg(feature = "sprs")]
 use qmb_core::Coordinates;
 use qmb_core::{
-    Act, Adjoint, Basis, BasisError, DimensionOverflow, ExpressionError, HilbertSpace,
-    LinearCombination, LocalOperator, LocalState, Operator, SpanDimension, State,
+    Act, Adjoint, Basis, BasisError, Dimension, DimensionOverflow, ExpressionError, HilbertSpace,
+    LinearCombination, LocalOperator, LocalState, Operator, State,
 };
 use qmb_export::{Export, ExportError, Exported, MatrixArgs, MatrixMetadata, VectorMetadata};
 use std::num::NonZeroUsize;
@@ -11,8 +11,8 @@ use std::num::NonZeroUsize;
 struct Ket(u8);
 struct Op;
 struct Ordered;
-impl SpanDimension for Ket {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl Dimension for Ket {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(2).unwrap())
     }
 }

@@ -6,8 +6,8 @@ use std::{fmt::Debug, num::NonZeroUsize, ops::Neg};
 use num_complex::Complex;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb_core::{
-    Act, Adjoint, Basis, DimensionOverflow, Identity, InnerProduct, LinearCombination, Product,
-    SpanDimension, Term, Trace, operator_basis_len, state_basis_len,
+    Act, Adjoint, Basis, Dimension, DimensionOverflow, Identity, InnerProduct, LinearCombination,
+    Product, Term, Trace, operator_basis_len, state_basis_len,
 };
 
 pub(super) trait Real:
@@ -343,13 +343,13 @@ pub(super) fn assert_matrix<T: Real>(actual: Matrix<T>, expected: Matrix<T>) {
     }
 }
 
-impl SpanDimension for Ket {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl Dimension for Ket {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(3).unwrap())
     }
 }
-impl SpanDimension for Operator {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl Dimension for Operator {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(9).unwrap())
     }
 }

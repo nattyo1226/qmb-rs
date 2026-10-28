@@ -1,5 +1,5 @@
 use qmb_core::{BasisError, DimensionOverflow, ExpressionError, SpaceError};
-use std::{alloc::Layout, collections::TryReserveError};
+use std::collections::TryReserveError;
 
 /// Failure to construct or interpret a numerical export.
 #[derive(Debug, thiserror::Error)]
@@ -33,14 +33,4 @@ pub enum ExportError {
     #[cfg(feature = "sprs")]
     #[error("{0}")]
     SparseStructure(#[from] sprs::errors::StructureError),
-}
-
-pub(crate) fn reserve<T>(values: &mut Vec<T>, additional: usize) -> Result<(), ExportError> {
-    let length = values
-        .len()
-        .checked_add(additional)
-        .ok_or(ExportError::SizeOverflow)?;
-    Layout::array::<T>(length).map_err(|_| ExportError::SizeOverflow)?;
-    values.try_reserve(additional)?;
-    Ok(())
 }
