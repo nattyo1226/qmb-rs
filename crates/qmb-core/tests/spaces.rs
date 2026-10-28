@@ -105,3 +105,18 @@ fn deep_spaces_walk_and_drop_on_a_small_stack_with_shared_leaves() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn leaves_borrow_actual_handles_in_order_and_remain_exhausted() {
+    // Reading leaves needs no Eq, Clone, Default or numeric capabilities.
+    struct Opaque;
+    let leaf = HilbertSpace::factor(Opaque);
+    let mut leaves = leaf.leaves();
+    assert!(std::ptr::eq(leaves.next().unwrap(), &leaf));
+    assert!(leaves.next().is_none());
+    assert!(leaves.next().is_none());
+    let unit = HilbertSpace::<Opaque>::unit();
+    let mut empty = unit.leaves();
+    assert!(empty.next().is_none());
+    assert!(empty.next().is_none());
+}

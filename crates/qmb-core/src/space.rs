@@ -85,6 +85,14 @@ impl<I> HilbertSpace<I> {
     /// Lazily borrows all leaf indices in tensor order, using a work stack.
     pub fn indices(&self) -> Indices<'_, I> {
         Indices {
+            leaves: self.leaves(),
+        }
+    }
+
+    /// Lazily borrows the actual leaves in tensor order, including a leaf input.
+    /// Empty tensors yield no leaves; traversal uses an explicit work stack.
+    pub fn leaves(&self) -> Leaves<'_, I> {
+        Leaves {
             pending: vec![self],
         }
     }
@@ -167,22 +175,35 @@ impl<I: Eq> HilbertSpace<I> {
 
 /// A borrowing, depth-first iterator over a space's leaf indices.
 pub struct Indices<'a, I> {
-    pending: Vec<&'a HilbertSpace<I>>,
+    leaves: Leaves<'a, I>,
 }
 
 impl<'a, I> Iterator for Indices<'a, I> {
     type Item = &'a I;
     fn next(&mut self) -> Option<Self::Item> {
+        self.leaves.next().and_then(HilbertSpace::factor_index)
+    }
+}
+impl<I> FusedIterator for Indices<'_, I> {}
+
+/// A borrowing, depth-first iterator over the actual leaf space handles.
+pub struct Leaves<'a, I> {
+    pending: Vec<&'a HilbertSpace<I>>,
+}
+
+impl<'a, I> Iterator for Leaves<'a, I> {
+    type Item = &'a HilbertSpace<I>;
+    fn next(&mut self) -> Option<Self::Item> {
         while let Some(space) = self.pending.pop() {
             match space.node() {
-                Node::Factor(index) => return Some(index),
+                Node::Factor(_) => return Some(space),
                 Node::Tensor(children) => self.pending.extend(children.iter().rev()),
             }
         }
         None
     }
 }
-impl<I> FusedIterator for Indices<'_, I> {}
+impl<I> FusedIterator for Leaves<'_, I> {}
 
 impl<I> Drop for HilbertSpace<I> {
     fn drop(&mut self) {

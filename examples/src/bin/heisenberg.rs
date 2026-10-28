@@ -2,18 +2,22 @@ use num_complex::Complex;
 use qmb_basic::Id128;
 #[cfg(not(feature = "normalize"))]
 use qmb_core::Divide;
-use qmb_geometry::{Boundary, Chain, ToSpace};
+use qmb_core::HilbertSpace;
+use qmb_geometry::{Boundary, Chain};
 #[cfg(feature = "normalize")]
 use qmb_normalize::{Norm, NormalizedExpectation};
-use qmb_spin_half::SpinHalfState;
-use qmb_spin_half::utility::{heisenberg, neel};
+use qmb_spin_half::{SpinHalf, SpinHalfState};
+
+type Spin = SpinHalf<Complex<f64>>;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let chain = Chain::<Id128>::new(6, 1, Boundary::Open)?;
-    let space = chain.to_space()?;
+    let chain = Chain::new(6, Boundary::Open);
+    let factors: Vec<_> = (0..chain.site_count())
+        .map(|_| HilbertSpace::factor(Id128::default()))
+        .collect();
     // H = -J sum(Sx Sx + Sy Sy + Sz Sz); positive J is ferromagnetic.
-    let h = heisenberg(&chain, &space, 1.0_f64)?;
-    let psi = neel::<_, Complex<f64>>(&chain, &space, SpinHalfState::Up)?;
+    let h = Spin::heisenberg(&chain, &factors, 1.0)?;
+    let psi = Spin::neel(&chain, &factors, SpinHalfState::Up)?;
     #[cfg(feature = "normalize")]
     let energy = psi.normalized_expectation(&h)?;
     // This Neel state has nonzero norm; core's scalar quotient needs no

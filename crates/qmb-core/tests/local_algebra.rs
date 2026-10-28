@@ -73,9 +73,10 @@ fn check_rules<T: Real>() {
             );
         }
     }
-    let x = LinearCombination::primitive(Ket::Sum).scaled(c::<T>(0.3, -0.7))
-        + LinearCombination::primitive(Ket::Phase).scaled(c(1.2, 0.4));
-    let y = LinearCombination::primitive(Ket::Unit(Axis::B)).scaled(c::<T>(-0.2, 0.6));
+    let x = LinearCombination::<_, Complex<T>>::primitive(Ket::Sum).scaled(c::<T>(0.3, -0.7))
+        + LinearCombination::<_, Complex<T>>::primitive(Ket::Phase).scaled(c::<T>(1.2, 0.4));
+    let y =
+        LinearCombination::<_, Complex<T>>::primitive(Ket::Unit(Axis::B)).scaled(c::<T>(-0.2, 0.6));
     assert_complex(inner(&x, &y), dot(state_value(&x), state_value(&y)));
     assert_complex(inner(&x, &y), inner(&y, &x).conj());
     assert_complex(
@@ -83,8 +84,10 @@ fn check_rules<T: Real>() {
         c(1.0, 1.0),
     );
     let dependent = LinearCombination::primitive(Ket::Sum)
-        + LinearCombination::primitive(Ket::Unit(Axis::A)).scaled(c::<T>(-1.0, 0.0))
-        + LinearCombination::primitive(Ket::Unit(Axis::B)).scaled(c(-1.0, 0.0));
+        + LinearCombination::<_, Complex<T>>::primitive(Ket::Unit(Axis::A))
+            .scaled(c::<T>(-1.0, 0.0))
+        + LinearCombination::<_, Complex<T>>::primitive(Ket::Unit(Axis::B))
+            .scaled(c::<T>(-1.0, 0.0));
     assert_eq!(dependent.len(), 3);
     assert_vector(state_value(&dependent), [c(0.0, 0.0); 3]);
     assert_complex(inner(&dependent, &dependent), c(0.0, 0.0));

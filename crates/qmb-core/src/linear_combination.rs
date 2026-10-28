@@ -86,10 +86,12 @@ impl<P, C> LinearCombination<P, C> {
     }
 
     /// Multiplies coefficients, without cloning operands or removing zero terms.
-    pub fn scaled(self, coefficient: C) -> Self
+    /// Converts the input once even for an empty sum; the input need not be Clone.
+    pub fn scaled(self, coefficient: impl Into<C>) -> Self
     where
         C: Clone + Mul<Output = C>,
     {
+        let coefficient = coefficient.into();
         Self {
             terms: self.terms.map(|term| ScaleExpr {
                 coefficient: multiply(term.coefficient, coefficient.clone()),

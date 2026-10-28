@@ -1,6 +1,6 @@
 # 今後の課題
 
-更新日: 2026-10-27
+更新日: 2026-10-28
 
 初期版の機能実装と受入確認を完了した時点で、後続へ延期した機能、設計上の課題、および未実施の検証をまとめる。具体的な実施日と優先順位は未定である。必須の設計見直しと、実装するかどうかも含めて検討する機能候補は区別する。
 
@@ -11,9 +11,9 @@
 State・Operator・Structure・Space の管理方法は、所有・共有・関連付け、および Geometry と空間の依存関係を含めて再検討し、より適切な設計へリファクタリングする。具体的な設計と実施時期は未定である。[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)に経緯を記録する。
 
 - **Operator と State の整理**：操作的量子論の枠組みで両者を一般の演算子の特別な形として整理できるかを検討し、数学的対象と API の対応、共通化する範囲と別に維持する範囲を理由とともに記録する。公開型や評価器を統合するかどうかも検討対象とする。論点と完了条件は[アーキテクチャ第10.1節](architecture.md#101-operator-と-state-の整理)に定める。
-- **Grading の情報保持と API**：fermion 系の実装時に、空間・primitive・合成則が担う情報と `ToSpace` への渡し方を具体化する。Operator と State の整理とは独立に検討する。詳細は[アーキテクチャ第10.2節](architecture.md#102-grading-の情報保持と-api)に定める。
+- **Grading の情報保持と API**：fermion 系の実装時に、空間・primitive・合成則が担う情報と空間構築・幾何接続への渡し方を具体化する。Operator と State の整理とは独立に検討する。詳細は[アーキテクチャ第10.2節](architecture.md#102-grading-の情報保持と-api)に定める。
 
-係数型・数値能力の整理、LocalStructure の廃止、ordinary な HilbertSpace の責任分離、および Chain の Index 列保持への移行は実装済みである。
+係数型・数値能力の整理、LocalStructure の廃止、ordinary な HilbertSpace の責任分離、および純粋な Chain と外部局所空間列への移行、QuantumSystem と SpinHalf<C> の構築 API は実装済みである。
 
 ## 2. 延期した機能と検討事項
 

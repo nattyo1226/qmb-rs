@@ -1,31 +1,17 @@
-//! Immutable site index assignments and geometric relations.
-//!
-//! A chain owns ordered index lists and its boundary condition. Space conversion
-//! is available separately; callers manage Hilbert spaces, grouping and local algebras.
+//! Pure chain geometry with borrowing connections to caller-owned spaces.
 
 #![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-extern crate alloc;
+use qmb_core::HilbertSpace;
 
-use alloc::vec::Vec;
-
-pub mod space;
-pub use space::ToSpace;
-
-/// Invalid chain assignments or site references.
+/// Failure to connect a chain to a site-ordered input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ChainError {
-    /// A site number is outside the chain.
-    #[error("site number is out of bounds")]
-    SiteOutOfBounds,
-    /// The supplied number of sites differs from the requested count.
+    /// The supplied number of sites differs from the chain's count.
     #[error("site count mismatch")]
     SiteCountMismatch,
-    /// An index occurs more than once, within or across sites.
-    #[error("duplicate factor index")]
-    DuplicateIndex,
 }
 
 /// Boundary condition for an undirected chain.
@@ -37,39 +23,34 @@ pub enum Boundary {
     Periodic,
 }
 
-/// An immutable chain owning ordered indices for each site.
-///
-/// Empty and variable-length sites are retained. Construction checks index
-/// uniqueness with equality alone; borrowing sites or relations requires no
-/// index cloning or generation. Cloning a chain requires `I: Clone` and copies
-/// the same identities without issuing new indices.
+/// Immutable site count and boundary condition, without indices or assignments.
 ///
 /// ```
-/// use qmb_geometry::{Boundary, Chain, NearestNeighborRelation};
-/// let chain = Chain::from_sites([vec![9, 3], vec![8], vec![]], Boundary::Open)?;
-/// assert_eq!(chain.site(0)?, [9, 3]);
-/// assert_eq!(chain.nn_pairs().map(|(&a, &b)| (a, b)).collect::<Vec<_>>(),
-///            [(9, 8), (3, 8)]);
+/// use qmb_geometry::{Boundary, Chain};
+/// let chain = Chain::new(3, Boundary::Open);
+/// let values = ["a", "b", "c"];
+/// assert_eq!(chain.nn_site_pairs_with(&values)?.collect::<Vec<_>>(),
+///            [(&"a", &"b"), (&"b", &"c")]);
 /// # Ok::<(), qmb_geometry::ChainError>(())
 /// ```
-#[derive(Clone)]
-pub struct Chain<I> {
-    sites: Vec<Vec<I>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Chain {
+    site_count: usize,
     boundary: Boundary,
 }
 
-impl<I> Chain<I> {
-    /// Borrows all index lists in site order.
-    pub fn sites(&self) -> &[Vec<I>] {
-        &self.sites
+impl Chain {
+    /// Constructs geometry without issuing indices; zero sites are allowed.
+    pub fn new(site_count: usize, boundary: Boundary) -> Self {
+        Self {
+            site_count,
+            boundary,
+        }
     }
 
-    /// Borrows a site's ordered indices, with an explicit bounds error.
-    pub fn site(&self, site: usize) -> Result<&[I], ChainError> {
-        self.sites
-            .get(site)
-            .map(Vec::as_slice)
-            .ok_or(ChainError::SiteOutOfBounds)
+    /// Returns the number of sites, including any assigned empty sites.
+    pub fn site_count(&self) -> usize {
+        self.site_count
     }
 
     /// Returns the boundary condition.
@@ -78,101 +59,85 @@ impl<I> Chain<I> {
     }
 
     /// Enumerates normalized, unique site pairs in lexicographic order.
+    /// Zero and one sites have no edges; two sites have one for either boundary.
     pub fn nn_site_pairs(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
-        let n = self.sites.len();
+        let n = self.site_count;
         let closing = n > 2 && self.boundary == Boundary::Periodic;
         (0..n.saturating_sub(1)).flat_map(move |i| {
             core::iter::once((i, i + 1)).chain((closing && i == 0).then_some((0, n - 1)))
         })
     }
-}
 
-impl<I: Eq> Chain<I> {
-    /// Moves existing indices into a chain, rejecting duplicates within or across sites.
-    pub fn from_sites<S: IntoIterator<Item = I>>(
-        sites: impl IntoIterator<Item = S>,
-        boundary: Boundary,
-    ) -> Result<Self, ChainError> {
-        let sites: Vec<Vec<I>> = sites
-            .into_iter()
-            .map(|site| site.into_iter().collect())
-            .collect();
-        let mut seen = Vec::new();
-        for index in sites.iter().flatten() {
-            if seen.contains(&index) {
-                return Err(ChainError::DuplicateIndex);
-            }
-            seen.push(index);
-        }
-        Ok(Self { sites, boundary })
-    }
-
-    /// Constructs a chain and checks the explicitly declared site count.
-    pub fn with_sites<S: IntoIterator<Item = I>>(
-        site_count: usize,
-        sites: impl IntoIterator<Item = S>,
-        boundary: Boundary,
-    ) -> Result<Self, ChainError> {
-        let chain = Self::from_sites(sites, boundary)?;
-        if chain.sites.len() != site_count {
+    /// Maps site pairs to borrowed elements, without cloning or inspecting them.
+    /// Validates the exact input length before returning even an empty iterator.
+    pub fn nn_site_pairs_with<'a, T>(
+        &'a self,
+        values: &'a [T],
+    ) -> Result<impl Iterator<Item = (&'a T, &'a T)> + 'a, ChainError> {
+        if values.len() != self.site_count {
             return Err(ChainError::SiteCountMismatch);
         }
-        Ok(chain)
+        Ok(self.nn_site_pairs().map(|(i, j)| (&values[i], &values[j])))
+    }
+
+    /// Enumerates all leaf combinations across neighboring sites, left outermost.
+    /// Empty sites retain their positions and contribute no leaf pairs.
+    /// Index uniqueness is the responsibility of space or model construction.
+    pub fn nn_pairs_with<'a, I>(
+        &'a self,
+        factors: &'a [HilbertSpace<I>],
+    ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
+    {
+        Ok(self.nn_site_pairs_with(factors)?.flat_map(|(left, right)| {
+            left.leaves()
+                .flat_map(move |a| right.leaves().map(move |b| (a, b)))
+        }))
+    }
+
+    /// Pairs corresponding leaf positions, stopping at the shorter site's end.
+    pub fn nn_pairs_by_pos_with<'a, I>(
+        &'a self,
+        factors: &'a [HilbertSpace<I>],
+    ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
+    {
+        Ok(self
+            .nn_site_pairs_with(factors)?
+            .flat_map(|(left, right)| left.leaves().zip(right.leaves())))
+    }
+
+    /// Reads the stored top-level partition as sites and borrows site pairs.
+    /// A leaf is one site; an empty tensor is zero sites. Nested grouping stays intact.
+    pub fn nn_site_pairs_on<'a, I>(
+        &'a self,
+        space: &'a HilbertSpace<I>,
+    ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
+    {
+        self.nn_site_pairs_with(sites_on(space))
+    }
+
+    /// Reads top-level sites and delegates to the Cartesian leaf-pair connection.
+    pub fn nn_pairs_on<'a, I>(
+        &'a self,
+        space: &'a HilbertSpace<I>,
+    ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
+    {
+        self.nn_pairs_with(sites_on(space))
+    }
+
+    /// Reads top-level sites and delegates to the positional leaf-pair connection.
+    pub fn nn_pairs_by_pos_on<'a, I>(
+        &'a self,
+        space: &'a HilbertSpace<I>,
+    ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
+    {
+        self.nn_pairs_by_pos_with(sites_on(space))
     }
 }
 
-impl<I: Default + Eq> Chain<I> {
-    /// Issues indices in site order and then within each site.
-    ///
-    /// `I::default()` must issue a fresh independent identity each time. Zero
-    /// degrees retain the requested number of empty sites; zero sites issue none.
-    pub fn new(
-        site_count: usize,
-        degrees_per_site: usize,
-        boundary: Boundary,
-    ) -> Result<Self, ChainError> {
-        Self::from_sites(
-            (0..site_count).map(|_| (0..degrees_per_site).map(|_| I::default())),
-            boundary,
-        )
-    }
-}
-
-/// A geometry capable of enumerating nearest-neighbor index pairs.
-pub trait NearestNeighborRelation {
-    /// Identity type of a basic factor.
-    type Index;
-    /// All combinations across each neighboring site pair, in site-pair order.
-    fn nn_pairs(&self) -> impl Iterator<Item = (&Self::Index, &Self::Index)> + '_;
-    /// Matching index positions across each site pair, stopping at the shorter side.
-    fn nn_pairs_by_pos(&self) -> impl Iterator<Item = (&Self::Index, &Self::Index)> + '_;
-}
-
-/// Cartesian index pairs, left outer and right inner, borrowing both lists.
-pub fn index_pairs<'a, I>(
-    left: &'a [I],
-    right: &'a [I],
-) -> impl Iterator<Item = (&'a I, &'a I)> + 'a {
-    left.iter()
-        .flat_map(move |a| right.iter().map(move |b| (a, b)))
-}
-
-/// Zips index positions, stopping at the shorter list.
-pub fn index_pairs_by_pos<'a, I>(
-    left: &'a [I],
-    right: &'a [I],
-) -> impl Iterator<Item = (&'a I, &'a I)> + 'a {
-    left.iter().zip(right.iter())
-}
-
-impl<I> NearestNeighborRelation for Chain<I> {
-    type Index = I;
-    fn nn_pairs(&self) -> impl Iterator<Item = (&I, &I)> + '_ {
-        self.nn_site_pairs()
-            .flat_map(|(i, j)| index_pairs(&self.sites[i], &self.sites[j]))
-    }
-    fn nn_pairs_by_pos(&self) -> impl Iterator<Item = (&I, &I)> + '_ {
-        self.nn_site_pairs()
-            .flat_map(|(i, j)| index_pairs_by_pos(&self.sites[i], &self.sites[j]))
+fn sites_on<I>(space: &HilbertSpace<I>) -> &[HilbertSpace<I>] {
+    if space.factor_index().is_some() {
+        core::slice::from_ref(space)
+    } else {
+        space.children().as_slice()
     }
 }

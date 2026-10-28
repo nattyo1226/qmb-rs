@@ -1,67 +1,129 @@
-use qmb_core::{HilbertSpace, SpaceError};
-use qmb_geometry::{Boundary, Chain, ToSpace};
+use qmb_core::HilbertSpace as H;
+use qmb_geometry::{Boundary::*, Chain, ChainError};
 
-// Clone and Eq suffice; no Default, Copy, Hash or Ord is needed for conversion.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Id(usize);
+fn ids<'a>(pairs: impl Iterator<Item = (&'a H<u8>, &'a H<u8>)>) -> Vec<(u8, u8)> {
+    pairs
+        .map(|(a, b)| (*a.factor_index().unwrap(), *b.factor_index().unwrap()))
+        .collect()
+}
 
 #[test]
-fn conversion_preserves_site_grouping_identity_order_and_empty_sites() {
-    let chain = Chain::from_sites(
-        [vec![Id(9), Id(3)], vec![], vec![Id(8)]],
-        Boundary::Periodic,
-    )
+fn nested_variable_length_sites_cartesian_and_positional_pairs_keep_order() {
+    let a = H::factor(9);
+    let b = H::factor(3);
+    let factors = [
+        H::tensor([a.clone(), H::tensor([H::unit(), b.clone()]).unwrap()]).unwrap(),
+        H::tensor([H::factor(8), H::factor(2), H::factor(7)]).unwrap(),
+        H::unit(),
+        H::factor(6),
+    ];
+    let chain = Chain::new(4, Periodic);
+    assert_eq!(
+        ids(chain.nn_pairs_with(&factors).unwrap()),
+        [
+            (9, 8),
+            (9, 2),
+            (9, 7),
+            (3, 8),
+            (3, 2),
+            (3, 7),
+            (9, 6),
+            (3, 6)
+        ]
+    );
+    assert_eq!(
+        ids(chain.nn_pairs_by_pos_with(&factors).unwrap()),
+        [(9, 8), (3, 2), (9, 6)]
+    );
+    let (left, right) = chain.nn_pairs_with(&factors).unwrap().next().unwrap();
+    assert!(std::ptr::eq(left, factors[0].children().next().unwrap()));
+    assert!(left.shares_node_with(&a));
+    assert!(std::ptr::eq(right, factors[1].children().next().unwrap()));
+    let full = H::tensor(factors.iter().cloned()).unwrap();
+    assert_eq!(
+        ids(chain.nn_pairs_on(&full).unwrap()),
+        ids(chain.nn_pairs_with(&factors).unwrap())
+    );
+    assert_eq!(
+        ids(chain.nn_pairs_by_pos_on(&full).unwrap()),
+        ids(chain.nn_pairs_by_pos_with(&factors).unwrap())
+    );
+    for ((a, b), (i, j)) in chain
+        .nn_site_pairs_on(&full)
+        .unwrap()
+        .zip(chain.nn_site_pairs())
+    {
+        assert!(std::ptr::eq(a, &full.children().as_slice()[i]));
+        assert!(std::ptr::eq(b, &full.children().as_slice()[j]));
+        assert!(a.shares_node_with(&factors[i]));
+    }
+    assert_eq!(full.children().count(), 4);
+    assert_eq!(full.children().next().unwrap().children().count(), 2);
+}
+
+#[test]
+fn on_reads_top_level_partition_and_distinguishes_empty_and_singleton_tensors() {
+    let leaf = H::<u8>::factor(0);
+    let unit = H::unit();
+    let single_empty = H::tensor([unit.clone()]).unwrap();
+    let single_leaf = H::tensor([leaf.clone()]).unwrap();
+    let nested = H::tensor([single_leaf.clone()]).unwrap();
+    for (space, count) in [
+        (&leaf, 1),
+        (&unit, 0),
+        (&single_empty, 1),
+        (&single_leaf, 1),
+        (&nested, 1),
+    ] {
+        let chain = Chain::new(count, Open);
+        assert_eq!(chain.nn_site_pairs_on(space).unwrap().count(), 0);
+        assert_eq!(chain.nn_pairs_on(space).unwrap().count(), 0);
+        assert_eq!(chain.nn_pairs_by_pos_on(space).unwrap().count(), 0);
+        let wrong = Chain::new(count + 1, Open);
+        assert_eq!(
+            wrong.nn_site_pairs_on(space).err(),
+            Some(ChainError::SiteCountMismatch)
+        );
+        assert_eq!(
+            wrong.nn_pairs_on(space).err(),
+            Some(ChainError::SiteCountMismatch)
+        );
+        assert_eq!(
+            wrong.nn_pairs_by_pos_on(space).err(),
+            Some(ChainError::SiteCountMismatch)
+        );
+    }
+    let full = H::tensor([
+        H::tensor([H::factor(1), H::factor(2)]).unwrap(),
+        H::factor(3),
+    ])
     .unwrap();
-    let space = chain.to_space().unwrap();
-    let again = chain.to_space().unwrap();
-    assert_eq!(space.indices().map(|i| i.0).collect::<Vec<_>>(), [9, 3, 8]);
-    assert!(space.is_compatible_with(&again));
-    let sites: Vec<_> = space.children().collect();
-    assert_eq!(sites.len(), 3);
-    assert_eq!(sites[0].children().count(), 2);
-    assert_eq!(sites[0].indices().map(|i| i.0).collect::<Vec<_>>(), [9, 3]);
-    assert!(sites[1].indices().next().is_none());
-    assert_eq!(sites[2].factor_index(), Some(&Id(8)));
-    assert_eq!(chain.site(0).unwrap(), [Id(9), Id(3)]);
-    assert!(chain.site(1).unwrap().is_empty());
-    assert_eq!(chain.site(2).unwrap(), [Id(8)]);
-    assert_eq!(chain.boundary(), Boundary::Periodic);
+    assert_eq!(
+        Chain::new(3, Open).nn_pairs_on(&full).err(),
+        Some(ChainError::SiteCountMismatch)
+    );
+    assert_eq!(
+        ids(Chain::new(2, Open).nn_pairs_on(&full).unwrap()),
+        [(1, 3), (2, 3)]
+    );
 }
 
 #[test]
-fn empty_chain_and_empty_sites_give_unit_spaces_without_erasing_sites() {
-    let empty = Chain::<Id>::from_sites(Vec::<Vec<Id>>::new(), Boundary::Open).unwrap();
-    let space = empty.to_space().unwrap();
-    assert!(space.is_compatible_with(&HilbertSpace::unit()));
-    assert_eq!(space.children().count(), 0);
-    let chain = Chain::<Id>::from_sites([vec![], vec![], vec![]], Boundary::Periodic).unwrap();
-    let space = chain.to_space().unwrap();
-    assert!(space.is_compatible_with(&HilbertSpace::unit()));
-    assert_eq!(space.children().count(), 3);
-    assert_eq!(chain.sites().len(), 3);
-}
-
-#[test]
-fn converted_space_outlives_the_chain_and_keeps_borrowed_indices() {
-    let names = [String::from("a"), String::from("b")];
-    let space = {
-        let chain = Chain::from_sites(names.iter().map(|s| [s.as_str()]), Boundary::Open).unwrap();
-        chain.to_space().unwrap()
-    };
-    assert_eq!(space.indices().copied().collect::<Vec<_>>(), ["a", "b"]);
-}
-
-#[test]
-fn trait_itself_requires_neither_index_clone_nor_equality() {
+fn leaf_connections_need_neither_eq_nor_clone_and_validate_empty_cases() {
     struct Opaque;
-    struct Existing(HilbertSpace<Opaque>);
-    impl ToSpace for Existing {
-        type Index = Opaque;
-        fn to_space(&self) -> Result<HilbertSpace<Opaque>, SpaceError> {
-            Ok(self.0.clone())
+    let factors = [H::factor(Opaque), H::factor(Opaque)];
+    let chain = Chain::new(2, Open);
+    let (a, b) = chain.nn_pairs_with(&factors).unwrap().next().unwrap();
+    assert!(std::ptr::eq(a, &factors[0]));
+    assert!(std::ptr::eq(b, &factors[1]));
+    assert_eq!(chain.nn_pairs_by_pos_with(&factors).unwrap().count(), 1);
+    for n in 0..=4 {
+        let chain = Chain::new(n, Open);
+        for count in 0..=5 {
+            let sites: Vec<_> = (0..count).map(|_| H::<Opaque>::unit()).collect();
+            let expected = (n != count).then_some(ChainError::SiteCountMismatch);
+            assert_eq!(chain.nn_pairs_with(&sites).err(), expected);
+            assert_eq!(chain.nn_pairs_by_pos_with(&sites).err(), expected);
         }
     }
-    let source = Existing(HilbertSpace::factor(Opaque));
-    let space = source.to_space().unwrap();
-    assert!(space.shares_node_with(&source.0));
 }

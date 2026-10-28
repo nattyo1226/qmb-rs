@@ -238,10 +238,31 @@ Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要�
 | 対象 | 主な API と契約 |
 | --- | --- |
 | 局所式の配置 | `LocalState::at(&factor)`・`LocalOperator::at(&factor)` は因子への配置を検証し、局所式を共有する。状態は所属空間を持ち、演算子は未束縛とする |
-| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`add`・`tensor`・`tensor_product`・`scaled` と、`space`・`domain`・`codomain` を提供する |
+| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`try_sum`・`add`・`tensor`・`try_tensor`・`tensor_product`・`scaled` と、`space`・`domain`・`codomain` を提供する |
 | `State<I, S, O, C>` の演算・評価 | `act`・`act_in`・`evaluate`・`inner_product`・`norm_squared`・`expectation`・`expectation_in` を提供する。作用は遅延構築する |
-| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`add`・`product_all`・`product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
+| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`try_sum`・`add`・`product_all`・`try_product_all`・`product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
 | `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hilbert_schmidt_inner_product`・`hilbert_schmidt_inner_product_in` を提供する。交換子は遅延構築する |
 | エラー | 空間の重複には `SpaceError`、複合式の接続・評価には `ExpressionError`、次元取得には `DimensionOverflow` を使う |
 
 Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
+
+## 11. QuantumSystem の構築入口と fallible 集約（2026-10-28）
+
+QuantumSystem は状態・演算子 primitive と係数型を関連付け、以下の既定メソッドから既存の core 式を構築する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
+
+| 入口 | 入力・契約 |
+| --- | --- |
+| state_tensor_at | 葉と状態 primitive の組の列。入力順に tensor 合成し、重複 Index は拒否。空入力は単位状態 |
+| operator_product_at | 葉と演算子 primitive の組の列。同一 Index の再登場を許可し、入力順に積を構築。右端が先に作用。空入力は未束縛 identity |
+| state_sum / try_state_sum | 明示空間と状態列。空入力はその空間の zero |
+| operator_sum / try_operator_sum | 演算子列。空入力は未束縛 zero |
+| state_tensor / try_state_tensor | 配置済み状態列の入力順 tensor。空入力は単位状態 |
+| operator_product / try_operator_product | 配置済み演算子列の入力順の積。空入力は未束縛 identity |
+
+_at は配置も行う入口を意味し、裸の primitive の列ではなく (&factor, primitive) の IntoIterator を受け取る。配置先は葉のみで、Tensor の自動展開はしない。演算子は明示的に bind するまで未束縛であり、spectator を含む全作用空間を積の配置先から自動構築しない。入力スライスや配置先の変数の生存期間を越えて、共有した式・空間を保持できる。
+
+try_ は Result 入力を表し、通常版も複合式では Result を返す。エラー型は ExpressionError に固定する。最初の入力 Err をそのまま返し、その後は Iterator の next を呼ばない。全入力が Ok の場合だけ合成を検証するため、入力エラーは先の項の空間不整合・重複より優先する。事前に配列・Vec を作った場合の生成処理や副作用は巻き戻さない。全入力成功後の合成検証が失敗する場合も、入力生成は最後まで行う。
+
+State::try_sum・try_tensor、Operator::try_sum・try_product_all を基礎 API として公開し、QuantumSystem はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
+
+各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の QuantumSystem 補助、局所式の集約用転送メソッドは後続候補として維持する。

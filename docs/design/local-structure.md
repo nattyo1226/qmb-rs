@@ -1,6 +1,6 @@
 # 局所 primitive の設計
 
-更新日: 2026-10-27
+更新日: 2026-10-28
 
 ## 1. 対象と検討状況
 
@@ -21,7 +21,7 @@
 | 作用の型対応 | 評価時の `S: Act<C, Operator = O, Term = S>` と `O: Adjoint<C, Term = O>` 等 |
 | Scalar の整合性 | C と各操作の bound。異なる精度を暗黙に混ぜない |
 | 基底 | `Basis<S, C>`・`Basis<O, C>`。列挙数は対象 primitive の span の次元と一致する |
-| 因子構造・幾何 | `HilbertSpace<I>` が因子順序・grouping、Chain が Site ごとの Index 列と境界条件を保持する。Chain も移行済み |
+| 因子構造・幾何 | `HilbertSpace<I>` が因子順序・grouping、Chain がサイト数と境界条件だけを保持する。配置は外部の局所空間列で指定する |
 
 SpanDimension は `fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow>` として実装した。次元を整数化できない場合は取得時にエラーを返す。`state_basis_len<S>()`・`operator_basis_len<O>()` は対象の次元をそのまま返す。Operator の d² を再度二乗しない。能力は次元を使う操作だけが要求する。
 
@@ -67,7 +67,7 @@ Index・Site・表示名・選択基底とその列挙順序・メモリ上の o
 
 ## 6. 後続事項
 
-一般の U→V の写像と State／Operator の型の統合は初期版実装後、Grading の情報保持・API は fermion 系の実装時に検討する。ordinary な空間の責任分離は実装済みである。Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と空間保持を廃止する方針を2026-10-26に採用した。Chain の実装移行は2026-10-27に実施し、契約は[Chain の設計](geometry.md)に従う。異種代数の型消去や実行時の表現パラメータを今回の移行には追加しない。
+一般の U→V の写像と State／Operator の型の統合は初期版実装後、Grading の情報保持・API は fermion 系の実装時に検討する。ordinary な空間の責任分離は実装済みである。Chain はサイト数と境界条件だけを保持し、外部の局所空間列を借用する構成へ2026-10-28に移行した。契約は[Chain の設計](geometry.md)に従う。異種代数の型消去や実行時の表現パラメータを今回の移行には追加しない。
 
 ## 7. LocalStructure 廃止の採用方針（2026-10-26）
 

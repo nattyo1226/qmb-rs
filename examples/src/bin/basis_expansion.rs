@@ -1,26 +1,26 @@
 //! Expand ordinary expressions, then obtain sparse coordinates for numeric export.
 
 use num_complex::Complex;
-use qmb_core::{HilbertSpace, LocalOperator, LocalState};
+use qmb_core::{HilbertSpace, QuantumSystem};
 use qmb_spin_half::{
-    CartesianBasis, LadderBasis, SpinHalfOperator as Op, SpinHalfState as Ket, SzBasis,
+    CartesianBasis, LadderBasis, SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket, SzBasis,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    type S = LocalState<Ket, Op, Complex<f64>>;
-    type O = LocalOperator<Op, Complex<f64>>;
+    type Spin = SpinHalf<Complex<f64>>;
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let up_down = S::primitive(Ket::Up)
-        .at(&a)?
-        .tensor_product(&S::primitive(Ket::Down).at(&b)?)?;
-    let down_up = S::primitive(Ket::Down)
-        .at(&a)?
-        .tensor_product(&S::primitive(Ket::Up).at(&b)?)?;
-    let state = up_down
-        .scaled(Complex::new(2.0, 0.0))
-        .add(&up_down.scaled(Complex::new(3.0, 0.0)))?
-        .add(&down_up.scaled(Complex::new(-1.0, 0.0)))?;
+    let up_down = Spin::state_tensor_at([(&a, Ket::Up), (&b, Ket::Down)])?;
+    let down_up = Spin::state_tensor_at([(&a, Ket::Down), (&b, Ket::Up)])?;
+    let space = a.tensor_product(&b)?;
+    let state = Spin::state_sum(
+        &space,
+        [
+            up_down.scaled(2.0),
+            up_down.scaled(3.0),
+            down_up.scaled(-1.0),
+        ],
+    )?;
 
     // The result remains an ordinary State with the original space.
     let expanded = state.expand_in(&SzBasis)?;
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Re-expansion needs no record of the previous basis in the expression.
-    let raising = O::primitive(Op::SPlus).expand_in(&CartesianBasis)?;
+    let raising = Spin::operator(Op::SPlus).expand_in(&CartesianBasis)?;
     let raising = raising.expand_in(&LadderBasis)?;
     let coordinates = raising.coordinates_in(&LadderBasis)?;
     println!(

@@ -1,6 +1,6 @@
 # qmb-rs 要件
 
-更新日: 2026-10-27
+更新日: 2026-10-28
 
 ## 1. 文書の目的と責任分離
 
@@ -8,7 +8,7 @@
 
 2026-10-26 に LocalStructure の廃止方針を採用した。primitive の意味・規則は S・O の型と各能力の実装で定め、追加の定義ラベルは設けない。次元は primitive 型全体の span、恒等元は演算子 primitive O の値として提供する。L による関連付け・一致判定は廃止し、[局所構造の設計第7節](design/local-structure.md#7-localstructure-廃止の採用方針2026-10-26)で置き換える。製品コード・テスト・利用例を移行済みである。
 
-同日に、Chain は Site ごとの Index 列と境界条件を直接保持し、Geometry 構造体と HilbertSpace の保持を廃止する方針を採用した。製品コード・テスト・利用例は2026-10-27に移行した。以下の幾何・配置の要件は移行後の契約を表す。詳細は[Chain の設計](design/geometry.md)に記録する。
+2026-10-28 に、Chain をサイト数と境界条件だけの幾何へ変更し、配置を外部の局所空間列へ移した。以下は移行後の契約であり、詳細は[Chain の設計](design/geometry.md)に記録する。
 
 初期版の提供範囲と完成条件は[アーキテクチャ第9節](architecture.md#9-初期版の提供範囲と完成条件)に定め、9 節にその概要と制限をまとめる。後続の課題は[今後の課題](future-work.md)にまとめる。本書には後続機能の数学的契約も含め、機能一覧全体を初期版の必須実装にはしない。公開 API、Rust の具体的な型や内部実装は、本文で採用済みの方針に従って各段階で具体化する。
 
@@ -24,7 +24,7 @@ qmb-rs は、量子系の Hilbert 空間、状態、および演算子を代数�
 
 以下の対象ごとに、定義、操作、制約、および検証条件をまとめる。局所構造から埋め込み・評価までと、基底・係数データの構築は代数 core が担当し、幾何・モデル構築と数値 backend への export はその上に接続する。
 
-代数 core は `qmb-core` に集約する。具体的代数は `qmb-spin-half` などの専用 crate、幾何と Site への配置および空間への変換は `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half` が担当する。利用例は各 crate を直接利用する workspace の [examples パッケージ](../examples/README.md)に置く。共通の型・式木・評価・基底処理を core の module として分離し、具体的代数には独自の式木・evaluator を要求しない。責任と依存関係は[アーキテクチャ](architecture.md#21-crate-の構成)に定める。
+代数 core は `qmb-core` に集約する。具体的代数は `qmb-spin-half` などの専用 crate、幾何と外部の Site 列への借用接続は `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half` が担当する。利用例は各 crate を直接利用する workspace の [examples パッケージ](../examples/README.md)に置く。共通の型・式木・評価・基底処理を core の module として分離し、具体的代数には独自の式木・evaluator を要求しない。責任と依存関係は[アーキテクチャ](architecture.md#21-crate-の構成)に定める。
 
 | 対象 | 担当すること | 記述先 |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ spin-1/2 を標準例としてこの抽象化を検証する。spin-S、qudit、
 | 複合代数の合成機構 | 因子への埋め込み、因子間の交換・grading、順序管理、各操作の合成、複合基底の構成を行う |
 | 局所複合代数 | 内部自由度と順序を保持し、合成機構へ委譲して通常の局所代数と同じ操作を提供する |
 | Hilbert 空間の木による grouping | 子空間を括り、基本因子と階層の対応を保持する |
-| Site への配置 | Chain が Site 順の Index 列を保持し、空間・grouping・全体の因子順序は利用側が管理する |
+| Site への配置 | Chain はサイト数と境界条件のみを保持し、利用側が Site 順の局所空間列を渡す |
 | 大域空間と埋め込み | 基本因子の Index・順序・局所構造と、積の種類・構造を保持する |
 
 複合 Hilbert 空間は、局所構造に相当する整合性の責任を持つ。子の構造・因子順序・積の種類から数学的能力を合成し、共通機構が局所契約を保存する合成則を実現する。独立した複合構造型は要求しない。能力一覧と合成・整合性の詳細は、[埋め込み・複合空間の式と数学的能力](design/composite-expression.md)に定める。
@@ -219,9 +219,9 @@ Tensor の次元は子空間の次元の積とする。Index を持つ一次元�
 
 ### 3.3. 内部因子の展開と grouping
 
-局所空間の tensor product から大域空間を構成するときは、複合空間を子として持つ木構造を保持できる。Chain は Site ごとの Index 列を保持し、利用側が空間の grouping と因子順序を管理する。初期版では内部ラベルを導入しない。利用者は構築時に保持した空間・自由度を演算の対象として指定でき、core は必要な検証・評価時に木の基本因子をたどる。任意の因子集合を指定した部分系の取得操作は要求しない。
+局所空間の tensor product から大域空間を構成するときは、複合空間を子として持つ木構造を保持できる。Chain はサイト数と境界条件だけを保持し、利用側が Site 順の局所空間列と grouping・因子順序を管理する。初期版では内部ラベルを導入しない。利用者は構築時に保持した空間・自由度を演算の対象として指定でき、core は必要な検証・評価時に木の基本因子をたどる。任意の因子集合を指定した部分系の取得操作は要求しない。
 
-Hilbert 空間は、Tensor の直下の子空間を構築順序で列挙する能力と、全葉の Index を因子順序で列挙する能力を提供する。入れ子を保持して子を読む操作と、再帰的に全 Index を読む操作を区別する。Factor の Index は一要素、空の Tensor はゼロ要素とし、Iterator として利用できる遅延列挙で、空間・Index・順序を変更しない。式・基底・行列は展開しない。詳細は [構成要素の列挙](design/hilbert-space.md#7-構成要素の列挙と不変構造の共有)に定める。
+Hilbert 空間は、Tensor の直下の子空間を構築順序で列挙する能力、全葉の実際の Factor ハンドルを借用する `leaves()`、および全葉の Index を因子順序で列挙する能力を提供する。入れ子を保持して子を読む操作と、再帰的に全 Index を読む操作を区別する。Factor の Index は一要素、空の Tensor はゼロ要素とし、Iterator として利用できる遅延列挙で、空間・Index・順序を変更しない。式・基底・行列は展開しない。詳細は [構成要素の列挙](design/hilbert-space.md#7-構成要素の列挙と不変構造の共有)に定める。
 
 同じ局所構造 `L` の内部自由度 `α: L` と `β: L` を site `i` に配置した場合、具体的な因子を `(i,α)` と `(i,β)` として参照できる。この表記の α・β は説明用の記号であり、内部ラベル API や Index の値・生成方法を定めるものではない。実際の参照には因子の順序と保持した Factor を用いる。各基本因子は独立に発行した Index を持ち、参照時にはそれを保持する。
 
@@ -833,7 +833,7 @@ A_{mn}=\langle e_m^{\mathrm{out}}|A|e_n^{\mathrm{in}}\rangle.
 - nearest-neighbor 関係
 - 関係の列挙
 
-Site は Chain が保持する外側の Vec の位置を表す usize で指定し、構築後に順序を変更しない。専用の SiteId や所属トークンは導入せず、Chain を跨ぐ同一性・混用を管理しない。範囲外は検出する。詳細は [Chain・Site と自由度の配置](design/geometry.md)に定める。
+Site は `0..chain.site_count()` の位置番号 usize で指定する。専用の SiteId や所属トークンは設けず、外部列の長さを接続時に検証する。詳細は [Chain・Site と自由度の配置](design/geometry.md)に定める。
 
 一次元 chain は、一般的な site 集合と関係からなる物理空間を構築するための便利な生成手段として位置づける。幾何学的な関係と Hamiltonian の結合は同一視しない。物理空間は関係を提供し、モデル構築処理がその関係に演算子と係数を割り当てる。
 
@@ -865,30 +865,24 @@ Periodic chain では、次の規約を採用する。
 
 ### 7.3. 自由度の配置とモデル構築
 
-Chain は局所代数に依存せず、Site ごとの Index 列 `Vec<Vec<I>>` と境界条件を直接保持する。Geometry 構造体は廃止し、各 Site の部分空間・全 Hilbert 空間・grouping を保持しない。構築経路は Site ごとの既存の所有 Index 列を渡すものと、Site 数・各 Site 共通の自由度数から Index を発行するものの二つとする。
+Chain はサイト数と境界条件だけを保持し、Index の入力・発行・空間への変換は行わない。利用側が Site 順の局所空間列を構築し、借用して接続する。一要素は一 Site であり、葉・入れ子・複数葉・単項 Tensor・空 Site を受け入れる。
 
-構築時は `I: Eq` で Site 内・Site 間の Index 重複を拒否する。所有入力を移動して取り込め、保持・借用列挙には Clone・Default を要求しない。新規発行時のみ `I: Default` を要求して `I::default()` を呼び、この用途の Default は新しい独立した Index を発行する契約とする。所有データの複製や、借用 Index から別の Factor を構築する操作にだけ Clone を要求できる。Clone／Copy は同じ識別値の複製であり、新規発行ではない。Chain は UUID や具体的代数の規則に依存しない。
+`nn_site_pairs_with` は任意の入力要素への参照対、`nn_pairs_with` は最近接 Site 間の全葉の直積、`nn_pairs_by_pos_with` は短い方までの葉の位置対応を返す。いずれも Iterator を返す前に列長の完全一致を検証し、要素や Index の Clone・Eq を要求しない。`_on` の入口は全空間の保存されたトップレベル分割を Site と読み、対応する `_with` へ委譲する。葉は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site と読む。
 
-別の Chain や空間で同じ Index を再利用できる。全空間との対応・未配置・必要数に対する過不足は、その空間と接続するモデル構築側・利用側が検証する。空間の構築・保持・因子順序・grouping・局所式の配置と束縛も利用側が担当する。Site 順と全空間の因子順序は異なり得るものとし、既存空間の順序・grouping を暗黙に変更しない。接続時に Index を再発行しない。
+標準モデルの入口は `SpinHalf<C>::xyz`・`heisenberg`・`neel` とし、Chain と局所空間列を受け取る。全空間の引数は不要である。各関数は列長と全局所空間にわたる Index 重複を辺の有無によらず検証し、I には Eq のみを要求する。局所空間ハンドルを共有して Site 順に tensor した空間へ Hamiltonian を束縛し、内部 grouping と相互作用に現れない Site も保持する。別途存在する全空間の root・上位 grouping・異なる因子順序を復元する契約は持たない。既存状態・行列の暗黙の並べ替えは行わない。
 
-空間への変換能力は独立した拡張 trait `ToSpace` と `to_space` メソッドで提供する。Chain では `I: Clone + Eq` を変換実装にだけ要求し、元の対象を借用して同じ Index を持つ空間を Site 順・Site 内の Index 順で構築する。同じ Arc 節点の返却は保証せず、生成した空間は利用側が保持する。Grading に必要な情報の渡し方は fermion 系の実装時に具体化する。詳細は[ToSpace の契約](design/geometry.md#61-空間への変換能力-tospace)に従う。
-
-Site 数ゼロと自由度数ゼロの Site を認め、それぞれ空の外側 Vec・空の内側 Vec で表す。空 Site を削除したり、入力不足から暗黙に補ったりしない。単位空間や空 Tensor は必要な利用側が構築する。配置は構築後に不変とする。Chain 内の自由度は Site の位置と Site 内の Index 順序で参照し、内部ラベルは導入しない。
-
-Chain は近接 Site ペアを列挙する。関係ごとの trait を設け、NearestNeighborRelation の `nn_pairs()` は Site 間の Index 全組合せ、`nn_pairs_by_pos()` は同じ位置同士を短い方まで借用列挙する。片側が空ならペアなしとし、Site ペア順と Site 内の Index 順序を維持する。相互作用項の演算子・係数の選択はモデル構築側が行う。構築・列挙・空間接続の契約は [Chain の設計](design/geometry.md)に従う。Step 4 の空間保持 API は移行前の記録とする。
+空 Site は位置を保持し、葉ペアを生成せず、前後を直接接続し直さない。Index 発行は利用側で明示的に行い、共有による Index の Clone・再発行は不要である。契約とエラー型は[Chain の設計](design/geometry.md)に従う。
 
 XYZ Hamiltonian は `−Σ(Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j)` の負符号の規約とし、Heisenberg Hamiltonian は `Jx = Jy = Jz = J` の等方的な特別例として構築する。いずれも特別な内部表現を持つ演算子型とせず、一般的な局所演算子積の有限和として表現する。nearest-neighbor 関係に演算子項を割り当てるモデル構築用の便利な処理を、その一般表現の上に提供できるものとする。
 
-Neel 状態は専用の状態型とせず、site ごとに局所状態を交互に割り当てた積状態として表現する。Neel 状態を作る便利な構築処理を提供することは妨げない。先頭 site を `|up>` とするか `|down>` とするかは構築時に指定できる。Heisenberg・Neel utility は各 Site に一つの spin Factor を持つ配置を対象とし、空 Site・複数自由度の Site はエラーとする。0-site では単位状態と zero Hamiltonian を構築する。
+Neel 状態は専用の状態型とせず、site ごとに局所状態を交互に割り当てた積状態として表現する。Neel 状態を作る便利な構築処理を提供することは妨げない。先頭 site を `|up>` とするか `|down>` とするかは構築時に指定できる。XYZ・Heisenberg は最近接 Site 間の葉の全組み合わせを結合し、Site 内の葉間には項を追加しない。Neel は Site の全葉に同じ向きを置き、空 Site も偶奇に含める。0-site と全 Site が空の場合は単位状態と単位空間に束縛した zero Hamiltonian を構築する。
 
 少なくとも以下を検出してエラーとして扱う。
 
-- 存在しない site への局所状態または演算子の配置
-- 一つの積状態における、同一 Index への矛盾した局所状態の割り当て
-- 範囲外の Site 位置番号の使用
-- Chain 内での Index の重複、および Site 数を別途指定した経路での入力数不一致
-- 空間との接続時の Index の未配置・不足・不一致
-- Site に所属しない Index の指定
+- 配置先が葉でない局所状態・演算子の配置
+- 同一 Index を重ねる積状態・空間の構築
+- 外部列と Chain の Site 数の不一致（0・1 Site も含む）
+- モデル入力の局所空間列の全葉にわたる Index 重複
 
 ### 7.4. 検証条件
 
@@ -903,9 +897,9 @@ Hermiticity と解析的なエネルギー期待値の検証には、実数の�
 - 構築した Heisenberg Hamiltonian が Hermitian である。
 - 代数的な演算子作用および内積から得た期待値が解析解と一致する。
 
-配置について、Clone・Default のない Index の所有入力・借用列挙、Site 内・Site 間の重複拒否、発行・取得・複製での識別値の保持、範囲外・Site 数不一致を検証する。空間接続側では Factor・入れ子・空の空間との対応、未配置・過不足を検証する。二つの Index ペア列挙の順序・可変長・空も確認する。内部ラベルと Chain を跨ぐ所属チェックは対象外とする。
+配置について、非 Clone・非 Eq の入力要素への借用、列長の過不足、全葉の Index 重複拒否、入れ子・空・可変長の局所空間を検証する。両葉ペア列挙の順序、トップレベルと全葉の区別、`_on` と `_with` の一致も確認する。
 
-初期版の Chain では、Site と Site 内の Index 順序、空 Site、各 Site 共通の自由度数による発行経路を検証する。モデル構築側では利用側で保持する grouping、新しく構成する全空間の因子順序、および Site 順と異なる既存全空間への接続を検証する。
+モデル構築側は局所 grouping の共有、Site 順に生成する全空間の因子順序、複数葉の全組み合わせ結合、空 Site の偶奇と非再接続、0 Site・全空の場合、および一葉の場合の従来の数値結果との一致を検証する。
 
 ## 8. 代表ユースケースと受入条件
 
@@ -957,7 +951,7 @@ H = -J \sum_{\langle i,j\rangle}
 
 初期版は、spin-1/2 の 1D Chain を代数的に構築・評価し、密・疎の数値表現へ変換する一連の流れを提供する。局所構造の拡張、ordinary な Factor・入れ子 Tensor、状態・演算子の合意済みの演算と full trace、二種類の演算子基底と tensor product 基底、通常の式木への展開・再展開と座標取得、および単精度・倍精度の複素数を含む。
 
-標準の状態 primitive は `up, down`、演算子 primitive は `I, Sx, Sy, Sz, S+, S-`、状態基底は `{up,down}`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。幾何は open / periodic な 1D Chain と Site ごとの Index 配置を扱い、入れ子空間との接続は利用側が管理する。標準提供する局所構造は spin-1/2 のみとし、非公開の別の局所代数・非正規直交基底で共通機構の拡張性を検証する。
+標準の状態 primitive は `up, down`、演算子 primitive は `I, Sx, Sy, Sz, S+, S-`、状態基底は `{up,down}`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。幾何は open / periodic な 1D Chain と外部の Site 順局所空間列への接続を扱い、入れ子空間との接続は利用側が管理する。標準提供する局所構造は spin-1/2 のみとし、非公開の別の局所代数・非正規直交基底で共通機構の拡張性を検証する。
 
 一つの系の全基本因子は同じ primitive 型 S・O とする。非公開の別の局所代数も独立した同種の系として検証し、spin と混在させない。
 
@@ -1037,3 +1031,17 @@ Fermion などについて本文書で定める合成・評価・検証規約は
 | [TeNPy: GroupedSite](https://tenpy.readthedocs.io/en/stable/reference/tenpy.networks.site.GroupedSite.html) | 複数の局所空間をまとめて一つの site として扱い、Fermion の内部符号を含む局所演算子を構成する機構 |
 
 参考資料で採用されている仕様と、本文書で定める qmb-rs の仕様は同一とは限らない。Fermion の trace は 5.4 節の通常の trace の規約に従い、外部ライブラリとの責任分離は 6.5 節に従う。
+
+## 11. 型選択の構築 API
+
+`qmb_core::QuantumSystem` は `State`・`Operator`（primitive 型）・`Coeff` を関連型とし、`state(primitive)`・`operator(primitive)` の既定メソッドで既存の局所式を返す。構築時に Clone・数値演算・Act などを要求せず、評価の能力は各操作で要求する。空間・幾何・Index 発行は担わず、選択した系の識別子を式へ加えない。既存 constructor の直接利用も維持する。
+
+`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は関連型を既存の core 式型へ投影する別名である。`qmb_spin_half::SpinHalf<C>` は精度の既定値を持たず、C を一度選んで状態・演算子・モデルの戻り値へ引き継ぐ。異なる係数精度の暗黙変換や個別 primitive 用メソッドは追加しない。選択済みの Q は入口で指定し、投影を逆向きに推論できることは前提にしない。
+
+### 11.1. 構築・集約の共通入口（2026-10-28）
+
+QuantumSystem は state_tensor_at・operator_product_at、state_sum・operator_sum・state_tensor・operator_product と各集約の try_ 版を既定メソッドとして提供する。構築は選択した Q から、構築後の操作・評価は式から行う。_at は葉と primitive の組を受け取って配置・合成する入口とし、裸の基本名は構築済みの式を集約する。既存の core constructor は維持する。
+
+scaled は4式型と LinearCombination で `impl Into<C>` を受け取り、入口で一度だけ変換する。式の保持に数値能力・Clone を追加せず、LinearCombination の既存の乗算用制約は維持する。選択済みの精度を変更しない。型推論の完全互換は要求せず、構築入口の型注釈や不要な into() の除去で移行する。
+
+try_ の入力エラーは ExpressionError に固定し、最初の入力 Err で Iterator の消費を止める。全入力が成功した後に空間・束縛を検証する。既に行った入力生成の副作用は巻き戻さず、部分的な和・積は返さない。順序・重複・零係数を保存し、合成時に primitive を評価しない。空・単項、状態の重複拒否、演算子の重複受理、束縛の選択は既存 constructor の規約を維持する。詳細は[複合式の構築 API](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に定める。

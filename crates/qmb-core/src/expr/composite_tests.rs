@@ -837,3 +837,29 @@ fn deep_composite_actions_and_operators_evaluate_and_drop_iteratively() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn fallible_sums_retain_order_duplicates_and_explicit_zero_scaling() {
+    let counts = Counts::default();
+    let factor = H::factor(Index(0));
+    let local = LocalState::primitive(Primitive(0, &counts));
+    let first: S<'_> = local.at(&factor).unwrap();
+    let sum = S::try_sum(
+        &factor,
+        [Ok(first.clone()), Ok(first.scaled(0.0)), Ok(first)],
+    )
+    .unwrap();
+    let StateNode::Sum(parts) = sum.expression.node() else {
+        panic!("expected sum")
+    };
+    assert_eq!(parts.len(), 3);
+    assert!(matches!(parts.as_slice()[1].node(), StateNode::Scale(_)));
+    assert_eq!(counts.acts.get(), 0);
+    let first = O::<f64>::place(&LocalOperator::primitive(Op), &factor).unwrap();
+    let sum = O::try_sum([Ok(first.clone()), Ok(first.scaled(0.0)), Ok(first)]).unwrap();
+    let OpNode::Sum(parts) = sum.expression.node() else {
+        panic!("expected sum")
+    };
+    assert_eq!(parts.len(), 3);
+    assert!(matches!(parts.as_slice()[1].node(), OpNode::Scale(_)));
+}

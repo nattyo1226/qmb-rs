@@ -444,3 +444,35 @@ fn scalar_reductions_need_no_num_division_remainder_one_or_copy() {
     let expectation = state.expectation(&op);
     assert_eq!((expectation.re.0, expectation.im.0), (3, 4));
 }
+
+#[test]
+fn try_sums_preserve_duplicate_and_zero_nodes_without_evaluating() {
+    let counts = Counts::default();
+    let primitive = S::primitive(State(7, &counts));
+    let zero_term = primitive.scaled(0.0);
+    let state = S::try_sum([Ok(primitive.clone()), Ok(zero_term), Ok(primitive)]).unwrap();
+    assert_eq!(
+        coefficients(&state),
+        [
+            (7, Complex::new(1., 0.)),
+            (7, Complex::new(0., 0.)),
+            (7, Complex::new(1., 0.)),
+        ]
+    );
+    assert_eq!(counts.actions.get(), 0);
+    let op = O::<f64>::primitive(Operator(0, &counts));
+    let sum = O::try_sum([Ok(op.clone()), Ok(op.scaled(0.0)), Ok(op)]).unwrap();
+    let OperatorNode::Sum(parts) = sum.node() else {
+        panic!("expected retained sum")
+    };
+    assert_eq!(parts.len(), 3);
+    assert!(matches!(parts.as_slice()[1].node(), OperatorNode::Scale(_)));
+    assert!(matches!(
+        S::<f64>::try_sum([]).unwrap().node(),
+        StateNode::Sum(SumExpr::Empty)
+    ));
+    assert!(matches!(
+        O::<f64>::try_sum([]).unwrap().node(),
+        OperatorNode::Sum(SumExpr::Empty)
+    ));
+}
