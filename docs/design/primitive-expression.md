@@ -153,6 +153,14 @@ Primitive が線型独立でないため、同じ数学的対象に複数の式�
 
 局所・複合の4式型と LinearCombination の scaled は `impl Into<C>` を受け取り、入口で一度だけ C に変換する。式型は係数を保持するだけで数値能力・Clone を要求せず、LinearCombination は従来の `C: Clone + Mul<Output=C>` を維持する。変換元の Clone は不要で、空の LinearCombination でも変換は一度行う。C の精度は維持し、新たなキャストや精度変換は導入しない。Mul・scalar・term の引数は広げない。
 
-旧 scaled(C) の期待型に依存していたコードでは、構築入口の係数型や Default の入力型を明示し、不要な into() を外す。推論の完全互換は条件とせず、選択済みの C と最小能力の契約を維持する。[移行例](../plans/expression-construction.md#23-型推論の変化と移行例)を参照する。
+旧 scaled(C) の期待型に依存していたコードでは、構築入口の係数型や Default の入力型を明示し、不要な into() を外す。推論の完全互換は条件とせず、選択済みの C と最小能力の契約を維持する。移行方法は次のとおりである。
+
+| 旧引数型に依存していた箇所 | 現在の書き方 |
+| --- | --- |
+| scaled の引数から式の C を推論 | QuantumSystem で先に C を選ぶか、`LocalOperator::<Op, Complex<f64>>` などで明示する |
+| `.scaled(value.into())` の内側の変換先 | `.scaled(value)` と入力を直接渡す |
+| `.scaled(Default::default())` の生成型 | `.scaled(Complex::<f64>::default())` など入力型を明示する |
+
+係数型を選択済みなら `.scaled(0.5)` と同じ精度の実数を渡せる。標準の `Complex<f32>` へ明示的な f64 を渡すなど、既存の Into が提供しない変換は受け入れない。利用例は[基底展開](../../examples/src/bin/basis_expansion.rs)と[2スピンの計算](../../examples/src/bin/two_spins.rs)を参照する。
 
 LocalState::try_sum・LocalOperator::try_sum は `Result<式,ExpressionError>` の列を集約し、最初の入力 Err 以降を取り出さずに、そのまま返す。全成功時は既存 sum と同じ項順・重複・零係数・空／単項の扱いを保ち、primitive を評価しない。QuantumSystem の局所式用転送メソッドは後続候補であり、今回追加していない。
