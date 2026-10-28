@@ -1,0 +1,136 @@
+# QuantumSystem を入口とする式構築 API
+
+作成日・更新日: 2026-10-28
+状態: 構築入口の統一方針とメソッド候補・追加の優先順位を記録。既存の state・operator 以外は未実装であり、以下の公開名・シグネチャは実装時に確認する案である。
+
+## 1. 方針と責任分担
+
+構築補助が StateOf・OperatorOf などの型ごとに増えることで、利用者が処理の所在を覚える負担を増やさないよう、次の使い分けを基本にする。
+
+- 新しい式の構築・複数の式の集約は `QuantumSystem` の関連関数から行う。
+- 構築済みの式への操作・計算は、その式のインスタンスメソッドから行う。
+- `LocalStateOf`・`LocalOperatorOf`・`StateOf`・`OperatorOf` は、主に戻り値や変数の型注釈で使う。
+
+例えば、構築は `Spin::state_product`・`Spin::try_operator_sum`、構築後は `.scaled(...)`・`.at(...)`・`.bind(...)`・`.act(...)`・`.expectation(...)` とする。式の演算子構文も引き続き利用できる。複数の式を受け取る集約用関連関数と、既存式を起点にした `.add()`・`.product()`・`.tensor_product()` は併存する。
+
+共通の構築入口は QuantumSystem の既定メソッドとし、既存 core constructor と共通の検証・構築処理へ委譲する。既存 constructor は維持する。QuantumSystem に空間・Index・幾何を登録・保持せず、系の識別子や新たな式ラッパーを返り値に追加しない。必要な能力は各メソッドに限定し、trait 全体に Clone・数値演算・評価能力を要求しない。
+
+Heisenberg・Neel などの代数固有モデルは引き続き SpinHalf<C> の関連関数とし、QuantumSystem の共通メソッドに含めない。macro は後続で検討し、現段階では通常の関連関数を基本 API とする。`Mul` の変換入力・実数入力への拡張は保留とし、[scaled と try_sum の計画](expression-construction.md)の `scaled(impl Into<C>)` は維持する。
+
+## 2. 命名と入力の基本規則
+
+- 基本名は `state_...`・`operator_...` に揃える。既存の `state(primitive)`・`operator(primitive)` は維持する。
+- 局所式の追加 constructor・集約は `local_state_...`・`local_operator_...` で区別する。
+- `Result` の列を受け取る集約には `try_` を先頭に付ける。通常入力でも空間検証などで Result を返す場合があるため、try の有無は返り値だけで区別しない。
+- 列入力は配列固定にせず IntoIterator とする。構築済みの式は所有ハンドルとして受け取り、借用した式の共有が必要なら利用側でハンドルを clone できる。
+- 返り値の primitive・係数型は Self の関連型で固定し、Index 型 I は配置先・入力式・明示空間から決める。
+
+前の議論で使った仮称 `product_state` は、命名を揃えて `state_product` とする案を採用する。これは未実装 API の名前の整理であり、既存公開 API の改名ではない。
+
+## 3. primitive から構築する入口
+
+下表の Q は選択した QuantumSystem を表す。
+
+| メソッド | 入力 | 成功時の返り値 | 状態 |
+| --- | --- | --- | --- |
+| `state(primitive)` | `Self::State` | `LocalStateOf<Q>` | 実装済み。Result を返さない |
+| `operator(primitive)` | `Self::Operator` | `LocalOperatorOf<Q>` | 実装済み。Result を返さない |
+| `state_at(primitive, &factor)` | 状態 primitive と葉 | `StateOf<Q,I>` | 追加候補。Result を返す |
+| `operator_at(primitive, &factor)` | 演算子 primitive と葉 | `OperatorOf<Q,I>` | 追加候補。Result を返す |
+| `state_product(assignments)` | `(&factor, 状態 primitive)` の列 | `StateOf<Q,I>` | 追加候補。Result を返す |
+| `operator_product(assignments)` | `(&factor, 演算子 primitive)` の列 | `OperatorOf<Q,I>` | 追加候補。Result を返す |
+
+```rust
+// 未実装の API 案。
+let up_down = Spin::state_product([
+    (&a, Ket::Up),
+    (&b, Ket::Down),
+])?;
+
+let xx = Spin::operator_product([
+    (&a, Op::Sx),
+    (&b, Op::Sx),
+])?;
+```
+
+単独配置は既存の state／operator と at、積構築は各要素を配置して State::tensor／Operator::product_all へ渡す処理に相当する。
+
+| 契約 | state_product | operator_product |
+| --- | --- | --- |
+| 合成・順序 | 入力順の tensor product。状態の因子順も入力順 | 入力順の演算子積。右側が先に作用 |
+| 同じ Index の再登場 | Eq によって拒否する | 許可し、積順を保持する |
+| 空入力 | 単位空間上の単位状態 | 未束縛の恒等演算子 |
+| 全作用空間 | 入力から状態の所属空間を構築 | 未束縛。必要に応じて利用側で bind |
+
+配置先は既存 at と同じ葉に限定し、Tensor は NotAFactor とする。モデル構築が Site の局所空間から全葉を展開する契約とは区別し、暗黙の葉展開・並べ替え・spectator の補完・Index の発行は行わない。operator_product の重複 Index は、同じ因子上の演算子積を記述するために必要である。
+
+primitive は移動して受け取り、配置先のハンドルは共有する。primitive・係数・Index の Clone や数値能力は要求しない。単独配置は現行 at と同様に I: Eq を要求せず、複数式の合成は既存 constructor と同じ I: Eq の範囲で実装する。構築時に primitive の評価や正規化はしない。
+
+配置エラーを入力順に確認し、最初のエラー以降は入力を消費しない。全配置が成功した後に合成の検証を行う。状態の Index 重複と後続入力の配置エラーが共存する場合には、この順序により配置エラーが優先する。
+
+## 4. 構築済みの複合式を集約する入口
+
+通常入力は所有式の列、try 版は同じ式の `Result<_, ExpressionError>` 列を受け取る。返り値はいずれも `Result<式, ExpressionError>` とする。
+
+| 通常入力のメソッド | Result 入力のメソッド | 処理 |
+| --- | --- | --- |
+| `state_sum(&space, states)` | `try_state_sum(&space, states)` | 同じ空間の状態の和 |
+| `operator_sum(operators)` | `try_operator_sum(operators)` | 演算子の和 |
+| `state_tensor(states)` | `try_state_tensor(states)` | 状態の入力順 tensor product |
+| `operator_product_all(operators)` | `try_operator_product_all(operators)` | 演算子の入力順の積 |
+
+state_product／operator_product は primitive と配置先の組を受け取り、state_tensor／operator_product_all は構築済みの式を受け取る。後者では局所重ね合わせを配置した式や、複数因子にまたがる式も合成できる。
+
+空入力・単項・空間互換性・束縛の選択は既存 constructor に合わせる。state_sum の明示空間は、空の和の所属空間を確定するためにも維持する。try 版は、最初の入力 Err で停止し、全入力が Ok の場合に合成を検証する。[try_sum のエラー順序](expression-construction.md#32-入力の集約とエラーの順序)を tensor・積にも適用する。
+
+Operator の和・積では、全項が束縛済みかどうかを見て束縛の整合性を判断する。二項演算の fold へ単純に置き換えてこの契約を変えない。式の構築は遅延し、項の簡約や暗黙の因子順序変更は行わない。
+
+```rust
+// 未実装の API 案。構築の入口を Spin に揃える。
+let h = Spin::try_operator_sum(
+    [Op::Sx, Op::Sy, Op::Sz].into_iter().map(|axis| {
+        Spin::operator_product([(&a, axis), (&b, axis)])
+    }),
+)?.bind(&space)?;
+
+let energy = psi.expectation(&h)?;
+```
+
+core の各式型の sum・tensor・product_all、および try 版の共通処理を利用する。StateOf／OperatorOf は型別名であり、独立した実装先ではない。構築処理を QuantumSystem 側へ複製せず、利用者向けの説明と例を QuantumSystem の入口に揃える。
+
+## 5. 零・単位元と局所式の補助
+
+| メソッド | 返り値・契約 |
+| --- | --- |
+| `state_zero(&space)` | 指定空間上の零状態 |
+| `state_unit()` | 単位空間上の単位状態 |
+| `operator_zero()` | 未束縛の零演算子 |
+| `operator_identity()` | 未束縛の恒等演算子 |
+| `local_state_zero()` | 局所零状態 |
+| `local_operator_zero()` | 局所零演算子 |
+| `local_operator_identity()` | 局所恒等演算子 |
+
+既存の象徴的な zero・unit・identity の constructor に委譲し、係数型の Zero・One や primitive の恒等元生成・評価能力を構築時に要求しない。返り値は各式型であり、Result は返さない。空間を引数に取らない複合式では、Index 型 I を後段の利用や戻り値注釈、明示型引数で指定する必要がある。
+
+局所式の集約を追加する場合は、次を候補とする。
+
+| 通常入力のメソッド | Result 入力のメソッド | 返り値 |
+| --- | --- | --- |
+| `local_state_sum(states)` | `try_local_state_sum(states)` | 局所状態 |
+| `local_operator_sum(operators)` | `try_local_operator_sum(operators)` | 局所演算子 |
+| `local_operator_product_all(operators)` | `try_local_operator_product_all(operators)` | 局所演算子 |
+
+通常入力版は式を直接返し、try 版だけが Result を返す。局所式では空間を検証する必要がない。入力は構築済みの局所式であり、primitive の列を受け取る入口とは区別する。
+
+## 6. 追加の優先順位と確認事項
+
+1. 計画中の state_sum・operator_sum と try 版を QuantumSystem から呼べるようにする。scaled の変換対応と try_sum の既存計画にもこの入口を反映する。
+2. primitive の配置をまとめる state_product・operator_product を追加する。
+3. 構築済みの式を受け取る state_tensor・operator_product_all と try 版を追加する。
+4. 零・単位元、state_at・operator_at、局所式の集約補助を追加候補として検討する。
+
+この順序は全候補を一括実装する指示ではない。各段階で既存の基礎 API に委譲できることを確認し、実装済みと未実装の候補を分けて記録する。新 API の公開名・引数・戻り値は、通常の Rust の型推論とメソッド解決を確認して確定する。
+
+実装時には、独自 QuantumSystem でも既定メソッドが使えること、最小能力、非 Clone の保持要素、空・単項入力、状態の重複拒否と因子順、演算子の重複受理と作用順、葉以外の配置拒否、束縛と未束縛の混在、try 版の短絡・エラー順序を検証する。入力の借用期間を超えて返り値を保持できること、既存 core constructor と同じ型・数学的結果になることも確認する。
+
+rustdoc・examples の基本の案内を QuantumSystem に揃え、型別名には型注釈の用途と基礎式型へのリンクを記載する。現時点では本書の追加候補のコンパイルや回帰テストは行っていない。

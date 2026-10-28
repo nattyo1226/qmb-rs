@@ -5,6 +5,8 @@
 
 本書の「現状」は設計検討開始時のスナップショットである。型引数・係数型の集約と Chain の責任分離は2026-10-28に実装した。現在の API と移行結果は[型選択の計画](api-type-parameters.md)と[Chain の設計](../design/geometry.md)を参照する。その他の候補は未採用の検討事項として残す。
 
+2026-10-28 の追加方針として、`scaled` の `impl Into<C>` 対応と `try_sum` の実装を計画する。対象・型推論への影響・エラー処理・検証は[式構築 API の実装計画](expression-construction.md)に記録する。構築・集約の入口を QuantumSystem に揃える方針、および配置込みの積・tensor・零・単位元などのメソッド候補と優先順位は[QuantumSystem の構築 API](quantum-system-construction.md)に記録する。これらの追加 API は未実装であり、macro と Mul の入力拡張は保留とする。
+
 ## 1. 目的と位置づけ
 
 現行 API を利用する際の典型的な負担と、今後の API 整備で判断すべき論点を整理する。対象は、利用開始から式の構築・評価・数値出力までの流れと、独自の局所代数を実装する拡張経路である。
