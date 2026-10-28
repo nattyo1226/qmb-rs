@@ -78,6 +78,12 @@ fn norm_does_not_require_inverse_real_embedding_or_coefficient_float() {
 
 struct Op;
 
+impl qmb_core::Identity for Op {
+    fn identity() -> Self {
+        Self
+    }
+}
+
 impl InnerProduct<Complex<f64>> for Primitive<'_> {
     fn inner_product(&self, _: &Self) -> Complex<f64> {
         self.0.set(self.0.get() + 1);

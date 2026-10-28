@@ -1,7 +1,6 @@
 use crate::{
     Export, ExportError, Exported, MatrixMetadata, VectorMetadata,
-    matrix::{DenseBuilder, MatrixBuilder, MatrixStorage},
-    vector::VectorStorage,
+    backend::{MatrixBuilder, MatrixStorage, VectorStorage, vec::DenseBuilder},
 };
 use ndarray::{Array1, Array2};
 use num_traits::Zero;

@@ -1,12 +1,16 @@
 //! Contraction of evaluated states without distributing independent factors.
 
 use alloc::{collections::BTreeMap, vec, vec::Vec};
-use core::ptr;
+use core::{ops::Mul, ptr};
 use num_traits::{One, Zero};
 
-use super::composite::{StateExpr, StateNode};
+use crate::expr::{
+    composite::{StateExpr, StateNode},
+    traversal::{LinearTerms, state_view},
+};
 use crate::{
-    Conjugate, InnerProduct,
+    Act, Adjoint, Conjugate, ExpressionError, HilbertSpace, InnerProduct, LocalOperator,
+    LocalState, Operator, RealPart, State,
     coefficient::{add, conjugate, multiply, zero},
 };
 
@@ -142,7 +146,7 @@ fn matching_groups<'a, I, S, O, C>(
     groups
 }
 
-pub(super) fn contract<I, S, O, C>(lhs: &StateExpr<I, S, O, C>, rhs: &StateExpr<I, S, O, C>) -> C
+pub(crate) fn contract<I, S, O, C>(lhs: &StateExpr<I, S, O, C>, rhs: &StateExpr<I, S, O, C>) -> C
 where
     C: Clone + Zero + One + Conjugate<Output = C>,
     S: InnerProduct<C>,
@@ -225,4 +229,121 @@ where
         }
     }
     values.pop().expect("one contraction result")
+}
+
+impl<S, O, C> LocalState<S, O, C> {
+    /// Computes the inner product, conjugate-linear on the left.
+    ///
+    /// Actions are evaluated internally; no basis or explicit prior evaluation
+    /// is needed. Coefficients require arithmetic but no division or remainder.
+    pub fn inner_product(&self, rhs: &Self) -> C
+    where
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        let lhs = self.evaluate();
+        let rhs = rhs.evaluate();
+        lhs.evaluated_inner_product(&rhs)
+    }
+
+    // Both operands must be action-free. Separating this reduction avoids
+    // requiring action/adjoint capabilities again in composite contraction.
+    pub(crate) fn evaluated_inner_product(&self, rhs: &Self) -> C
+    where
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        S: InnerProduct<C>,
+    {
+        let mut result = zero();
+        for (a, left) in LinearTerms::new(self, state_view) {
+            for (b, right) in LinearTerms::new(rhs, state_view) {
+                let mut value = left.inner_product(right);
+                if let Some(b) = b {
+                    value = multiply(value, b);
+                }
+                if let Some(a) = a.clone() {
+                    value = multiply(conjugate(a), value);
+                }
+                result = add(result, value);
+            }
+        }
+        result
+    }
+
+    /// Returns the real part of the self-inner-product, without clamping.
+    pub fn norm_squared(&self) -> C::Real
+    where
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C> + RealPart,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        self.inner_product(self).real_part()
+    }
+
+    /// Computes the unnormalized expectation `self† operator self`.
+    pub fn expectation(&self, operator: &LocalOperator<O, C>) -> C
+    where
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        self.inner_product(&self.act(operator))
+    }
+}
+
+impl<I: Eq, S, O, C> State<I, S, O, C> {
+    /// Computes the conjugate-linear/linear inner product on compatible spaces.
+    ///
+    /// Contracts matching tensor factors before distributing sums. Tensor
+    /// grouping need not agree, and no global product-of-sums expansion is built.
+    pub fn inner_product(&self, rhs: &Self) -> Result<C, ExpressionError>
+    where
+        C: Clone + Zero + One + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        if !self.space.is_compatible_with(&rhs.space) {
+            return Err(ExpressionError::IncompatibleSpaces);
+        }
+        let lhs = self.evaluate()?;
+        let rhs = rhs.evaluate()?;
+        Ok(super::inner_product::contract(
+            &lhs.expression,
+            &rhs.expression,
+        ))
+    }
+
+    /// Returns the real part of the self-inner-product, without clamping.
+    pub fn norm_squared(&self) -> Result<C::Real, ExpressionError>
+    where
+        C: Clone + Zero + One + Conjugate<Output = C> + RealPart,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        Ok(self.inner_product(self)?.real_part())
+    }
+
+    /// Computes the unnormalized expectation without requiring prior evaluation.
+    pub fn expectation(&self, operator: &Operator<I, O, C>) -> Result<C, ExpressionError>
+    where
+        C: Clone + Zero + One + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        self.inner_product(&self.act(operator)?)
+    }
+
+    /// Computes an expectation using an explicit ambient space over any binding.
+    pub fn expectation_in(
+        &self,
+        operator: &Operator<I, O, C>,
+        ambient: &HilbertSpace<I>,
+    ) -> Result<C, ExpressionError>
+    where
+        C: Clone + Zero + One + Conjugate<Output = C>,
+        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
+        O: Adjoint<C, Term = O>,
+    {
+        self.inner_product(&self.act_in(operator, ambient)?)
+    }
 }

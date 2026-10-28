@@ -84,10 +84,10 @@
 extern crate alloc;
 
 pub mod basis;
+mod models;
 pub mod operator;
 pub mod state;
-mod utility;
-pub use utility::UtilityError;
+pub use models::UtilityError;
 
 mod coefficient;
 

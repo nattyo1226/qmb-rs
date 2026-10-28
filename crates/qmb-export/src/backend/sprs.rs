@@ -1,8 +1,6 @@
 use crate::{
     ExportError,
-    error::reserve,
-    matrix::{MatrixBuilder, MatrixStorage},
-    vector::VectorStorage,
+    backend::{MatrixBuilder, MatrixStorage, VectorStorage, reserve},
 };
 use sprs::{CsMat, CsVec};
 

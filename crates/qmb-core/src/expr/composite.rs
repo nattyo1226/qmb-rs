@@ -3,7 +3,7 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::{HilbertSpace, LocalOperator, LocalState, SpaceError};
+use crate::{HilbertSpace, Identity, LocalOperator, LocalState, SpaceError};
 
 /// Errors connecting, placing or evaluating composite expressions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -68,8 +68,8 @@ pub enum ExpressionError {
 /// needs_send::<State<Rc<()>, (), (), ()>>();
 /// ```
 pub struct State<I, S, O, C> {
-    pub(super) expression: StateExpr<I, S, O, C>,
-    pub(super) space: HilbertSpace<I>,
+    pub(crate) expression: StateExpr<I, S, O, C>,
+    pub(crate) space: HilbertSpace<I>,
 }
 
 /// A placed operator with an optional ambient-space binding.
@@ -82,21 +82,21 @@ pub struct State<I, S, O, C> {
 /// of an unbound operator requires an explicit space, except that action can
 /// use the state's space. See [`State::act`] and [`Operator::trace_in`].
 pub struct Operator<I, O, C> {
-    pub(super) expression: OpExpr<I, O, C>,
-    pub(super) ambient: Option<HilbertSpace<I>>,
+    pub(crate) expression: OpExpr<I, O, C>,
+    pub(crate) ambient: Option<HilbertSpace<I>>,
 }
 
-pub(super) struct StateExpr<I, S, O, C> {
+pub(crate) struct StateExpr<I, S, O, C> {
     root: Option<Arc<StateNode<I, S, O, C>>>,
-    pub(super) pending_action: bool,
+    pub(crate) pending_action: bool,
 }
-pub(super) struct OpExpr<I, O, C> {
+pub(crate) struct OpExpr<I, O, C> {
     root: Option<Arc<OpNode<I, O, C>>>,
 }
 
 type StateAction<I, S, O, C> = ActExpr<StateExpr<I, S, O, C>, OpExpr<I, O, C>>;
 
-pub(super) enum StateNode<I, S, O, C> {
+pub(crate) enum StateNode<I, S, O, C> {
     Local(HilbertSpace<I>, LocalState<S, O, C>),
     Unit,
     Scale(ScaleExpr<StateExpr<I, S, O, C>, C>),
@@ -104,7 +104,7 @@ pub(super) enum StateNode<I, S, O, C> {
     Tensor(SumExpr<StateExpr<I, S, O, C>>),
     Act(StateAction<I, S, O, C>),
 }
-pub(super) enum OpNode<I, O, C> {
+pub(crate) enum OpNode<I, O, C> {
     Local(HilbertSpace<I>, LocalOperator<O, C>),
     Identity,
     Scale(ScaleExpr<OpExpr<I, O, C>, C>),
@@ -146,7 +146,7 @@ impl<I, O, C> Clone for Operator<I, O, C> {
 }
 
 impl<I, S, O, C> StateExpr<I, S, O, C> {
-    pub(super) fn new(node: StateNode<I, S, O, C>) -> Self {
+    pub(crate) fn new(node: StateNode<I, S, O, C>) -> Self {
         let pending_action = match &node {
             StateNode::Local(_, local) => local.has_pending_action(),
             StateNode::Unit => false,
@@ -159,22 +159,22 @@ impl<I, S, O, C> StateExpr<I, S, O, C> {
             pending_action,
         }
     }
-    pub(super) fn node(&self) -> &StateNode<I, S, O, C> {
+    pub(crate) fn node(&self) -> &StateNode<I, S, O, C> {
         self.root.as_deref().expect("live state syntax")
     }
-    pub(super) fn scaled(self, coefficient: C) -> Self {
+    pub(crate) fn scaled(self, coefficient: C) -> Self {
         Self::new(StateNode::Scale(ScaleExpr {
             operand: self,
             coefficient,
         }))
     }
-    pub(super) fn sum(children: SumExpr<Self>) -> Self {
+    pub(crate) fn sum(children: SumExpr<Self>) -> Self {
         match children {
             SumExpr::One(child) => child,
             children => Self::new(StateNode::Sum(children)),
         }
     }
-    pub(super) fn same_node(&self, rhs: &Self) -> bool {
+    pub(crate) fn same_node(&self, rhs: &Self) -> bool {
         Arc::ptr_eq(
             self.root.as_ref().expect("live state"),
             rhs.root.as_ref().expect("live state"),
@@ -183,12 +183,12 @@ impl<I, S, O, C> StateExpr<I, S, O, C> {
 }
 
 impl<I, O, C> OpExpr<I, O, C> {
-    pub(super) fn new(node: OpNode<I, O, C>) -> Self {
+    pub(crate) fn new(node: OpNode<I, O, C>) -> Self {
         Self {
             root: Some(Arc::new(node)),
         }
     }
-    pub(super) fn node(&self) -> &OpNode<I, O, C> {
+    pub(crate) fn node(&self) -> &OpNode<I, O, C> {
         self.root.as_deref().expect("live operator syntax")
     }
     fn scaled(self, coefficient: C) -> Self {
@@ -244,7 +244,7 @@ impl<I, S, O, C> State<I, S, O, C> {
     pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
         self.clone().into_scaled(coefficient.into())
     }
-    pub(super) fn into_scaled(self, coefficient: C) -> Self {
+    pub(crate) fn into_scaled(self, coefficient: C) -> Self {
         Self {
             space: self.space,
             expression: self.expression.scaled(coefficient),
@@ -288,7 +288,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     pub fn add(&self, rhs: &Self) -> Result<Self, ExpressionError> {
         self.clone().into_add(rhs.clone())
     }
-    pub(super) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
+    pub(crate) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
         if !self.space.is_compatible_with(&rhs.space) {
             return Err(ExpressionError::IncompatibleSpaces);
         }
@@ -351,7 +351,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
             })),
         })
     }
-    pub(super) fn into_act(self, operator: Operator<I, O, C>) -> Result<Self, ExpressionError> {
+    pub(crate) fn into_act(self, operator: Operator<I, O, C>) -> Result<Self, ExpressionError> {
         let space = operator.select_space(None, Some(&self.space))?;
         if !space.is_compatible_with(&self.space) {
             return Err(ExpressionError::IncompatibleSpaces);
@@ -415,7 +415,7 @@ impl<I, O, C> Operator<I, O, C> {
     pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
         self.clone().into_scaled(coefficient.into())
     }
-    pub(super) fn into_scaled(self, coefficient: C) -> Self {
+    pub(crate) fn into_scaled(self, coefficient: C) -> Self {
         Self {
             ambient: self.ambient,
             expression: self.expression.scaled(coefficient),
@@ -477,7 +477,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     pub fn add(&self, rhs: &Self) -> Result<Self, ExpressionError> {
         Self::sum([self.clone(), rhs.clone()])
     }
-    pub(super) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
+    pub(crate) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
         Self::sum([self, rhs])
     }
     /// Constructs a product in input order; the empty product is unbound identity.
@@ -512,7 +512,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     pub fn product(&self, rhs: &Self) -> Result<Self, ExpressionError> {
         Self::product_all([self.clone(), rhs.clone()])
     }
-    pub(super) fn into_product(self, rhs: Self) -> Result<Self, ExpressionError> {
+    pub(crate) fn into_product(self, rhs: Self) -> Result<Self, ExpressionError> {
         Self::product_all([self, rhs])
     }
     /// Constructs the anticommutator without evaluating local rules.
@@ -527,7 +527,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             ambient: Some(ambient.clone()),
         })
     }
-    pub(super) fn select_space<'a>(
+    pub(crate) fn select_space<'a>(
         &'a self,
         explicit: Option<&'a HilbertSpace<I>>,
         state: Option<&'a HilbertSpace<I>>,
@@ -627,5 +627,11 @@ impl<I, O, C> Drop for OpExpr<I, O, C> {
                 }
             }
         }
+    }
+}
+
+impl<I, O, C> Identity for Operator<I, O, C> {
+    fn identity() -> Self {
+        Self::identity()
     }
 }

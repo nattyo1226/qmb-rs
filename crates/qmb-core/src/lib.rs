@@ -84,22 +84,20 @@ extern crate std;
 mod test_coefficient;
 
 pub mod coefficient;
+mod evaluate;
 
 pub mod basis;
 pub mod error;
 pub mod expr;
-pub mod linear_combination;
 pub mod ops;
-pub mod primitive;
 pub mod space;
 pub mod system;
 
 pub use basis::{Basis, BasisError, Coordinates, operator_basis_len, state_basis_len};
 pub use coefficient::{Conjugate, Divide, ImaginaryUnit, RealPart};
 pub use error::DimensionOverflow;
+pub use expr::parts::{IntoTerms, LinearCombination, Term};
 pub use expr::{ExpressionError, LocalOperator, LocalState, Operator, State};
-pub use linear_combination::{IntoTerms, LinearCombination, Term};
-pub use ops::{Act, Adjoint, InnerProduct, Product, Trace};
-pub use primitive::{Identity, SpanDimension};
+pub use ops::{Act, Adjoint, Dimension, Identity, InnerProduct, Product, Trace};
 pub use space::{HilbertSpace, SpaceError};
 pub use system::{LocalOperatorOf, LocalStateOf, OperatorOf, QuantumSystem, StateOf};

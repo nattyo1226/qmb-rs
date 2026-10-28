@@ -1,6 +1,6 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-28
+更新日: 2026-10-29
 
 ## 1. 文書の位置づけ
 
@@ -38,7 +38,13 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 この分割は、共通型と基本演算を所有する [tensory-core](https://github.com/todo-group/tensory/blob/c84f091e5c65f1408dee91db3730bdb8729e966e/tensory-core/src/lib.rs)と、公開テンソル表現の所有先を集約しつつ実行系・演算群を分ける [tenferro-rs の crate 設計](https://github.com/tensor4all/tenferro-rs/blob/f1d4d8d961ff6b937768111888ad2a493314892a/docs/architecture/tenferro-crates.md)を参考にした。qmb-rs では primitive の局所規則と共通合成則に基づく評価を core に含め、外部数値 backend との接続を分離する。
 
-### 2.2. 数値 export（実装済み）
+### 2.2. crate 内のモジュール構造
+
+[構造整理の決定事項](plans/v2/module-structure-plan.md)に従い、core は `ops` に `Dimension::dim()`・`Identity` と代数契約、`expr::parts` に有限線型結合と共通構文パーツ、`expr::traversal` に内部走査を置く。式の保持・構築は `expr`、評価・内積・trace は非公開のトップレベル `evaluate`、基底列挙・展開・座標取得は `basis` が担当する。旧 `primitive` とトップレベル `linear_combination` は廃止し、主要型・trait の crate root からの再公開は維持する。
+
+geometry は `boundary`・`geometry::chain`・`relation::nearest_neighbor`・`connection` に分け、Chain の既存メソッドから委譲する。export は `output`・`metadata`・`args`・共通の `coordinates` と `vector`・`matrix`、storage 契約と Vec・ndarray・sprs の `backend` に分ける。spin-half は `models`、normalize は `norm`・`expectation`・`error` に責任をまとめる。これらの crate の公開窓口は引き続き crate root とし、basic の構成は維持する。
+
+### 2.3. 数値 export（実装済み）
 
 2026-10-27に Step 6 の数値 export を完了した。qmb-export の `Export<T, Args = ()>` と、数値データ・メタデータを持つ `Exported<D, M>` を共通の利用窓口にする。密表現は Vec と shape・格納順序のメタデータを出力し、ndarray の Array1／Array2 への直接出力・取得済み Vec 出力からの変換も提供する。密行列専用の数値コンテナは設けない。
 
@@ -86,7 +92,7 @@ core は Index 型をジェネリックに扱い、同じ Index であること�
 
 状態 primitive は内積と演算子の作用を受ける Act、演算子 primitive は Product・随伴・trace を提供する。Product・Act・随伴の trait は係数全体 `C` を型引数、返却要素を関連型 `Term` とし、`LinearCombination<Self::Term, C>` を返す。Act の演算子型は関連型 `Operator` で指定する。局所規則と恒等演算子は、同じ局所構造の primitive の有限線型結合を返す。数値制約は各実装に置き、演算 trait は局所式や局所構造に依存させない。内積・trace は従来どおり複素 scalar を返す。局所構造はこれらの能力を関連付け、次元、所属、表現パラメータ、恒等演算子と、結合則・作用・内積・随伴などの整合性を定める。
 
-Rust の契約では、LocalStructure と追加の定義ラベルを廃止し、S・O と個別の能力実装で局所規則を定める。恒等元は `O: Identity` の値、次元は `SpanDimension` が返す primitive 型全体の span の次元とする。能力は利用するメソッドで要求し、保持・係数計算を伴わない遅延構築・map に数値制約を付けない。全能力をまとめた係数・primitive trait は導入しない。状態への作用評価に Product を要求せず、局所積を必要とする trace などで要求する。
+Rust の契約では、LocalStructure と追加の定義ラベルを廃止し、S・O と個別の能力実装で局所規則を定める。恒等元は `O: Identity` の値、次元は `Dimension` が返す primitive 型全体の span の次元とする。能力は利用するメソッドで要求し、保持・係数計算を伴わない遅延構築・map に数値制約を付けない。全能力をまとめた係数・primitive trait は導入しない。状態への作用評価に Product を要求せず、局所積を必要とする trace などで要求する。
 
 Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。局所式は `LocalState<S, O, C>`・`LocalOperator<O, C>` のハンドルが `Arc` で節点 enum を共有し、和・スカラー倍・積・作用・随伴の variant は対応する共通パーツを保持する。zero は空の和で表す。同じ式ハンドルを再利用した箇所で不変な部分式を共有し、別々に構築した同形の式を自動検出して共有する機構は設けない。
 

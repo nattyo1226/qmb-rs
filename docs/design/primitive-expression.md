@@ -31,7 +31,7 @@
 
 Product は演算子 primitive 側、Act は状態 primitive 側の能力とする。Act の規則は、作用先の状態 primitive 型と演算子 primitive 型の組に対応し、`state.act(&operator)` は数学的には `operator * state` を計算する。対応する型と表現パラメータの整合性は局所構造の契約に従う。
 
-Rust API は状態式を S・O・C、演算子式を O・C で指定する。恒等元は O が Identity として生成し、次元は S・O が SpanDimension で提供する。演算能力と入出力の対応は必要な評価メソッドで要求し、保持型に全演算能力を要求しない。LocalStructure と追加の定義ラベルは導入しない。
+Rust API は状態式を S・O・C、演算子式を O・C で指定する。恒等元は O が Identity として生成し、次元は S・O が Dimension で提供する。演算能力と入出力の対応は必要な評価メソッドで要求し、保持型に全演算能力を要求しない。LocalStructure と追加の定義ラベルは導入しない。
 
 Product・Act・随伴の結果は、同じ局所構造の primitive の有限線型結合を表す薄い `LinearCombination` とする。単一 primitive への閉性は要求しない。演算 trait は係数全体 C を型引数、返却要素を関連型 `Term` で指定し、局所式や局所構造には依存しない。局所規則では `Term` を対応する primitive 型とする。式木側は `map` で要素を変換し、和・スカラー倍として取り込む。恒等元は `O: Identity` の値として生成し、選択基底への展開は Basis が担う。未評価の作用・積・随伴を返して局所計算を先送りしない。加算、scalar multiplication、および zero は共通処理で提供する。演算 trait の関連型への移行と式木への接続は Step 2 で行う。
 
@@ -105,7 +105,7 @@ A(aB+bC)=a(AB)+b(AC),
 | 演算子式・状態式 | 期待値 | 作用と内積から `⟨ψ,Aψ⟩` を計算する |
 | 演算子式・状態式 | 正規化期待値 | 期待値を `⟨ψ,ψ⟩` で割る。zero-norm state では拒否する |
 
-bra 型・構築 API は後続へ延期し、初期版の braket は内積で計算する。Norm・正規化・正規化期待値は共通機構から提供し、局所代数ごとの実装を必須としない。恒等演算子は遅延構築では `Identity` 節点で保持し、trace で必要になった時に `O::identity()` を取得する。
+bra 型・構築 API は後続へ延期し、初期版の braket は内積で計算する。Norm・正規化・正規化期待値は共通機構から提供し、局所代数ごとの実装を必須としない。局所恒等演算子は `Primitive(O::identity())` で保持し、他の primitive と同じ評価・展開経路を使う。複合式の `OpNode::Identity` は維持する。
 
 ### 4.1. Norm・正規化の API と feature
 

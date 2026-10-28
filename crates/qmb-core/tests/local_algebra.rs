@@ -4,8 +4,8 @@ use std::num::NonZeroUsize;
 
 use num_complex::Complex;
 use qmb_core::{
-    Act, Adjoint, Basis, DimensionOverflow, Identity, InnerProduct, LinearCombination, Product,
-    SpanDimension, Trace, operator_basis_len, state_basis_len,
+    Act, Adjoint, Basis, Dimension, DimensionOverflow, Identity, InnerProduct, LinearCombination,
+    Product, Trace, operator_basis_len, state_basis_len,
 };
 
 #[path = "support/three_level.rs"]
@@ -164,18 +164,18 @@ fn three_level_rules_and_bases_work_at_both_precisions() {
     check_rules::<f64>();
     check_bases::<f32>();
     check_bases::<f64>();
-    assert_eq!(Ket::span_dimension().unwrap().get(), 3);
+    assert_eq!(Ket::dim().unwrap().get(), 3);
 }
 
-struct Dimension<const D: usize>;
+struct FixedDimension<const D: usize>;
 struct SquaredDimension<const D: usize>;
-impl<const D: usize> SpanDimension for Dimension<D> {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl<const D: usize> Dimension for FixedDimension<D> {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(D).unwrap())
     }
 }
-impl<const D: usize> SpanDimension for SquaredDimension<D> {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl<const D: usize> Dimension for SquaredDimension<D> {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         D.checked_mul(D)
             .and_then(NonZeroUsize::new)
             .ok_or(DimensionOverflow)
@@ -184,7 +184,7 @@ impl<const D: usize> SpanDimension for SquaredDimension<D> {
 
 #[test]
 fn basis_dimensions_handle_unit_large_and_overflow_cases() {
-    assert_eq!(state_basis_len::<Dimension<1>>().unwrap(), 1);
+    assert_eq!(state_basis_len::<FixedDimension<1>>().unwrap(), 1);
     assert_eq!(operator_basis_len::<SquaredDimension<1>>(), Ok(1));
     assert_eq!(state_basis_len::<Ket>().unwrap(), 3);
     assert_eq!(operator_basis_len::<Operator>(), Ok(9));
@@ -199,7 +199,7 @@ fn basis_dimensions_handle_unit_large_and_overflow_cases() {
         Err(DimensionOverflow)
     );
     assert_eq!(
-        state_basis_len::<Dimension<{ usize::MAX }>>().unwrap(),
+        state_basis_len::<FixedDimension<{ usize::MAX }>>().unwrap(),
         usize::MAX
     );
     assert_eq!(

@@ -1,14 +1,10 @@
 use alloc::{vec, vec::Vec};
 use core::ops::Mul;
-use num_traits::Zero;
 
-use super::{
-    local::{LocalOperator, LocalState, OperatorNode, StateNode},
-    parts::SumExpr,
-};
+use crate::expr::local::{LocalOperator, LocalState, OperatorNode, StateNode};
 use crate::{
-    Act, Adjoint, Conjugate, Identity, InnerProduct, Product, RealPart, Trace,
-    coefficient::{add, conjugate, multiply, zero},
+    Act, Adjoint, Conjugate, Product,
+    coefficient::{conjugate, multiply},
 };
 
 enum StateTask<S, O, C> {
@@ -62,7 +58,6 @@ impl<S, O, C> LocalState<S, O, C> {
                     tasks.push(StateTask::Apply(state, operator, adjoint));
                 }
                 StateTask::Apply(state, operator, adjoint) => match operator.node() {
-                    OperatorNode::Identity => values.push(state),
                     OperatorNode::Scale(s) => {
                         let c = s.coefficient.clone();
                         tasks.push(StateTask::Scale(if adjoint { conjugate(c) } else { c }));
@@ -129,133 +124,6 @@ impl<S, O, C> LocalState<S, O, C> {
         }
         values.pop().expect("one state result")
     }
-
-    /// Computes the inner product, conjugate-linear on the left.
-    ///
-    /// Actions are evaluated internally; no basis or explicit prior evaluation
-    /// is needed. Coefficients require arithmetic but no division or remainder.
-    pub fn inner_product(&self, rhs: &Self) -> C
-    where
-        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
-        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
-    {
-        let lhs = self.evaluate();
-        let rhs = rhs.evaluate();
-        lhs.evaluated_inner_product(&rhs)
-    }
-
-    // Both operands must be action-free. Separating this reduction avoids
-    // requiring action/adjoint capabilities again in composite contraction.
-    pub(super) fn evaluated_inner_product(&self, rhs: &Self) -> C
-    where
-        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
-        S: InnerProduct<C>,
-    {
-        let mut result = zero();
-        for (a, left) in LinearTerms::new(self, state_view) {
-            for (b, right) in LinearTerms::new(rhs, state_view) {
-                let mut value = left
-                    .expect("state primitive")
-                    .inner_product(right.expect("state primitive"));
-                if let Some(b) = b {
-                    value = multiply(value, b);
-                }
-                if let Some(a) = a.clone() {
-                    value = multiply(conjugate(a), value);
-                }
-                result = add(result, value);
-            }
-        }
-        result
-    }
-
-    /// Returns the real part of the self-inner-product, without clamping.
-    pub fn norm_squared(&self) -> C::Real
-    where
-        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C> + RealPart,
-        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
-    {
-        self.inner_product(self).real_part()
-    }
-
-    /// Computes the unnormalized expectation `self† operator self`.
-    pub fn expectation(&self, operator: &LocalOperator<O, C>) -> C
-    where
-        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
-        S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
-    {
-        self.inner_product(&self.act(operator))
-    }
-}
-
-// Both state and operator scalar reductions use this same linear walker.
-// None as coefficient means an implicit one, so generating it needs no One.
-pub(super) enum LinearView<'a, E, P, C> {
-    Leaf(Option<&'a P>),
-    Scale(&'a C, &'a E),
-    Sum(&'a SumExpr<E>),
-}
-pub(super) struct LinearTerms<'a, E, P, C> {
-    pending: Vec<(&'a E, Option<C>)>,
-    view: fn(&'a E) -> LinearView<'a, E, P, C>,
-}
-impl<'a, E, P, C> LinearTerms<'a, E, P, C> {
-    pub(super) fn new(root: &'a E, view: fn(&'a E) -> LinearView<'a, E, P, C>) -> Self {
-        Self {
-            pending: vec![(root, None)],
-            view,
-        }
-    }
-}
-impl<'a, E, P: 'a, C> Iterator for LinearTerms<'a, E, P, C>
-where
-    C: Clone + Mul<Output = C>,
-{
-    type Item = (Option<C>, Option<&'a P>);
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some((expression, coefficient)) = self.pending.pop() {
-            match (self.view)(expression) {
-                LinearView::Leaf(leaf) => return Some((coefficient, leaf)),
-                LinearView::Scale(c, operand) => {
-                    let coefficient = Some(match coefficient {
-                        None => c.clone(),
-                        Some(a) => multiply(a, c.clone()),
-                    });
-                    self.pending.push((operand, coefficient));
-                }
-                LinearView::Sum(s) => {
-                    for child in s.iter().rev() {
-                        self.pending.push((child, coefficient.clone()));
-                    }
-                }
-            }
-        }
-        None
-    }
-}
-pub(super) fn state_view<S, O, C>(
-    state: &LocalState<S, O, C>,
-) -> LinearView<'_, LocalState<S, O, C>, S, C> {
-    match state.node() {
-        StateNode::Primitive(p) => LinearView::Leaf(Some(p)),
-        StateNode::Scale(s) => LinearView::Scale(&s.coefficient, &s.operand),
-        StateNode::Sum(s) => LinearView::Sum(s),
-        StateNode::Act(_) => unreachable!("evaluated state"),
-    }
-}
-pub(super) fn operator_view<O, C>(
-    op: &LocalOperator<O, C>,
-) -> LinearView<'_, LocalOperator<O, C>, O, C> {
-    match op.node() {
-        OperatorNode::Primitive(p) => LinearView::Leaf(Some(p)),
-        OperatorNode::Identity => LinearView::Leaf(None),
-        OperatorNode::Scale(s) => LinearView::Scale(&s.coefficient, &s.operand),
-        OperatorNode::Sum(s) => LinearView::Sum(s),
-        _ => unreachable!("evaluated operator"),
-    }
 }
 
 enum OperatorTask<O, C> {
@@ -267,7 +135,7 @@ enum OperatorTask<O, C> {
 }
 
 impl<O, C> LocalOperator<O, C> {
-    pub(super) fn evaluated(&self) -> Self
+    pub(crate) fn evaluated(&self) -> Self
     where
         C: Clone + Mul<Output = C> + Conjugate<Output = C>,
         O: Product<C, Term = O> + Adjoint<C, Term = O>,
@@ -286,7 +154,6 @@ impl<O, C> LocalOperator<O, C> {
                             values.push(op);
                         }
                     }
-                    OperatorNode::Identity => values.push(op),
                     OperatorNode::Scale(s) => {
                         let c = s.coefficient.clone();
                         tasks.push(OperatorTask::Scale(if adjoint { conjugate(c) } else { c }));
@@ -318,8 +185,6 @@ impl<O, C> LocalOperator<O, C> {
                     tasks.push(OperatorTask::Multiply(lhs, rhs));
                 }
                 OperatorTask::Multiply(lhs, rhs) => match (lhs.node(), rhs.node()) {
-                    (OperatorNode::Identity, _) => values.push(rhs),
-                    (_, OperatorNode::Identity) => values.push(lhs),
                     (OperatorNode::Scale(s), _) => {
                         tasks.push(OperatorTask::Scale(s.coefficient.clone()));
                         tasks.push(OperatorTask::Multiply(s.operand.clone(), rhs));
@@ -366,38 +231,5 @@ impl<O, C> LocalOperator<O, C> {
             }
         }
         values.pop().expect("one operator result")
-    }
-
-    /// Computes the ordinary, unnormalized local trace without a chosen basis.
-    pub fn trace(&self) -> C
-    where
-        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
-        O: Identity,
-        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
-    {
-        let evaluated = self.evaluated();
-        let mut result = zero();
-        for (coefficient, primitive) in LinearTerms::new(&evaluated, operator_view) {
-            let mut value = if let Some(p) = primitive {
-                p.trace()
-            } else {
-                O::identity().trace()
-            };
-            if let Some(c) = coefficient {
-                value = multiply(c, value);
-            }
-            result = add(result, value);
-        }
-        result
-    }
-
-    /// Computes `Tr(self† rhs)`, without division by the local dimension.
-    pub fn hilbert_schmidt_inner_product(&self, rhs: &Self) -> C
-    where
-        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
-        O: Identity,
-        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
-    {
-        self.adjoint().product(rhs).trace()
     }
 }

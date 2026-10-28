@@ -170,7 +170,7 @@ Chain と、利用側が保持する Site 順の局所空間列・基本自由�
 | `HilbertSpace::tensor(children)`・`tensor_product(&rhs)` | `I: Eq` で重複を検査し、`Result<Self, SpaceError>` を返す |
 | `factor_index()`・`children()`・`indices()` | Factor の `Option<&I>`・直下の子・全葉の Index を借用する |
 | `is_compatible_with(&rhs)`・`is_subsystem_of(&ambient)` | `I: Eq` で葉の順序付き列を照合する |
-| `dimension::<P>()` | `P: SpanDimension` の次元を因子ごとに適用し、`Result<usize, DimensionOverflow>` を返す |
+| `dimension::<P>()` | `P: Dimension` の次元を因子ごとに適用し、`Result<usize, DimensionOverflow>` を返す |
 | `dimension_with(local_dimension)` | `NonZeroUsize` の局所次元を明示し、同じ Result を返す |
 | `clone()`・`shares_node_with(&rhs)` | Index を複製せず共有ハンドルを複製・比較する |
 

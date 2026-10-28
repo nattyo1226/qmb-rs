@@ -68,7 +68,7 @@ fn evaluated_contraction_only_requires_primitive_inner_products() {
         Complex::new(1.0, 0.0)
     );
     assert_eq!(
-        super::inner_product::contract(&state.expression, &state.expression),
+        crate::evaluate::inner_product::contract(&state.expression, &state.expression),
         Complex::new(1.0, 0.0)
     );
 }
@@ -336,7 +336,7 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
         Err(E::MissingIndex)
     ));
     assert!(matches!(
-        LocalOperator::<Op, Complex<f64>>::identity()
+        LocalOperator::<Op, Complex<f64>>::primitive(Op)
             .at(&a)
             .unwrap()
             .bind(&b),
@@ -648,7 +648,7 @@ fn unit_zero_singleton_and_placement_preserve_spaces_and_lazy_local_expressions(
         Err(E::Space(crate::SpaceError::DuplicateIndex))
     ));
     assert!(matches!(
-        O::<f64>::place(&LocalOperator::identity(), unit.space()),
+        O::<f64>::place(&LocalOperator::primitive(Op), unit.space()),
         Err(E::NotAFactor)
     ));
     assert!(matches!(

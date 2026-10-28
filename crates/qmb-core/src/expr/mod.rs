@@ -2,13 +2,10 @@
 
 pub mod parts;
 
+mod arithmetic;
 pub mod composite;
-mod composite_eval;
-mod evaluate;
-mod expansion;
-mod inner_product;
-mod local;
-mod operators;
+pub(crate) mod local;
+pub(crate) mod traversal;
 
 pub use composite::{ExpressionError, Operator, State};
 pub use local::{LocalOperator, LocalState};
