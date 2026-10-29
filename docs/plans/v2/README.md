@@ -19,7 +19,7 @@ Graded tensor product と Fermion の実装済み仕様・検証記録は設計�
 
 ## 詳細検討
 
-- [Spin-one の局所 primitive 実装案](spin-one-primitives.md)：三状態・全九次元演算子空間の表現、局所規則・完全基底・√2 の係数能力。
+- [Spin-one の局所 primitive 実装案](spin-one-primitives.md)：三状態、15演算子 primitive、Cartesian / ladder の2完全基底、基底内で閉じる局所積、std と `Act<Complex<R>>`・`R: Float`、除算に閉じる係数型と match による局所規則の方針。
 
 ## 関連文書
 
