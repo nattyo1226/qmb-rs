@@ -8,7 +8,7 @@
 
 現在の ordinary 専用実装を、ordinary と Z₂-graded の二種類の tensor product に対応させるための変更案を記録する。依頼中の `ordinal` は、現行の要件・設計で用いる `ordinary`（通常のテンソル積）を指すものとして扱う。
 
-推奨する構成は、空間が積の種類と因子順序を保持し、primitive が局所 parity と parity 演算子を提供し、core の共通評価機構が符号を処理する方式である。`HilbertSpace<I>`、`State<I,S,O,C>`、`Operator<I,O,C>` の型引数は維持する。既存の最小限の評価能力を保つため、graded な評価能力を要求する入口を追加し、内部実装を共有する。
+推奨する構成は、空間が積の種類と因子順序を保持し、primitive が局所 parity と parity 演算子を提供し、core の共通評価機構が符号を処理する方式である。`HilbertSpace<I>`、`State<I,S,O,C>`、`Operator<I,O,C>` の型引数は維持する。利用者は既存 API を残さない breaking change を許容しており、互換性のための別入口は設けず、共通の評価 API が空間の種類を参照する方針とする。
 
 対象は空間、状態の tensor 構築、配置・束縛、作用、随伴、内積、full trace、基底展開・座標取得、および既存の密・疎 export への接続とする。Fermion は規則を検証する具体例として用い、製品用 fermion crate の全 API・モデル設計は別計画に委ねる。Spin-one、異種 primitive 型の混在、ordinary 積と graded 積の実質的な混在、permutation、regrouping、partial trace、State / Operator の型統合は今回追加しない。これは [v2 の確定範囲](README.md)全体の実装完了を意味しない。
 
@@ -53,14 +53,21 @@ core に `TensorKind { Ordinary, Graded }` を追加し、非公開節点を概�
 | 提案 API | 意味 |
 | --- | --- |
 | `HilbertSpace::tensor_with_kind(kind, children)` | 種類を明示して構築。保持する子の grouping は変更しない |
-| `tensor_product_with_kind(&rhs, kind)` | 二項版。因子順序は左、右の順 |
-| 既存 `tensor`・`tensor_product`・`unit` | ordinary を指定する既存入口として維持。入力から種類を推測しない |
-| `tensor_kind() -> Option<TensorKind>` | 保持する Tensor 節点の種類。Factor は `None` |
-| `effective_tensor_kind() -> Option<TensorKind>` | 同一視後の種類。基本因子が0または1個なら `None` |
+| `HilbertSpace::tensor(children)` | `tensor_with_kind(TensorKind::Ordinary, children)` の短縮形 |
+| `HilbertSpace::tensor_g(children)` | `tensor_with_kind(TensorKind::Graded, children)` の短縮形 |
+| `tensor_product_with_kind(kind, &rhs)`・`tensor_product(&rhs)`・`tensor_product_g(&rhs)` | 同じ三種類の二項版。因子順序は左、右の順 |
+| `kind() -> Option<TensorKind>` | 保持する Tensor 節点の種類。Factor は `None` |
+| `effective_kind() -> Option<TensorKind>` | 同一視後の種類。基本因子が0または1個なら `None` |
 
-`unit()` は共通の単位空間として両種類と互換である。明示的な空の graded Tensor も構築できるが、数学的意味は同じとする。
+三種類の入口は共通の構築・検証処理へ委譲し、重複 Index・種類の混在・grouping の扱いを一致させる。`tensor` と `tensor_g` は呼び出しの便宜のための入口であり、primitive や子空間から種類を推測しない。種類の取得には、構築名と区別した `kind()`・`effective_kind()` を用いる。
+
+`unit()` は ordinary の空 Tensor として保持するが、共通の単位空間として両種類と互換である。`tensor_g([])` で明示的な空の graded Tensor も構築でき、数学的意味は同じとする。
 
 ### 3.2. 空・単因子を正規化した後で検証する
+
+今回の対応範囲では、一つの空間内で ordinary / graded の実質的な混在を許さない。これは利用者との合意事項とし、空・単因子の同一視後に残る積の種類について検証する。
+
+積の種類の混在と異種局所代数の混在は別の条件である。同じ局所 primitive 型でも、ordinary / graded によって因子間の交換関係が変わる。混在を扱うには木の各境界に応じた合成則・互換性判定が必要になるため、今回は両者とも対応範囲から外す。
 
 木は保持したまま、各空間に「葉数の区分（0 / 1 / 複数）」と「有効な積の種類」を構造 metadata として持たせる案を推奨する。局所次元・全基底・評価結果のキャッシュは追加しない。
 
@@ -89,36 +96,32 @@ trait HomogeneousParity {
     fn parity(&self) -> Parity;
 }
 
-trait ParityOperator<C>: Sized {
-    fn parity_operator() -> LinearCombination<Self, C>;
+trait ParityOperator: Sized {
+    fn parity_operator() -> Self;
 }
 ```
 
 graded な局所代数の S・O は homogeneous な primitive とし、両方が `HomogeneousParity` を提供する。混合 parity は `LocalState` / `LocalOperator` の和で表す。`parity() -> Option<Parity>` の `None` を even と扱う方式や、任意の型を自動的に even とする blanket impl は採用しない。
 
-O は局所 parity 演算子 `P` を `ParityOperator<C>` で提供する。`P` 自体を primitive の variant に持たない代数でも、例えば `I - 2n` という有限線型結合で返せる。能力 trait 自体には係数の一律な数値制約を置かず、具体的実装に必要な bound を置く。
+O は局所 parity 演算子 `P` 自身を primitive の値として `ParityOperator` で提供する。Identity と同様に係数型へ依存させない。P は選択基底の要素である必要はなく、基底展開では例えば `I - 2n` と表せる。必要なら P を表す線型従属な primitive を追加する。
 
 契約は `P† = P`、`P² = I`、`Pψ = (-1)^p(ψ) ψ`、`POP = (-1)^p(O) O` とする。Identity と P は even、随伴は parity を保存し、局所 Product / Act の非零な出力項の parity は入力の和 modulo 2 と一致する。S の even・odd 部分は内積で直交する。局所基底の primitive もこの契約に従う。
 
 これらの代数法則は具体的代数の契約・テストで保証する。一般のユーザ実装の法則を実行時に証明しない。式全体の parity を必要とする内部処理は even / odd 成分へ分け、混合した和に一つの parity を割り当てない。Zero に便宜的な parity を与えても結果を変えない。
 
-### 3.4. Ordinary の最小能力を保つ評価入口
+### 3.4. 空間の種類に従う統一評価 API
 
-Rust では、空間の実行時 kind が graded の場合だけ追加の trait bound を要求することはできない。特に現在の `State::evaluate` は係数の算術能力をほとんど要求しないため、単にすべての評価へ parity・`Neg` を追加する変更は既存の独自代数へ影響する。
+既存 API を残さない breaking change を許容するという利用者の方針を受け、`evaluate`・`trace`・`expand_in`・`coordinates_in` 等を両種類に対応する共通入口へ変更する。`evaluate_graded`・`trace_graded`・`GradedExport` のような互換性維持用の別入口・adapter は追加しない。
 
-| 選択肢 | 評価 |
-| --- | --- |
-| 全複合評価へ grading 能力を必須化 | 呼び出しは簡潔だが、ordinary 専用の独自代数・最小係数実装にも移行が必要 |
-| 評価能力を持つ入口を追加し、内部を共有 | 推奨。構築型と既存 ordinary API の bound を維持できる。導出 API にも入口の追加が必要 |
-| 空間・全式に grading の型引数を追加 | 静的に区別できるが、単因子・単位空間の共有、型別名、全 crate に変更が広がる |
+Rust の trait bound は実行時の kind で切り替えられないため、複合評価にはその操作が graded 側で必要とする能力を ordinary 空間でも要求する。ordinary 専用の独自代数も、共通評価を利用する場合は明示的な grading 実装へ移行する。非対応を暗黙の even と扱う blanket impl は作らない。
 
-推奨案では `evaluate_graded`・`trace_graded` のような追加入口を設け、内部では ordinary / graded の双方を空間の kind に従って処理する。メソッドの選択によって ordinary 空間を graded に変更してはならない。既存の評価入口は実質的な graded 空間を `ExpressionError::GradingRequired` 相当で拒否し、符号を無視した結果を返さない。
+実際の合成則は選択済み空間の有効な種類で決める。ordinary 空間では parity による交差符号・P の挿入を行わず、graded 空間ではそれらを処理する。primitive に grading 能力があることから空間の種類を推測・変更しない。
 
-実装時には `_graded` と引数で評価能力を渡す `_with_grading` の命名を統一する。本案では前者で記載する。内部の評価方針は静的な実装引数で共有し、ordinary 側には grading 用のダミー実装を要求しない。公開の任意交換則プラグインは v2 の要件にしない。
+局所式の構築・`at`・`bind`・和・積・`adjoint`・遅延した `act` に評価能力を一律に要求しない。局所だけで完結する評価の bound も独立に保つ。互換性を前提にしないことは、全操作に全能力を要求する理由にはならない。
 
-局所式の構築・`at`・`bind`・和・積・`adjoint`・遅延した `act` に新しい能力 bound は不要である。graded の係数符号が必要な評価だけに `Neg<Output=C>` 等を置く。parity 演算子を作用させる経路では、その局所規則が返す係数と既存の Scale 節点を利用でき、符号のためだけに `One`・`Neg` を `State::evaluate` 全体へ追加する必要はない。
+符号係数を出力する処理には `Neg<Output=C>` 等を要求する。一方、P の primitive への局所 Act と既存の Scale 節点を使う作用経路は、交差符号のためだけに係数の One・Neg を追加する必要がない。状態への作用に O の Product を要求しない契約も維持する。
 
-追加する入口の範囲は次のとおりとする。既存の明示空間版（`_in` / `_in_space`）も同じ評価方針へ接続し、旧束縛より明示空間を優先する契約を維持する。
+変更する共通入口の範囲は次のとおりとする。明示空間版（`_in` / `_in_space`）も同じ評価方針へ接続し、旧束縛より明示空間を優先する契約を維持する。
 
 | 対象 | graded 対応する操作 | 追加で必要となる主な能力 |
 | --- | --- | --- |
@@ -126,19 +129,19 @@ Rust では、空間の実行時 kind が graded の場合だけ追加の trait 
 | Operator | trace、Hilbert–Schmidt 内積と明示空間版 | O の parity と P。既存の局所 Product / Trace 等も必要 |
 | State の基底処理 | expand_in、coordinates_in | graded の作用評価能力。状態 tensor の展開だけには交差符号を追加しない |
 | Operator の基底処理 | expand_in、coordinates_in と明示空間版 | O の parity、係数の Neg。intrinsic な整列自体には P は不要 |
-| export / normalize | 既存の出力形式・導出操作に対応する追加入口 | 呼び出す core 評価経路の能力を引き継ぐ |
+| export / normalize | 共通の Export・norm・正規化・期待値 API | 呼び出す core 評価経路の能力を引き継ぐ |
 
 ### 3.5. 利用側の移行
 
-既存の ordinary な空間・式の構築と評価は、追加の grading 実装なしで利用できる方針とする。graded を利用する側は、局所代数の能力を実装し、空間・状態を `TensorKind::Graded` で構築し、追加の評価入口・export adapter を使う。既存空間の kind を書き換える変換は提供せず、構築時に種類を選ぶ。
+既存 API・trait bound の互換性は維持条件にしない。ordinary 専用の独自代数は、複合評価に必要な parity・P を明示実装する。自明な grading を採用する代数では全状態・演算子を even、P を I とする。graded を使う側は、空間・状態を `TensorKind::Graded` で構築し、同じ評価・export API を呼ぶ。既存空間の kind を書き換える変換は提供せず、構築時に種類を選ぶ。
 
 `SpaceError`・`ExpressionError` への variant 追加は、外部の網羅的な match を壊し得る。0.2.0 の移行案内でこの変更を記録する。既存のエラー型を一律に `non_exhaustive` へ変えるかは別の API 判断とし、本案では前提にしない。
 
 ## 4. 式の構築と作用の空間
 
-`State::tensor_with_kind`・`try_tensor_with_kind`・`tensor_product_with_kind` を追加し、空間と状態構文を同じ kind で構築する。`StateNode::Tensor` にも kind を保持するか、それと等価な内部 context を保持し、評価・再構築・基底列挙で失わないようにする。通常の `tensor` は ordinary 指定のままとする。
+状態も `State::tensor_with_kind(kind, states)`・`tensor(states)`・`tensor_g(states)` の三種類に揃え、空間と状態構文を同じ kind で構築する。fallible 入力には `try_tensor_with_kind`・`try_tensor`・`try_tensor_g`、二項合成には空間と同じ `tensor_product_with_kind`・`tensor_product`・`tensor_product_g` を用意し、共通処理へ委譲する。`StateNode::Tensor` にも kind を保持するか、それと等価な内部 context を保持し、評価・再構築・基底列挙で失わないようにする。
 
-`QuantumSystem` にも `state_tensor_with_kind`・`try_state_tensor_with_kind`・`state_tensor_at_with_kind` 相当を追加し、共通 constructor へ委譲する。`try_` の最初の入力エラー優先・以降の Iterator を読まない規則を維持する。全入力が成功した後に、重複と種類の混在を検証する。
+`QuantumSystem` にも `state_tensor_with_kind`・`state_tensor`・`state_tensor_g` と対応する `try_` 版を用意する。配置も行う入口は `state_tensor_at_with_kind`・`state_tensor_at`・`state_tensor_g_at` とし、種類指定版は kind を第一引数に受け取る。すべて共通 constructor へ委譲する。`try_` の最初の入力エラー優先・以降の Iterator を読まない規則を維持する。全入力が成功した後に、重複と種類の混在を検証する。
 
 演算子には独立した tensor 操作・節点を追加しない。因子順の配置積 `E_0(A_0) E_1(A_1) ...` が、その空間上の演算子 tensor を表す。未束縛演算子は kind を決めず、既存どおり明示空間、既存束縛、作用先状態の順で全空間を選択する。複数の束縛済み演算子を合成するときは、新しい空間互換性の検査で ordinary / graded の不一致も拒否する。
 
@@ -194,7 +197,7 @@ P は **A の右側** に置く。例えば `A ⊗g B` は `A P^p(B) ⊗ B` で�
 
 先行する状態が混合 parity・もつれた和でも、P の実際の作用を行うため、一つの定数符号へ誤って置換しない。先行区間を表すタスクまたは private な区間記述で P の挿入を遅延させ、全状態の積和展開や全基底列挙を必要にしない。先行区間と対象因子以外は共有できるが、P が作用する先行因子は spectator として共有するだけでは済まない。
 
-S の `HomogeneousParity` は parity の問い合わせ・契約検証・homogeneous 状態に対する直接符号処理に利用できる。基本の P 作用経路自体は S の parity を読まずに実現できるため、`evaluate_graded` の S の bound は既存 Act を基本とし、直接符号処理を導入するときだけ追加する。最初から二つの独立した本番評価器を保守する必要はない。
+S の `HomogeneousParity` は parity の問い合わせ・契約検証・homogeneous 状態に対する直接符号処理に利用できる。基本の P 作用経路自体は S の parity を読まずに実現できるため、共通の `evaluate` の S の bound は既存 Act を基本とし、直接符号処理を導入するときだけ追加する。最初から二つの独立した本番評価器を保守する必要はない。
 
 ### 5.3. 積と随伴
 
@@ -236,15 +239,15 @@ full trace は両種類とも通常の非正規化 trace とする。graded で�
 
 演算子基底の要素は `E_0(b_0) ... E_n(b_n)` という因子順の配置積と定義する。これは intrinsic な graded tensor 基底である。`basis_operators` の列挙はこの積を作るだけなので、新たな局所積の評価や全行列は不要である。
 
-演算子の graded な `expand_in` / `coordinates_in` 相当は、5.3 節の intrinsic な項走査から局所基底へ展開する。P string を含む通常の因子列の係数を、そのまま graded 演算子基底の座標として返してはいけない。
+共通の `expand_in` / `coordinates_in` は、選択空間が graded の場合、5.3 節の intrinsic な項走査から局所基底へ展開する。P string を含む通常の因子列の係数を、そのまま graded 演算子基底の座標として返してはいけない。
 
 例えば `c_1` の intrinsic な座標は `I ⊗g a` に対する係数1である。一方、状態基底上の通常の行列は `P ⊗ a` になる。`c_1` を graded 空間上の配置積 `P_0 a_1` として再構築すると P を二重に含み、異なる演算子になってしまう。展開結果は intrinsic な因子順の配置積で再構築し、元の束縛先を保持する。再展開後も作用・座標が一致することを検証する。
 
-`qmb-export` の行列化は既存どおり「状態基底列挙 → 作用 → 状態座標 → 列格納」とする。graded 対応の作用・座標入口を呼び、backend 側には符号処理を追加しない。演算子基底の座標と状態基底上の行列は別の出力である。
+`qmb-export` の行列化は既存どおり「状態基底列挙 → 作用 → 状態座標 → 列格納」とする。空間の種類に対応した共通の作用・座標 API を呼び、backend 側には符号処理を追加しない。演算子基底の座標と状態基底上の行列は別の出力である。
 
-既存 `Export` の ordinary な bound を維持するため、graded 対応の借用 adapter（仮称 `GradedExport::new(&expression)`）に `Export` を実装する案を採る。Vec・ndarray・sprs の列構築・storage は共有する。adapter を選んでも ordinary 空間の意味は変えない。vector 出力も graded の遅延作用に到達できるようにする。metadata は既存の `HilbertSpace` を保持するため kind を失わず、shape・格納順序を変更しない。
+`Export` 自体を両種類に対応させ、共通評価に必要な bound へ変更する。専用 adapter は設けず、Vec・ndarray・sprs の列構築・storage を共有する。vector 出力も同じ API から graded の遅延作用を評価する。metadata は `HilbertSpace` を保持するため kind を失わず、shape・格納順序を変更しない。
 
-`qmb-normalize` も graded 対応の内積・期待値を呼ぶ入口を追加し、平方根・除算・零 norm の処理を共有する。core だけの対応で完了とせず、公開の導出操作まで接続する。
+`qmb-normalize` も共通の内積・期待値を呼ぶ既存メソッドの bound を更新し、平方根・除算・零 norm の処理を共有する。core だけの対応で完了とせず、公開の導出操作まで接続する。
 
 ## 7. 変更箇所と実装順序
 
@@ -254,14 +257,14 @@ full trace は両種類とも通常の非正規化 trace とする。graded で�
 | --- | --- | --- |
 | 1. 空間・局所能力 | `qmb-core/src/space.rs`、`ops.rs`、`lib.rs` | kind、正規化 metadata、混在拒否、互換性・部分系、parity / P の契約と再公開 |
 | 2. 構築・scope | `expr/composite.rs`、`system.rs`、`basis/enumeration.rs` | kind 指定の状態構築、Act の選択済み空間、再構築・走査・破棄の更新 |
-| 3. 作用と内積 | `evaluate/composite.rs`、`evaluate/inner_product.rs` | scope 内の P 挿入、混合 parity、期待値、ordinary の最小 bound の維持 |
+| 3. 作用と内積 | `evaluate/composite.rs`、`evaluate/inner_product.rs` | scope 内の P 挿入、混合 parity、期待値、必要な能力を要求する統一 API |
 | 4. 演算子の項処理 | `expr/traversal.rs`、`evaluate/trace.rs` | intrinsic / 通常表現を区別し、積・随伴・通常 trace を検証 |
 | 5. 基底と数値接続 | `basis/expansion/composite.rs`、`basis/coordinates.rs`、`qmb-export`、`qmb-normalize` | 展開・再展開・座標・密疎行列・正規化の graded 対応 |
 | 6. 具体例と文書 | core のテスト用代数、`examples`、`docs/design/`、`docs/architecture.md`、`docs/future-work.md` | 独立した二・三 mode の参照計算と既存 ordinary 回帰、公開 API・移行例の記録 |
 
 作用・trace・基底の全経路で空間検証を先に行い、Zero・零係数・identity でも不正な Index や空間を見逃さない。`BasisError`・`ExportError` は既存の複合式エラーの伝播を利用し、新しい種類の拒否も外側で失わないようにする。
 
-`qmb-basic` の Index 発行と `qmb-geometry` の Chain に grading の所有・符号計算を追加しない。利用側が kind を指定して空間を構築し、従来の Site 順の外部空間列を接続する。`qmb-spin-half` の既存モデルは ordinary を明示する現在の挙動を維持する。trivial grading に対応させる場合は S・O を even、P を I として明示実装し、fermion の局所規則を流用しない。core / geometry の `no_std + alloc` を維持し、新規の本番依存を必要としない。
+`qmb-basic` の Index 発行と `qmb-geometry` の Chain に grading の所有・符号計算を追加しない。利用側が kind を指定して空間を構築し、従来の Site 順の外部空間列を接続する。`qmb-spin-half` の既存モデルは ordinary を明示する現在の挙動を維持する。共通の複合評価へ接続するため、S・O を even、P を I とする trivial grading を明示実装し、fermion の局所規則を流用しない。core / geometry の `no_std + alloc` を維持し、新規の本番依存を必要としない。
 
 ## 8. 受入条件と検証計画
 
@@ -274,6 +277,7 @@ full trace は両種類とも通常の非正規化 trace とする。graded で�
 - `T_o(a,b)` と `T_g(a,b)` が非互換、実質的な混在構築がエラーとなる。空・単因子 wrapper を挟んでも同じ判断になる。
 - `T_g(a,c)` は `T_g(a,b,c)` の部分系、`T_o(a,c)` と逆順の `T_g(c,a)` は部分系でない。単因子・空の部分系規則も確認する。
 - `try_` の入力エラー優先・消費停止、束縛の集約規則、Zero でも参照検証する規則を維持する。
+- `tensor` と ordinary 指定の `tensor_with_kind`、`tensor_g` と graded 指定の `tensor_with_kind` が、それぞれ同じ空間・状態を構築する。三入口と fallible・二項・QuantumSystem の委譲経路で、同じ検証・エラー規則が適用されることを確認する。
 - 既存と同じ2万段・128 KiB スタックの条件で、kind の取得・構築・比較・評価・最終所有者の破棄を検証する。単因子 wrapper の構築が繰り返し全葉走査を起こさないことも確認する。
 
 ### 8.2. 符号と評価
@@ -295,16 +299,16 @@ full trace は両種類とも通常の非正規化 trace とする。graded で�
 - even / odd を含む複数の局所基底、混合 parity の式、非正規直交な状態基底を含める。基底列挙順序・要素数・空の基底を維持する。
 - Vec・ndarray・sprs が同じ状態基底行列を出力し、kind・因子順序の metadata を保持する。export 側で再度符号を入れない。
 - graded の期待値・正規化を行列計算と照合する。`Complex<f32>`・`Complex<f64>` の両方で既存要件の許容誤差を用い、近似的な零による成分の黙った削除をしない。
-- 既存の独自代数、`Product` を持たない作用、最小係数型、borrowed primitive、共有・疎性のテストを維持する。ordinary の利用者にダミーの grading 実装を要求しない。
+- 独自代数・テスト用代数・利用例を共通の grading 契約へ移行し、`Product` を持たない作用、操作ごとの最小係数能力、borrowed primitive、共有・疎性を検証する。spin-half の全 primitive が even で P=I となり、両種類の空間で同じ結果を返すこと、同じ fermion primitive でも ordinary / graded で因子間の符号が変わることを確認する。
 - 通常の構築・作用・内積・trace が全基底・密行列を生成しないことを、既存の allocation / capability テストを拡張して確認する。parity string の長さに応じた作業量は必要だが、状態全体の積和展開を共通の前処理にしない。
 
 実装時の基本検証は `cargo test --workspace --all-features`、`cargo check -p qmb-core -p qmb-geometry --no-default-features`、`cargo fmt --all -- --check` とする。後者の check はホスト上の確認であり、専用 no_std target の検証とは区別する。MSRV の実ビルド・専用 target・性能計測は、既存の未検証事項と区別して実施有無を記録する。
 
 ## 9. 実装着手前に固定する詳細
 
-本案では「kind は空間」「parity / P は primitive」「符号は core」「混在は同一視後に拒否」「評価の追加入口」「作用の scope 保存」「intrinsic 座標と通常表現の区別」を推奨する。数学的規約は既存設計を引き継ぎ、新たな規約へ変更しない。
+本案では「kind は空間」「parity / P は primitive」「符号は core」「混在は同一視後に拒否」「空間の種類に従う統一評価 API」「作用の scope 保存」「intrinsic 座標と通常表現の区別」を推奨する。数学的規約は既存設計を引き継ぎ、新たな規約へ変更しない。
 
-残る詳細は、追加入口の命名と公開 adapter、intrinsic 項走査のデータ構造、P の区間タスクの共有方法、エラーの具体名である。API を確定する際には、構築・作用・trace・基底・export・normalize を通した短い利用例と最小 trait bound を先にレビューする。Fermion の製品実装に進む前に、この共通機構をテスト用代数で検証する。
+利用者との合意により、構築入口は `tensor_with_kind`・`tensor`・`tensor_g` の三種類とし、空・単因子の同一視後にも残る ordinary / graded の混在は拒否する。残る詳細は、各共通操作の最小 trait bound、intrinsic 項走査のデータ構造、P の区間タスクの共有方法、エラーの具体名である。API を確定する際には、構築・作用・trace・基底・export・normalize を通した短い利用例と最小 trait bound を先にレビューする。Fermion の製品実装に進む前に、この共通機構をテスト用代数で検証する。
 
 設計文書の「実装済み API」や future work の完了状態は実装後に更新する。今回の文書追加だけをもって、v2 の Graded tensor product または Fermion の実装を完了扱いにはしない。
 
@@ -312,4 +316,4 @@ full trace は両種類とも通常の非正規化 trace とする。graded で�
 
 現行ソースと上記の設計文書を照合し、相対ファイルリンク、コードフェンス、差分の空白を確認した。補助的に Python 標準ライブラリの整数行列計算を使い、局所演算子 `{I,P,a,a†}` の二・三 mode の組合せについて、通常表現への変換と graded の積・随伴を4,432ケース照合した。二 mode の CAR、`Tr(c_1†c_1)=2`、8.2 節に記載した占有状態への作用の符号も確認した。
 
-これは提案中の式の整合性の確認であり、Rust の graded 実装を検証したものではない。変更は本書と v2 README のみのため、Rust のビルド・テストは今回実行していない。
+これは初回作成時の式の整合性の確認であり、Rust の graded 実装を検証したものではない。その後の API 方針の更新でも変更は計画文書のみで、Rust のビルド・テストは実行していない。

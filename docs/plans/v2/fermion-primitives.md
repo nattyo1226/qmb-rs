@@ -139,7 +139,7 @@ P を使う表現のために、第二の完全基底 `ParityBasis = [I, Parity,
 
 ## 7. Tensor 実装から独立した接続方針
 
-局所 primitive には係数に依存しない `is_odd() -> bool` を用意できる。core の parity trait が確定した段階で、この値に対応する trait を具体的代数側で実装する。P の取得能力には `LinearCombination::primitive(FermionOperator::Parity)` を返せる。仮称の core trait を本書の局所実装の前提にせず、同じ数学的契約を重複定義しない。
+局所 primitive には係数に依存しない `is_odd() -> bool` を用意できる。core の parity trait が確定した段階で、この値に対応する trait を具体的代数側で実装する。係数型に依存しない P の取得能力には `FermionOperator::Parity` 自身を返す。仮称の core trait を本書の局所実装の前提にせず、同じ数学的契約を重複定義しない。
 
 多 mode の順序・交換符号・先行区間の P は core の合成機構に委ねる。`FermionOperator` に Index・Site・mode 番号・parity string・global ordering を保持しない。既存 ordinary tensor へ複数の a を配置するだけでは fermion の異なる mode の CAR は得られないため、その構成を fermion 多体系の利用例として案内しない。
 

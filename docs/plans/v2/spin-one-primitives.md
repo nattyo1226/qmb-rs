@@ -173,7 +173,7 @@ E の9要素は Hilbert–Schmidt 内積で正規直交であり、完全性は�
 
 既存 `LocalState` / `LocalOperator` の評価・期待値・随伴・trace・展開・座標取得・正規化を利用する。演算子の九つの基底係数と、状態基底に対する3×3作用行列を区別する。作用行列は既存 export の列ごとの作用で生成し、primitive 側に backend 固有の行列化を実装しない。
 
-ordinary な複合系では既存の状態・演算子型にそのまま配置できる。graded の能力を後から付与する場合は、全状態・演算子を even、P=I という trivial grading とし、磁気量子数 m の整数としての偶奇を fermion parity と解釈しない。spin-half・fermion と混在する型消去や一般 spin-S は本書の対象にしない。
+ordinary な複合系では既存の状態・演算子型にそのまま配置できる。tensor 計画の統一された複合評価 API に接続するときは、全状態・演算子を even、P=I という trivial grading を明示実装し、磁気量子数 m の整数としての偶奇を fermion parity と解釈しない。spin-half・fermion と混在する型消去や一般 spin-S は本書の対象にしない。
 
 ## 7. Crate 構成と実装順序
 
