@@ -31,16 +31,22 @@
 //! that mathematical contract. Construction needs no numeric capabilities.
 //! This crate permits `std`, forbids unsafe code, and uses core's shared
 //! expressions, evaluation, tensor composition and basis coordinates.
+//!
+//! [`SpinOne::xyz`], [`SpinOne::heisenberg`] and [`SpinOne::blbq`] construct
+//! chain Hamiltonians on caller-owned site spaces. Positive bilinear coupling
+//! is ferromagnetic, following the spin-half model convention.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub mod basis;
 mod coefficient;
+mod models;
 pub mod operator;
 pub mod state;
 
 pub use basis::{CartesianBasis, LadderBasis, SzBasis};
+pub use models::UtilityError;
 pub use operator::SpinOneOperator;
 pub use state::SpinOneState;
 

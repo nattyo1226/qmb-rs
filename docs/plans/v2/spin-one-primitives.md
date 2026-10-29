@@ -2,11 +2,11 @@
 
 作成日: 2026-10-29
 更新日: 2026-10-30
-状態: 局所 primitive は `qmb-spin-one` に実装済み。局所規則・基底・共通 API 接続の検証は第10節に記録する。モデル utility の確定仕様を第11節に追加し、実装を進める。
+状態: 局所 primitive と XYZ・Heisenberg・BLBQ モデル utility を `qmb-spin-one` に実装済み。局所規則・基底・共通 API 接続の検証は第10節、モデルの仕様・検証は第11節に記録する。
 
 ## 1. 対象と参照した実装
 
-spin-1 の三状態、全九次元演算子空間、局所規則と完全な基底の実装仕様を記録する。局所規則は core の既存契約で実装した。Tensor 合成には[実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を使う。公開入口は [qmb-spin-one の rustdoc](../../../crates/qmb-spin-one/src/lib.rs)、概要は[局所代数の設計](../../design/local-structure.md#10-spin-one-の局所代数)を参照する。
+spin-1 の三状態、全九次元演算子空間、局所規則と完全な基底、および Chain 上の3モデルの実装仕様を記録する。局所規則は core の既存契約で実装した。Tensor 合成には[実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を使う。公開入口は [qmb-spin-one の rustdoc](../../../crates/qmb-spin-one/src/lib.rs)、概要は[局所代数の設計](../../design/local-structure.md#10-spin-one-の局所代数)を参照する。
 
 | 参照 | 本案に適用する内容 |
 | --- | --- |
@@ -275,7 +275,7 @@ I・Sz・Q0 は両基底で共有する。どちらの基底でも全15 primitiv
 
 ## 7. Crate 構成と共通 API への接続
 
-局所 primitive の実装は `src/{lib,state,operator,basis,coefficient}.rs`、検証は `tests/{contracts,minimal_scalar,local_expressions,tensor_products}.rs` と `tests/support/mod.rs` に置く。モデル utility は `src/models.rs` と `tests/models.rs` に追加する。本番依存は既存 workspace の `qmb-core`・`num-traits`・`num-complex` と、モデル構築に使う `qmb-geometry`・`thiserror` とする。num-complex は Act の係数型を表すため、本番依存とする。num-traits はこの crate 側で std feature を有効にし、qmb-normalize と同様に Float を利用する。workspace 全体の既定 feature や core の公開契約は変更しない。数値 backend は本番依存に含めない。
+局所 primitive の実装は `src/{lib,state,operator,basis,coefficient}.rs`、検証は `tests/{contracts,minimal_scalar,local_expressions,tensor_products}.rs` と `tests/support/mod.rs` に置く。モデル utility は `src/models.rs` と `tests/models.rs` に追加した。本番依存は既存 workspace の `qmb-core`・`num-traits`・`num-complex` と、モデル構築に使う `qmb-geometry`・`thiserror` である。num-complex は Act の係数型を表すため、本番依存とする。num-traits はこの crate 側で std feature を有効にし、qmb-normalize と同様に Float を利用する。workspace 全体の既定 feature や core の公開契約は変更していない。数値 backend は本番依存に含めない。
 
 依存宣言は以下のとおりである。
 
@@ -315,7 +315,7 @@ std の利用を許可し、Act は `Complex<R>`・`R: Float` 向けに実装す
 
 variant 名と基底の列挙順も3節の内容で確定し、そのまま実装した。係数は非零による除算に閉じることを要求し、定数係数は C の算術で生成する。局所規則は既存実装と同様に match で直接記述した。独自の有理数型・記号係数や実行時の行列単位分解を導入する旧案は採用していない。
 
-追加基底・一般 spin-S・異種代数の混在は後続の範囲とする。局所 primitive の完成後に追加するモデル utility の範囲は第11節に記録する。
+追加基底・一般 spin-S・異種代数の混在は後続の範囲とする。局所 primitive の完成後に追加したモデル utility の範囲は第11節に記録する。
 
 ## 10. 実装と受入検証
 
@@ -329,7 +329,7 @@ variant 名と基底の列挙順も3節の内容で確定し、そのまま実�
 | [tensor_products.rs](../../../crates/qmb-spin-one/tests/tensor_products.rs) | 両精度で ordinary 二因子の9状態・両81演算子基底、mixed-radix 順序、全列の作用と trace・座標、spectator の I、複素係数の積・随伴・作用・期待値・再展開・正規化、trivial grading による ordinary / graded の一致、全 backend |
 | [spin_one.rs](../../../examples/src/bin/spin_one.rs)・crate rustdoc | 公開入口の使い方、昇降型基底への閉性、二因子の期待値、feature 付き正規化 / 行列出力、異なる係数精度の混在拒否 |
 
-2026-10-30、Rust 1.99.1 の direnv devShell で確認した。spin-one の統合テスト16件と doctest 3件（異精度を混ぜる compile-fail を含む）が成功した。以下も成功している。
+2026-10-30、Rust 1.99.1 の direnv devShell で局所 primitive の初回受入確認を行った。この時点の spin-one の統合テスト16件と doctest 3件（異精度を混ぜる compile-fail を含む）が成功した。以下も成功している。モデル追加後の確認は11.5節に記録する。
 
 - `cargo test -p qmb-spin-one`
 - `cargo test --workspace --all-features`（既存 crate と doctest を含む）
@@ -343,7 +343,7 @@ MSRV 1.85 の実ビルド・性能計測は未実施であり、今回のホス�
 
 ## 11. XYZ・Heisenberg・BLBQ モデル utility
 
-2026-10-30 に以下の3モデルの定義を確定した。既存の [spin-half の models](../../../crates/qmb-spin-half/src/models.rs) と同じ符号規約・Chain・外部 Site 空間列を使い、`SpinOne<C>` の関連関数として提供する。
+2026-10-30 に以下の3モデルの定義を確定し、[models.rs](../../../crates/qmb-spin-one/src/models.rs) に実装した。既存の [spin-half の models](../../../crates/qmb-spin-half/src/models.rs) と同じ符号規約・Chain・外部 Site 空間列を使い、`SpinOne<C>` の関連関数として提供する。
 
 ### 11.1. Hamiltonian と公開入口
 
@@ -405,3 +405,18 @@ XYZ は配置した Cartesian 成分の積と和、Heisenberg は XYZ の等方�
 - 複数葉 Site では全葉ペアへ結合し、二乗がペアごとであることを検証する。空 Site・0 / 1 Site・2 Site の周期辺の重複防止・非連番の因子順・grouping の共有と spectator の保持を確認する。
 - 辺なし・zero 結合でも列長不一致と重複 Index を拒否し、エラーの source を保持することを確認する。
 - 数値演算を実装しない Clone・From・Neg だけの係数、非 Clone の結合入力と Index で構築できることを確認する。モデルの使用例と関連ドキュメントも更新する。
+
+### 11.5. モデル実装の検証記録
+
+2026-10-30、Rust 1.99.1 の direnv devShell で確認した。[models.rs](../../../crates/qmb-spin-one/tests/models.rs) の新規テスト9件が成功した。両精度の0〜3 Site・両境界の全行列成分と trace、等方的・bilinear 限界、全スピン別の固有状態とエネルギー、複数葉ペアごとの二乗、空 Site・空間共有・不正入力・最小係数能力を検証する。独立した参照は手書きのスピン行列から作り、モデル構築コード・Chain の辺列挙を使わない。
+
+以下がすべて成功した。workspace の全231テストに spin-one の統合テスト25件と doctest 4件を含む。
+
+- `cargo test -p qmb-spin-one --test models`
+- `cargo test --workspace --all-features`
+- `cargo check -p qmb-spin-one`
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`
+- `cargo fmt --all -- --check`
+- `RUSTDOCFLAGS='-D warnings' cargo doc -p qmb-spin-one --no-deps`
+
+[spin_one.rs](../../../examples/src/bin/spin_one.rs) を `--no-default-features` と `--all-features` で実行した。XYZ と Heisenberg の `|+,-〉` の期待値1、`J=1,K=0.25` の BLBQ の期待値0.5を確認し、export 有効時には BLBQ の9×9 Vec / sprs 行列が一致した。MSRV の実ビルド・性能計測については第10節の未実施事項を維持する。

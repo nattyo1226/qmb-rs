@@ -7,6 +7,8 @@ description = "Spin-1 primitives, quadrupoles, local rules, and bases for qmb-rs
 
 [dependencies]
 qmb-core.workspace = true
+qmb-geometry.workspace = true
+thiserror.workspace = true
 num-traits = { workspace = true, features = ["std"] }
 num-complex.workspace = true
 

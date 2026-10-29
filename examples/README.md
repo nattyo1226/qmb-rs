@@ -19,7 +19,7 @@ cargo run -p examples --bin spin_one --features export
 
 `hubbard` は `Fermion<Complex<f64>>` と、各 Site が `(up,down)` の2 mode を持つ graded 空間を使う。2 Site の標準 Hubbard・symmetric Hubbard を `t=1,U=4` で構築し、`|up,down>` の期待値がそれぞれ0・−2になることを確認する。`Parity=2 MajoranaZ` の基底座標も取得する。既定の normalize feature では正規化・正規化期待値、任意の export feature では16×16の Vec・sprs 行列の一致を確認する。`--no-default-features` でも実行でき、Index は利用側で発行する。
 
-`spin_one` は `SpinOne<Complex<f64>>` の三状態と四重極を使い、単イオン異方性と横磁場を持つ局所 Hamiltonian を構築する。`SPlus²=Q2Plus` の ladder 座標、Cartesian / ladder の往復変換、二因子での作用を確認する。既定の normalize feature では正規化と正規化期待値、export feature では3×3の Vec・sprs 行列の一致を確認する。`--no-default-features` でも実行できる。
+`spin_one` は `SpinOne<Complex<f64>>` の三状態と四重極を使い、単イオン異方性と横磁場を持つ局所 Hamiltonian を構築する。`SPlus²=Q2Plus` の ladder 座標、Cartesian / ladder の往復変換、二因子での作用を確認する。2 Site の XYZ・Heisenberg・BLBQ を関連関数から構築し、`J=1,K=0.25` の BLBQ では `|+,->` の期待値が0.5となることも確認する。bilinear 結合の正符号は強磁性的で、2 Site の周期辺は一度だけ数える。既定の normalize feature では正規化と正規化期待値、export feature では局所3×3と BLBQ 9×9の Vec・sprs 行列の一致を確認する。`--no-default-features` でも実行できる。
 
 `normalize` はデフォルトで有効、`export` は任意の feature である。次のように正規化を無効にした構成も実行できる。
 
