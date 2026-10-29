@@ -3,7 +3,7 @@
 作成日: 2026-10-30
 更新日: 2026-10-30
 
-現在の実装を読み、同種の操作で名前の規則が揃っていない箇所と、公開 API として長くなっている名前を記録する。実装名・入力・動作はソースで確認した事実であり、使いにくさの評価・優先度・新しい名前は検討案である。改名の採用や v2 での実施は未決とする。
+現在の実装を読み、同種の操作で名前の規則が揃っていない箇所と、公開 API として長くなっている名前を記録する。実装名・入力・動作はソースで確認した事実であり、使いにくさの評価・優先度・新しい名前は検討案である。第1〜3節は候補の調査記録、第5節はそれらを比較した推奨案とする。推奨は採用決定ではなく、改名の採用や v2 での実施は未決である。
 
 確認対象は `crates/` 以下の `qmb-core`・`qmb-basic`・`qmb-geometry`・`qmb-spin-half`・`qmb-spin-one`・`qmb-fermion`・`qmb-normalize`・`qmb-export` の関数・メソッド・公開 trait と、`examples/src/bin/` の呼び出しである。非公開 module 内でも公開型の inherent method や再公開された trait は公開 API に含める。内部関数は後段に分ける。
 
@@ -114,6 +114,120 @@ N1〜N5 と同じ関数を含む。以下の候補名は相互に独立して採
 - **短縮で数学的契約を変えない。** 左側の共役・随伴、積の右側が先に作用する順序、ordinary / graded の選択、正規化の有無、明示空間が古い束縛に優先する規則を維持する。局所式の恒等元と未束縛の複合恒等元、列集約の空入力・単項の扱いも維持する。
 - **名前と能力を別に扱う。** primitive・Index の Clone 要求、数値能力、係数精度、no_std の境界を改名に伴って追加・変更しない。`normalized_expectation` の短縮のために `normalized().expectation()` へ置き換えると、平方根など現在不要な能力を要求するので同等の移行にはならない。
 - **採用時に名前の衝突と利用例を確認する。** 特に N1・N3 は既存名の引数形を変えるため、同じ型に旧名の互換 alias をそのまま残せるとは限らない。公開 trait の変更は独自代数の実装にも影響する。対応する crate のテスト・rustdoc・examples と、設計文書の API 表を合わせて更新・検証する。本書の調査ではソースと呼び出し例を確認し、実行テストは行っていない。
+
+## 5. 各候補の推奨案
+
+検討日: 2026-10-30
+
+判断基準は、型をまたいで操作名から入力の形を推測できること、数学的な意味を失わないこと、頻出する呼び出しを短くすることの三点とする。既存名を残すだけで十分な項目も含めて結論を示す。第1〜3節の代替案のうち、以下で選ばなかったものは今回の推奨には含めない。根拠となる定義箇所は各候補のリンクを参照する。
+
+### 5.1. 命名規則についての結論
+
+| 対象 | 推奨 | 判断理由・選ばなかった案 |
+| --- | --- | --- |
+| N1 | **改名**。二項は `product` / `tensor`、列は `product_all` / `tensor_all` に揃える。QuantumSystem の列集約も同じ名前にする。`add` / `sum` は維持する。 | 二項のテンソル積を短くし、列であることを `_all` で明示できる。全てを `product` に統合すると演算子積とテンソル積を区別できず、`sum_all` の追加は既に集約を意味する `sum` を長くするだけなので採らない。 |
+| N2 | **修飾順序を統一**。`[try_]操作[_all][_at][_g または _with]` とする。`_g` は graded の略記として維持し、配置版では `_at_g` に揃える。 | 既存の短い `_g` と ordinary の無印を保ちながら、配置版だけ修飾順序が異なる問題を解消できる。全てを `graded_*` にすると列・配置の名前が再び長くなるため採らない。テンソル系の `_with` の先頭引数は必ず `TensorKind` とし、種類の暗黙推論にはしない。 |
+| N3 | **改名**。基底を指定する基本名を `expand` / `coordinates`、明示空間版を `expand_in` / `coordinates_in` とする。`act_in`・`expectation_in`・`trace_in` と `MatrixArgs::in_space` は維持する。 | 式の計算メソッドで `_in` の対象を作用空間へ揃えられる。基底は必須引数なので無印でも情報を失わない。全計算名を `_in_space` に長くする案や、配置の `_at` を流用する案は採らない。builder は計算ではないため `in_space` を残す。 |
+| N4 | **`dimension` に統一**。`Dimension::dim` → `dimension`、`state_basis_len` → `state_dimension`、`operator_basis_len` → `operator_dimension` とする。 | 基底を受け取らない自由関数の意味も名前に反映できる。二つの自由関数は `usize` を返す便宜を残すため削除しない。既存の `dimension_with`・`local_dimension`・`Coordinates::len` は維持し、戻り値・overflow の契約も変更しない。 |
+| N5 | **葉を明示して改名**。全組み合わせは `nn_leaf_pairs_with` / `nn_leaf_pairs_on`、位置対応は `nn_leaf_zip_with` / `nn_leaf_zip_on` とする。Site の三入口は維持する。 | `leaf` で返す対象、`zip` で短い側までの位置対応を示す。`nn_` の削除は最近接という情報を失い、`_with` と `_on` の統合は入力の解釈を隠すため採らない。全組み合わせ版が少し長くなることは意味の明確化のために受け入れる。 |
+| N6 | **現状維持**。`hubbard` / `symmetric_hubbard` を残す。 | モデル名の形容詞と API の入力条件を示す接尾辞は役割が異なる。自然なモデル名を変えて得られるのは一覧上の並びだけであり、短縮や意味の改善がない。関連する二関数の rustdoc から相互に参照できれば十分である。 |
+
+### 5.2. 長い公開名についての結論
+
+| 対象 | 推奨する公開名 | 判断理由・移行範囲 |
+| --- | --- | --- |
+| L1 | **改名**。`hs_inner_product` / `hs_inner_product_in` | Hilbert–Schmidt の部分だけを `hs` とし、内積であることは省略しない。局所版・複合版を同時に変える。`inner_product` だけにする案は内積の種類を隠し、`dot` / `hs_inner` はさらに語彙を減らす必要がないため採らない。rustdoc の冒頭に正式名と `Tr(A†B)`、非正規化であることを残す。 |
+| L2 | **改名**。`tensor_all_at_with`、`tensor_all_with`、`try_tensor_all_with` | N1・N2 と組み合わせて `state_` と `_kind` を省く。配置版は25文字から18文字、fallible な種類指定版は26文字から19文字になる。`tensor_at_with` まで縮めると列の `_all` 規則を外れるため採らない。ordinary・graded の短縮入口も5.3節の対応表で揃える。 |
+| L3 | **改名**。`product_all_at`、`try_product_all`。通常の `operator_product` も `product_all` とする。 | QuantumSystem の積は演算子だけを受け取るので `operator_` を省ける。式型の列集約と同名になり、配置も `_at` で表せる。`op_product` のような新しい略語は導入しない。状態・演算子の双方がある `state_sum` / `operator_sum` とそれぞれの `try_` 版は維持する。 |
+| L4 | **改名**。二項は `tensor_with`、列は `tensor_all_with` / `try_tensor_all_with` | N1 により二項と列が名前で分かれ、引数型 `TensorKind` と合わせれば `_kind` を省いても種類指定であることを説明できる。`_with_kind` を一部だけ残す案は採らない。この `_with` を任意のオプションを受け取る入口へ拡張することも今回の案には含めない。 |
+| L5 | **改名**。両局所式型で `from_combination` | `LinearCombination<Self, C>` という既存の入力型と型推論を保ち、名前だけを短縮できる。主入口を `From` / `.into()` に置き換える案は変換先の推論に依存し、`from_terms` は入力を iterator へ広げる別の API 変更になるため今回は採らない。primitive の線型結合を受け取る別 overload も追加しない。 |
+| L6 | **現状維持**。`normalized_expectation` / `normalized_expectation_in` と二つの trait 名を残す。 | 非正規化の `expectation` と式上で明確に区別できることを優先する。`mean` は短いが正規化規約が名前に表れず、`expectation` への単独改名は既存メソッドと競合する。名前の短縮のために平方根を要する正規化処理へ置き換えない。 |
+| L7 | **N3・N5 に統合して改名**。`coordinates_in_space` → `coordinates_in`、`nn_pairs_by_pos_with` → `nn_leaf_zip_with` | それぞれのファミリ全体に対する決定を適用し、この二関数だけ別の略称を追加しない。対応する基本版・`_on` 版も同時に移行する。 |
+
+`hs` と `_g` は特定の数学的概念の短縮形として限定して使う。`coordinates` を `coords` にするなど、一般の単語まで一律に略す規則にはしない。また QuantumSystem の接頭辞省略は現在の状態 tensor／演算子 product の責務に基づく。将来、演算子 tensor や状態の別種の積を追加する場合も、これらの入力型や意味を暗黙に変更せず、別の入口として設計する。
+
+### 5.3. テンソル・積の統合対応表
+
+以下は**推奨する変更後の名前**であり、現在利用できる API の一覧ではない。引数順序・入力型・戻り値・trait bound は現行のままとする。`_with` の先頭引数が `kind`、`_at` の入力が `(&factor, primitive)` の列である点も維持する。
+
+#### State / HilbertSpace
+
+| 提供型 | 現行名 | 推奨名 |
+| --- | --- | --- |
+| 両方 | `tensor_product` | `tensor` |
+| 両方 | `tensor_product_g` | `tensor_g` |
+| 両方 | `tensor_product_with_kind` | `tensor_with` |
+| 両方 | `tensor` | `tensor_all` |
+| 両方 | `tensor_g` | `tensor_all_g` |
+| 両方 | `tensor_with_kind` | `tensor_all_with` |
+| State のみ | `try_tensor` | `try_tensor_all` |
+| State のみ | `try_tensor_g` | `try_tensor_all_g` |
+| State のみ | `try_tensor_with_kind` | `try_tensor_all_with` |
+
+HilbertSpace に `try_` 版を新設する提案は含まない。`LocalOperator` / `Operator` の `product` / `product_all` と、Operator の `try_product_all` はそのまま使う。
+
+#### QuantumSystem
+
+| 現行名 | 推奨名 |
+| --- | --- |
+| `state_tensor` | `tensor_all` |
+| `state_tensor_g` | `tensor_all_g` |
+| `state_tensor_with_kind` | `tensor_all_with` |
+| `try_state_tensor` | `try_tensor_all` |
+| `try_state_tensor_g` | `try_tensor_all_g` |
+| `try_state_tensor_with_kind` | `try_tensor_all_with` |
+| `state_tensor_at` | `tensor_all_at` |
+| `state_tensor_g_at` | `tensor_all_at_g` |
+| `state_tensor_at_with_kind` | `tensor_all_at_with` |
+| `operator_product` | `product_all` |
+| `try_operator_product` | `try_product_all` |
+| `operator_product_at` | `product_all_at` |
+
+#### 呼び出しの比較（移行案）
+
+| 現行 | 推奨案 |
+| --- | --- |
+| `a.tensor_product(&b)?` | `a.tensor(&b)?` |
+| `State::tensor(states)?` | `State::tensor_all(states)?` |
+| `Spin::state_tensor_at_with_kind(kind, assignments)?` | `Spin::tensor_all_at_with(kind, assignments)?` |
+| `F::state_tensor_g_at(assignments)?` | `F::tensor_all_at_g(assignments)?` |
+| `Spin::try_operator_product(terms)?` | `Spin::try_product_all(terms)?` |
+
+### 5.4. 基底・幾何の統合対応表
+
+| 提供型 | 現行 | 推奨案 |
+| --- | --- | --- |
+| 四つの式型 | `expand_in(&basis)` | `expand(&basis)` |
+| 四つの式型 | `coordinates_in(&basis)` | `coordinates(&basis)` |
+| Operator | `expand_in_space(&basis, &ambient)` | `expand_in(&basis, &ambient)` |
+| Operator | `coordinates_in_space(&basis, &ambient)` | `coordinates_in(&basis, &ambient)` |
+| Chain | `nn_pairs_with(&sites)` | `nn_leaf_pairs_with(&sites)` |
+| Chain | `nn_pairs_on(&space)` | `nn_leaf_pairs_on(&space)` |
+| Chain | `nn_pairs_by_pos_with(&sites)` | `nn_leaf_zip_with(&sites)` |
+| Chain | `nn_pairs_by_pos_on(&space)` | `nn_leaf_zip_on(&space)` |
+
+四つの式型は `LocalState`・`LocalOperator`・`State`・`Operator` を指す。局所式や State に明示空間版を追加する提案ではない。Chain の `nn_site_pairs` / `nn_site_pairs_with` / `nn_site_pairs_on` は変更しない。
+
+### 5.5. 内部関数についての結論
+
+第3節の四候補に、追跡用の ID を付ける。公開範囲は現行のままとする。
+
+| ID | 現行名 | 推奨名 | 理由・変更範囲 |
+| --- | --- | --- | --- |
+| I1 | `LocalOperator::evaluated` | `evaluate` | 状態側と同じ動詞にする。公開する必要はなく、`pub(crate)` のまま呼び出しを置換する。`evaluated_inner_product` は「既に評価済みの入力を要求する」という前提を表すので、この規則で機械的に変更しない。 |
+| I2 | `StateExpr::same_node` | `shares_node_with` | 空間側と共有節点の同一性の語彙を揃える。`Arc::ptr_eq` を使う実装を維持し、式の数学的等価性を比較する名前にはしない。 |
+| I3 | `basis::enumeration::leaves` | `collect_leaves` | `Vec` への集約と、公開 `HilbertSpace::leaves` の遅延列挙を区別する。既存走査を公開 iterator の利用へ置き換えるかどうかは改名とは別に扱う。 |
+| I4 | `qmb-export::coordinates::owned_entries` | `into_flat_entries` | 所有権の移動と flat index 化の両方を表す。借用版の `flat_entries` と対応し、反復時にエラーを返す契約も維持できる。 |
+
+### 5.6. 採用時の移行単位
+
+N1・N2・L2・L3・L4 は一つの命名体系として同時に適用する。N3・L7 の基底側も、基本名と明示空間版を一緒に変更する。古い名前を新しい意味で再利用する箇所は、互換 alias を残すだけでは移行できないため、v2 の破壊的変更として対応表を公開する方針を推奨する。
+
+具体的には、旧 `State::tensor(states)` を新しい二項 `tensor` として解決させないよう、呼び出し先の型と引数を見て変更する。`tensor` → `tensor_all` と `tensor_product` → `tensor` を単純な文字列の一括置換で処理すると、別の既存名の一部や置換済みの新名まで変更する恐れがある。`expand_in` / `coordinates_in` も同様に、基底だけの呼び出しと明示空間付きの呼び出しを区別する。
+
+名前を再利用しない改名も、新名を正式な入口に揃える。互換期間が必要になった場合に限り、同じシグネチャで旧名から新名へ委譲する deprecated alias を検討し、両名を恒久的な選択肢にはしない。`Dimension` の必須メソッドの改名は独自実装側の更新も必要であり、旧名と新名のデフォルト実装を相互に委譲させて対応しない。
+
+採用後は該当 crate の既存テスト・rustdoc・examples を更新して実行し、第4節の契約を確認する。特に fallible 集約のエラー優先順位、graded の符号、明示空間の優先、基底座標と行列の区別を検証対象にする。今回の成果物は推奨案の記録であり、上記の新名を実装・コンパイル検証したものではない。
 
 ## 関連文書
 
