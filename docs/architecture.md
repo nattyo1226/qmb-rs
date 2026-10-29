@@ -4,9 +4,11 @@
 
 ## 1. 文書の位置づけ
 
-本書は、[要件](requirements.md)に基づく設計の概要と、合意済みの設計判断を記録する。各対象の詳細な契約は `docs/design/` 以下の文書に記録する。具体的な Rust の型、公開 API、および内部実装は、対応する設計を決めた時点で追記する。
+本書は、[要件](requirements.md)に基づく設計の概要と、合意済みの設計判断を記録する。各対象の詳細な契約、具体的な Rust の型、公開 API、および内部実装は `docs/design/` 以下の文書で管理する。
 
-2026-10-28 に QuantumSystem と SpinHalf<C> の構築 API を導入し、Chain をサイト数・境界条件だけの幾何へ移行した。本書は移行後の構成を表す。
+現在は ExpressionFactory が式の構築入口、QuantumSystem が primitive と係数型の関連付けを担う。SpinHalf<C>・SpinOne<C>・Fermion<C> は ExpressionFactory の型エイリアスとし、ordinary / graded の共通評価を利用する。Chain はサイト数・境界条件だけを保持し、配置には外部の Site 空間列を使う。
+
+公開 API の詳細は[局所式の構築](design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)、[共通の構築入口と型情報](design/composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)、[基底処理と座標](design/basis.md)、[幾何とモデル構築](design/geometry.md)を参照する。延期した機能・未実施の検証は[今後の課題](future-work.md)、補助 API や利用開始の導線は[API の使いやすさ](plans/api-usability/README.md)にまとめる。
 
 ## 2. 責任分離
 

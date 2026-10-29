@@ -1,6 +1,6 @@
 # 埋め込み・複合空間の式と数学的能力
 
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 ## 1. 対象と責任分担
 
@@ -244,7 +244,7 @@ Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積ま�
 
 Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。LocalStructure 廃止後の公開型は `State<I, S, O, C>`・`Operator<I, O, C>` とする。現在の API は第10節に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
 
-本書は数学的な契約を定める。[初期版の提供範囲](../architecture.md#9-初期版の提供範囲と完成条件)は同種局所構造の ordinary な演算とし、異種局所構造の合成は[後続へ延期](../future-work.md#2-延期した機能と検討事項)する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
+本書は数学的な契約を定める。[初期版の提供範囲](../architecture.md#9-初期版の提供範囲と完成条件)は同種局所構造の ordinary な演算とした。現在は第12節の ordinary / graded 共通評価まで実装済みであり、異種局所構造の合成は引き続き[後続へ延期](../future-work.md#2-延期した機能と検討事項)する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
 
 ## 10. 現在の公開 API
 
@@ -355,11 +355,11 @@ P は A の右側に置く。例えば `A ⊗g B` は `A P^p(B) ⊗ B` となる
 
 状態内積には追加符号がなく、full trace は通常表現で局所積・Trace を縮約する。P が入る可能性のある因子を下ろす前に identity spectator と判定しない。二 mode の `c_1 = P_0 ⊗ a_1` に対し、`c_1†c_1 = I_0 ⊗ n_1` の trace も検証する。通常の trace の巡回性に parity 符号を加えず、S・状態基底・usize で表せる総次元も要求しない。Hilbert–Schmidt 内積は同じ trace 経路を使う。Supertrace / partial trace は追加しない。
 
-空間検証は Zero・零係数・identity でも先に行い、不正な Index や空間を見逃さない。利用例は [tensor_products.rs](../../examples/src/bin/tensor_products.rs)。Fermion / spin-one の製品実装、異種 primitive、実質的な ordinary / graded 混在、permutation、regrouping、State / Operator の統合は対象外である。
+空間検証は Zero・零係数・identity でも先に行い、不正な Index や空間を見逃さない。利用例は [tensor_products.rs](../../examples/src/bin/tensor_products.rs)。この共通機構を使う製品実装は [Fermion](local-structure.md#9-fermion-の局所代数)・[Spin-one](local-structure.md#10-spin-one-の局所代数)に記録する。異種 primitive、実質的な ordinary / graded 混在、permutation、regrouping、State / Operator の統合は後続の範囲とする。
 
 ## 13. Ordinary / graded の受入確認（2026-10-29）
 
-Ordinary / graded の共通機構の実装時に行った受入確認を記録する。Fermion / spin-one の製品実装と v2 全体の完了は含まない。新しい本番依存は追加していない。
+Ordinary / graded の共通機構の実装時に行った受入確認を記録する。Fermion / spin-one の製品実装の検証は、それぞれ[局所代数の検証記録](local-structure.md#96-実装時の検証記録)・[Spin-one の検証記録](local-structure.md#106-実装時の検証記録)を参照する。共通機構の実装では新しい本番依存は追加していない。
 
 | 対象 | 実装時の検証根拠 |
 | --- | --- |

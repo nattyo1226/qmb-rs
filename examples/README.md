@@ -6,6 +6,7 @@ qmb-rs の利用例を、workspace に属する Cargo パッケージの bin と
 
 ```sh
 cargo run -p examples --bin two_spins
+cargo run -p examples --bin tensor_products
 cargo run -p examples --bin basis_expansion
 cargo run -p examples --bin heisenberg
 cargo run -p examples --bin heisenberg --features export
@@ -38,6 +39,4 @@ cargo run -p examples --bin heisenberg --no-default-features --features export
 
 `scaled` は `impl Into<C>` を受け取るため、選択済みの複素係数型に `.scaled(0.5)` と実数を直接渡せる。旧 scaled の期待型に依存した `.scaled(value.into())` は `.scaled(value)` とし、Default の生成型や constructor の C を推論できない場合は明示する。`*` は従来の係数型を直接受け取る契約を維持する。
 
-`cargo run -p examples --bin tensor_products` は `TensorKind` を空間の構築時に指定し、
-共通の作用・trace API を使う例である。Spin-half は全 primitive が even、P=I
-なので、ordinary / graded で同じ数値結果になる。
+`tensor_products` は `TensorKind` を空間の構築時に指定し、共通の作用・trace API を使う例である。Spin-half は全 primitive が even、P=I なので、ordinary / graded で同じ数値結果になる。共通機構の契約は[ordinary / graded の共通評価](../docs/design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照する。
