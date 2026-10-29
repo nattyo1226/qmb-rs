@@ -21,11 +21,11 @@ Grading の情報保持と共通評価 API は実装済み。空間が kind、pr
 - **Partial trace**：公開 API、遅延節点、残存空間の構築、評価器への接続、および検証を延期する。残存因子の Index・局所構造・順序を保持する数学的契約は[要件第5.4節](requirements.md#54-full-trace-と-partial-trace)と[複合式の設計](design/composite-expression.md#7-full-tracepartial-trace-と埋め込み)に保持する。実施時期は未定である。
 - **写像の表現行列・表現係数**：共通 API、複数入力、入力ごとの共役指定、係数データの保持・再利用と対応する検証を延期する。表現係数の生成は将来の `qmb-core` の担当とし、数学的契約は[写像の表現行列の設計](design/representation-matrix.md)に保持する。状態・演算子の座標取得と密・疎 export はこの機能に依存しない。実施時期は未定である。
 - **局所代数と基底の拡張**：一つの系で異種局所構造を混在・合成する機能と、そのための型消去・保持方式を延期する。実行時の局所構造パラメータや異なる実装型間の定義照合も後続の検討事項である。初期版の複合基底は一つの局所基底を全因子へ適用するため、因子ごとに異なる基底の指定は扱わない。
-- **Fermion の製品実装**：実装は延期する。Ordinary / graded tensor product の共通機構は実装済み。合成・作用・随伴・通常の trace に関する数学的契約は[複合式の設計](design/composite-expression.md#5-ordinary--graded-の合成則)に保持する。
+- **Fermion の追加機能**：単一 mode の局所代数・Majorana 系・graded 接続と標準／symmetric Hubbard は `qmb-fermion` に実装した。汎用 spinful 構築 utility、粒子数 sector、任意格子・可変結合などは後続とする。[局所代数と検証の記録](design/local-structure.md#9-fermion-の局所代数)・[Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)を参照する。
 - **式と空間の操作**：bra 型・構築 API、内部ラベル、部分空間・射影・制約付き部分空間、積和から和積への因数分解、因子の permutation、個別の簡約ルールを選択して適用する操作、および任意の式型を分解結果から組み立て直す汎用機構を延期する。braket は内積で計算し、grouping は既存の HilbertSpace を用いる。通常の評価・基底展開に必要な分配・局所積・係数処理や、共通式の構築は引き続き提供する。延期した機構の詳細は[要件第9.2節](requirements.md#92-未決延期した機構と操作)に記録する。
 - **式の管理**：source の自動保持、式の構造比較・表示 API、保存・復元を延期する。入力の不変性と不変実体の共有は維持する。
 - **キャッシュと並列化**：評価結果のキャッシュ、並列評価・スレッド間共有は未決である。キャッシュの導入可否・対象・保持先・再利用条件・破棄・資源管理と、スレッド間共有の条件・並列実行方式を検討する。初期版は要求時の計算と単一スレッドの評価でよい。
-- **追加の代数・幾何と外部接続**：spin-1/2 以外の builtin algebra、1D Chain 以外の Geometry、ML・自動微分 module、tensor network・MPS・MPO、GPU・分散計算などへの接続を延期する。追加候補の詳細は[要件第9.3節](requirements.md#93-追加の機能候補)に記録する。
+- **追加の代数・幾何と外部接続**：spin-1/2・fermion 以外の builtin algebra、1D Chain 以外の Geometry、ML・自動微分 module、tensor network・MPS・MPO、GPU・分散計算などへの接続を延期する。追加候補の詳細は[要件第9.3節](requirements.md#93-追加の機能候補)に記録する。
 
 後続機能のための crate は先に作らず、必要な責任と依存関係が具体化した段階で検討する。
 
@@ -34,7 +34,7 @@ Grading の情報保持と共通評価 API は実装済み。空間が kind、pr
 初期版の受入確認時点では、次の検証は実施していない。
 
 - MSRV（Rust 1.85）での実ビルド・テスト。受入確認時は利用者の依頼により省略した。
-- 専用 no_std target での実ビルド。`qmb-core`・`qmb-geometry` の `no_std + alloc` は、ソース、依存 feature、およびホスト上の単独ビルドによる確認にとどまる。
+- 専用 no_std target での実ビルド。`qmb-core`・`qmb-geometry`・`qmb-fermion` の `no_std + alloc` は、ソース、依存 feature、およびホスト上の単独ビルドによる確認にとどまる。
 - 性能ベンチマーク、速度比較、および追加の割り当て最適化の検証。
 
 演算子式の積に含まれる和は既存の走査で分配されるため、結果が疎でも項数が増大する場合がある。式の構造を利用し、先に局所的な和をまとめる最適化は後続の検討対象とする。

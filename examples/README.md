@@ -9,9 +9,13 @@ cargo run -p examples --bin two_spins
 cargo run -p examples --bin basis_expansion
 cargo run -p examples --bin heisenberg
 cargo run -p examples --bin heisenberg --features export
+cargo run -p examples --bin hubbard
+cargo run -p examples --bin hubbard --features export
 ```
 
 `two_spins` は `Spin::state_tensor_at`・`Spin::operator_product_at`・`Spin::try_operator_sum` から2スピンの一重項・三重項と交換 Hamiltonian `H = S_a · S_b` を手で組み立てる。norm squared、エネルギー期待値（一重項 −0.75、三重項 0.25）、固有状態の残差、状態間の内積を計算・検証する。追加 feature は不要で、`--no-default-features` でも実行できる。
+
+`hubbard` は `Fermion<Complex<f64>>` と、各 Site が `(up,down)` の2 mode を持つ graded 空間を使う。2 Site の標準 Hubbard・symmetric Hubbard を `t=1,U=4` で構築し、`|up,down>` の期待値がそれぞれ0・−2になることを確認する。`Parity=2 MajoranaZ` の基底座標も取得する。既定の normalize feature では正規化・正規化期待値、任意の export feature では16×16の Vec・sprs 行列の一致を確認する。`--no-default-features` でも実行でき、Index は利用側で発行する。
 
 `normalize` はデフォルトで有効、`export` は任意の feature である。次のように正規化を無効にした構成も実行できる。
 
