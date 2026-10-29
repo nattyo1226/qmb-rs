@@ -1,6 +1,6 @@
 mod support;
 use num_complex::Complex;
-use qmb_core::{LocalOperator, LocalState, QuantumSystem};
+use qmb_core::{LocalOperator, LocalState};
 use qmb_export::{Export, Exported, MatrixArgs};
 use qmb_fermion::{
     Fermion, FermionOperator as O, FermionState as S, LadderBasis, MajoranaBasis, OccupationBasis,
@@ -64,7 +64,7 @@ fn check<T: Real>() {
     let psi = state(S::Empty).scaled(c::<T>(2., 1.)) + state(S::Occupied).scaled(c::<T>(-1., 3.));
     let v = [Complex::new(2., 1.), Complex::new(-1., 3.)];
     values::<T>(&vector(&psi), &v);
-    values::<T>(&vector(&psi.expand_in(&OccupationBasis).unwrap()), &v);
+    values::<T>(&vector(&psi.expand(&OccupationBasis).unwrap()), &v);
     close::<T>(psi.norm().to_f64().unwrap().into(), 15_f64.sqrt().into());
     close::<T>(psi.norm_squared().to_f64().unwrap().into(), 15_f64.into());
     close::<T>(
@@ -92,9 +92,9 @@ fn check<T: Real>() {
         );
         values::<T>(
             &exported(
-                &a.expand_in(&LadderBasis)
+                &a.expand(&LadderBasis)
                     .unwrap()
-                    .expand_in(&MajoranaBasis)
+                    .expand(&MajoranaBasis)
                     .unwrap(),
             ),
             &m,
@@ -114,7 +114,7 @@ fn check<T: Real>() {
     values::<T>(&exported(&a), &reference);
     values::<T>(&exported(&a.adjoint()), &adjoint(&reference));
     values::<T>(
-        &exported(&a.adjoint().product(&a)),
+        &exported(&(a.adjoint().clone() * &a)),
         &product(&adjoint(&reference), &reference),
     );
     close::<T>(to64(a.trace()), trace(&reference));

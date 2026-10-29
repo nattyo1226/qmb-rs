@@ -40,8 +40,8 @@ enum Node<I> {
 /// use qmb_core::HilbertSpace;
 /// let a = HilbertSpace::factor("a");
 /// let b = HilbertSpace::factor("b");
-/// let h = a.tensor_product(&b)?;
-/// assert_eq!(h.dimension_with(NonZeroUsize::new(2).unwrap())?, 4);
+/// let h = a.tensor(&b)?;
+/// assert_eq!(h.dim_with(NonZeroUsize::new(2).unwrap())?, 4);
 /// assert!(a.is_subsystem_of(&h));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -146,7 +146,7 @@ impl<I> HilbertSpace<I> {
     /// Use a state primitive for a state-space dimension, and an operator
     /// primitive for an operator-space dimension. The empty tensor has dimension
     /// one even when P's local dimension cannot be represented.
-    pub fn dimension<P: Dimension>(&self) -> Result<usize, DimensionOverflow> {
+    pub fn dim<P: Dimension>(&self) -> Result<usize, DimensionOverflow> {
         let mut indices = self.indices();
         if indices.next().is_none() {
             return Ok(1);
@@ -158,10 +158,7 @@ impl<I> HilbertSpace<I> {
     /// Computes the dimension for an explicitly chosen uniform local space.
     ///
     /// This query does not associate a definition or primitive type with indices.
-    pub fn dimension_with(
-        &self,
-        local: core::num::NonZeroUsize,
-    ) -> Result<usize, DimensionOverflow> {
+    pub fn dim_with(&self, local: core::num::NonZeroUsize) -> Result<usize, DimensionOverflow> {
         self.indices().try_fold(1usize, |d, _| {
             d.checked_mul(local.get()).ok_or(DimensionOverflow)
         })
@@ -178,17 +175,17 @@ impl<I> HilbertSpace<I> {
 
 impl<I: Eq> HilbertSpace<I> {
     /// Constructs a tensor, retaining children and grouping and rejecting duplicates.
-    pub fn tensor(children: impl IntoIterator<Item = Self>) -> Result<Self, SpaceError> {
-        Self::tensor_with_kind(TensorKind::Ordinary, children)
+    pub fn tensor_all(children: impl IntoIterator<Item = Self>) -> Result<Self, SpaceError> {
+        Self::tensor_all_with(TensorKind::Ordinary, children)
     }
 
     /// Constructs a graded tensor, preserving grouping.
-    pub fn tensor_g(children: impl IntoIterator<Item = Self>) -> Result<Self, SpaceError> {
-        Self::tensor_with_kind(TensorKind::Graded, children)
+    pub fn tensor_all_g(children: impl IntoIterator<Item = Self>) -> Result<Self, SpaceError> {
+        Self::tensor_all_with(TensorKind::Graded, children)
     }
 
     /// Constructs a tensor with an explicit composition rule.
-    pub fn tensor_with_kind(
+    pub fn tensor_all_with(
         kind: TensorKind,
         children: impl IntoIterator<Item = Self>,
     ) -> Result<Self, SpaceError> {
@@ -220,20 +217,16 @@ impl<I: Eq> HilbertSpace<I> {
     }
 
     /// Constructs a binary tensor with this space's factors on the left.
-    pub fn tensor_product(&self, rhs: &Self) -> Result<Self, SpaceError> {
-        self.tensor_product_with_kind(TensorKind::Ordinary, rhs)
+    pub fn tensor(&self, rhs: &Self) -> Result<Self, SpaceError> {
+        self.tensor_with(TensorKind::Ordinary, rhs)
     }
     /// Constructs a binary graded tensor.
-    pub fn tensor_product_g(&self, rhs: &Self) -> Result<Self, SpaceError> {
-        self.tensor_product_with_kind(TensorKind::Graded, rhs)
+    pub fn tensor_g(&self, rhs: &Self) -> Result<Self, SpaceError> {
+        self.tensor_with(TensorKind::Graded, rhs)
     }
     /// Constructs a binary tensor with an explicit rule.
-    pub fn tensor_product_with_kind(
-        &self,
-        kind: TensorKind,
-        rhs: &Self,
-    ) -> Result<Self, SpaceError> {
-        Self::tensor_with_kind(kind, [self.clone(), rhs.clone()])
+    pub fn tensor_with(&self, kind: TensorKind, rhs: &Self) -> Result<Self, SpaceError> {
+        Self::tensor_all_with(kind, [self.clone(), rhs.clone()])
     }
 
     /// Tests equality of ordered factors, independently of grouping and sharing.

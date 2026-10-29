@@ -4,7 +4,7 @@ use num_complex::Complex;
 use num_traits::{One, Zero};
 use qmb_core::{
     Act, Adjoint, Basis, HilbertSpace, Identity, ImaginaryUnit, InnerProduct,
-    LinearCombination as Lc, Product, QuantumSystem, Trace,
+    LinearCombination as Lc, Product, Trace,
 };
 use qmb_fermion::{
     Fermion, FermionOperator as O, FermionState as S, LadderBasis, MajoranaBasis, OccupationBasis,
@@ -207,10 +207,11 @@ fn independent_capabilities_do_not_inherit_majorana_bounds() {
     struct Opaque;
     let ket = Fermion::<Opaque>::state(S::Empty);
     let op = Fermion::<Opaque>::operator(O::identity());
-    let _ = ket.act(&op.product(&op.adjoint()));
+    let _ = ket.act(&(op.clone() * &op.adjoint()));
     let a = HilbertSpace::factor(0);
     let b = HilbertSpace::factor(1);
-    let psi = Fermion::<Opaque>::state_tensor_g_at([(&a, S::Empty), (&b, S::Occupied)]).unwrap();
+    let psi = Fermion::<Opaque>::product_state(&a.tensor_g(&b).unwrap(), [S::Empty, S::Occupied])
+        .unwrap();
     let _ = psi.act(&op.at(&a).unwrap()).unwrap();
 }
 
@@ -232,12 +233,12 @@ impl Neg for ModelCoefficient {
 struct Index(u8);
 #[test]
 fn hubbard_construction_needs_neither_primitive_evaluation_nor_index_cloning() {
-    let site = HilbertSpace::tensor_g([
+    let site = HilbertSpace::tensor_all_g([
         HilbertSpace::factor(Index(9)),
         HilbertSpace::factor(Index(1)),
     ])
     .unwrap();
-    let other = HilbertSpace::tensor_g([
+    let other = HilbertSpace::tensor_all_g([
         HilbertSpace::factor(Index(4)),
         HilbertSpace::factor(Index(2)),
     ])
@@ -245,8 +246,12 @@ fn hubbard_construction_needs_neither_primitive_evaluation_nor_index_cloning() {
     let chain = Chain::new(2, Boundary::Periodic);
     let sites = [site, other];
     for model in [
-        Fermion::<ModelCoefficient>::hubbard(&chain, &sites, 1, 4),
-        Fermion::<ModelCoefficient>::symmetric_hubbard(&chain, &sites, 1, 4),
+        qmb_fermion::models::FermionModels::<Fermion<ModelCoefficient>>::hubbard(
+            &chain, &sites, 1, 4,
+        ),
+        qmb_fermion::models::FermionModels::<Fermion<ModelCoefficient>>::symmetric_hubbard(
+            &chain, &sites, 1, 4,
+        ),
     ] {
         assert!(
             model

@@ -121,7 +121,7 @@ fn singleton_fallible_collections_need_no_temporary_allocation() {
         let _ = LocalOperator::try_sum([Ok(local_op)]).unwrap();
         let _ = State::try_sum(&space, [Ok(state)]).unwrap();
         let _ = Operator::try_sum([Ok(op.clone())]).unwrap();
-        let _ = Operator::try_product_all([Ok(op)]).unwrap();
+        let _ = Operator::try_product([Ok(op)]).unwrap();
     });
 }
 
@@ -132,19 +132,20 @@ fn graded_contractions_and_trace_do_not_materialize_a_global_basis() {
     use graded::*;
     use qmb_core::{HilbertSpace, LocalState, State};
     let factors: Vec<_> = (0..32).map(HilbertSpace::factor).collect();
-    let psi = State::<_, Ket, Op, Complex<f64>>::tensor_g(factors.iter().map(|f| {
-        (LocalState::primitive(Ket(0)) + LocalState::primitive(Ket(1)))
-            .at(f)
-            .unwrap()
-    }))
+    let psi = State::<_, Ket, Op, Complex<f64>>::tensor_in(
+        &qmb_core::HilbertSpace::tensor_all_g(factors.iter().cloned()).unwrap(),
+        factors.iter().map(|f| {
+            (LocalState::primitive(Ket(0)) + LocalState::primitive(Ket(1)))
+                .at(f)
+                .unwrap()
+        }),
+    )
     .unwrap();
     let op = placed(A, &factors[31]);
     ALLOCATIONS.with(|count| count.set(Some(0)));
     let acted = psi.act(&op).unwrap().evaluate().unwrap();
     let norm = acted.inner_product(&acted).unwrap();
-    let trace = op
-        .adjoint()
-        .product(&op)
+    let trace = (op.adjoint().clone() * &op)
         .unwrap()
         .trace_in(psi.space())
         .unwrap();

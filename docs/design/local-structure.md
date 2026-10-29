@@ -23,9 +23,9 @@
 | 基底 | `Basis<S, C>`・`Basis<O, C>`。列挙数は対象 primitive の span の次元と一致する |
 | 因子構造・幾何 | `HilbertSpace<I>` が因子順序・grouping、Chain がサイト数と境界条件だけを保持する。配置は外部の局所空間列で指定する |
 
-Dimension は `fn dim() -> Result<NonZeroUsize, DimensionOverflow>` として実装した。次元を整数化できない場合は取得時にエラーを返す。`state_basis_len<S>()`・`operator_basis_len<O>()` は対象の次元をそのまま返す。Operator の d² を再度二乗しない。能力は次元を使う操作だけが要求する。
+Dimension は `fn dim() -> Result<NonZeroUsize, DimensionOverflow>` として実装した。次元を整数化できない場合は取得時にエラーを返す。`dim_state<S>()`・`dim_op<O>()` は対象の次元をそのまま返す。Operator の d² を再度二乗しない。能力は次元を使う操作だけが要求する。
 
-恒等元は primitive の値として表せることを要求するが、選択基底の要素である必要はない。基底に含まれなければ Basis が展開する。線型従属な primitive を許容するため、恒等元用の値を追加しても基底の次元は増えない。局所式の恒等元は `Primitive(O::identity())` として保持し、作用・積・随伴・trace・基底展開を通常の primitive と同じ経路で処理する。`LocalOperator::identity()` と空の `product_all` は `O: Identity` を要求するが、係数の数値能力は要求しない。複合式の記号的な `OpNode::Identity` は、未束縛の空の積や全作用空間の恒等演算子として維持する。
+恒等元は primitive の値として表せることを要求するが、選択基底の要素である必要はない。基底に含まれなければ Basis が展開する。線型従属な primitive を許容するため、恒等元用の値を追加しても基底の次元は増えない。局所式の恒等元は `Primitive(O::identity())` として保持し、作用・積・随伴・trace・基底展開を通常の primitive と同じ経路で処理する。`LocalOperator::identity()` と空の `product` は `O: Identity` を要求するが、係数の数値能力は要求しない。複合式の記号的な `OpNode::Identity` は、未束縛の空の積や全作用空間の恒等演算子として維持する。
 
 局所 identity と spectator 因子の trace は、O の Identity・Trace から得る。次元の整数値を係数へ変換する経路に置き換えず、局所 trace に係数の One・整数変換を追加要求しない。外部の O に Identity を追加実装できない場合は、提供元の実装か利用者が所有する wrapper で接続する。`Identity`・`Dimension` は `qmb_core::ops` と crate root から公開する。`Identity` は局所式（`O: Identity`）と複合式（追加の能力制約なし）にも実装する。
 
@@ -63,7 +63,7 @@ Index・Site・表示名・選択基底とその列挙順序・メモリ上の o
 
 [Index](index.md)と局所代数の意味は別の責任である。空間は因子の Index・順序・grouping を保持し、primitive 型は式が保持する。因子の重複や配置先・束縛先の存在は空間の構造から検証し、異種の式の不適切な合成は S・O・C の型制約で拒否する。Index と局所定義の全体登録や、一律の TypeId・'static 制約は導入しない。
 
-空間の次元は `space.dimension::<P>()` で指定した primitive の span を各因子に適用するか、`space.dimension_with(local_dimension)` で明示する。S を指定すると状態空間、O を指定すると演算子空間の次元を取得する。この取得操作は空間に primitive の定義を登録しない。空の tensor は次元1とし、通常の作用・内積・trace に総次元の整数化を要求しない。
+空間の次元は `space.dim::<P>()` で指定した primitive の span を各因子に適用するか、`space.dim_with(dim_local)` で明示する。S を指定すると状態空間、O を指定すると演算子空間の次元を取得する。この取得操作は空間に primitive の定義を登録しない。空の tensor は次元1とし、通常の作用・内積・trace に総次元の整数化を要求しない。
 
 ## 6. 後続事項
 
@@ -115,7 +115,7 @@ Spin-half はこの自明な grading を明示実装する。既存モデルの�
 
 `qmb-fermion` は `no_std + alloc`、`unsafe` 禁止とし、係数型から独立した `FermionState`・`FermionOperator` を提供する。状態は `Empty`・`Occupied`、演算子は `I`・`Annihilate`・`Create`・`Number`・`MajoranaX`・`MajoranaY`・`MajoranaZ`・`Parity` の8 variant とする。いずれも `Clone, Copy, Debug, PartialEq, Eq, Hash` を実装する。Zero は primitive に追加せず、共通の空の線型結合・式で表す。
 
-`Fermion<C>` は `PhantomData<fn() -> C>` による型選択 marker とし、QuantumSystem の State・Operator・Coeff を関連付ける。構築は core の共通式を返し、係数精度の暗黙変換や独自 evaluator は追加しない。公開入口は [lib.rs](../../crates/qmb-fermion/src/lib.rs)、局所規則は [state.rs](../../crates/qmb-fermion/src/state.rs)・[operator.rs](../../crates/qmb-fermion/src/operator.rs)、基底は [basis.rs](../../crates/qmb-fermion/src/basis.rs) に実装する。Hubbard モデルの API と配置は [Chain・Site の設計](geometry.md#6-fermion-の-hubbard-モデル)に定める。
+`Fermion<C>` は `ExpressionFactory<FermionState,FermionOperator,C>` の型エイリアスとし、QuantumSystem の関連型を通じて primitive と係数型を取得できる。モデルは `models::FermionModels<Fermion<C>>` から構築する。構築は core の共通式を返し、係数精度の暗黙変換や独自 evaluator は追加しない。公開入口は [lib.rs](../../crates/qmb-fermion/src/lib.rs)、局所規則は [state.rs](../../crates/qmb-fermion/src/state.rs)・[operator.rs](../../crates/qmb-fermion/src/operator.rs)、基底は [basis.rs](../../crates/qmb-fermion/src/basis.rs) に実装する。Hubbard モデルの API と配置は [Chain・Site の設計](geometry.md#6-fermion-の-hubbard-モデル)に定める。
 
 ### 9.1. 規約・次元・parity
 
@@ -248,7 +248,7 @@ MajoranaBasis は Hermite 演算子だけからなり、Hilbert–Schmidt 内積
 
 | 能力 | C に要求する能力 |
 | --- | --- |
-| Identity、Dimension、parity 問い合わせ、QuantumSystem | 数値制約なし |
+| Identity、Dimension、parity 問い合わせ、ExpressionFactory | 数値制約なし |
 | InnerProduct、Trace | `Zero + One`。2は `one + one` で生成 |
 | Adjoint、状態基底 | `One` |
 | Product、Act、LadderBasis、MajoranaBasis | `One + Add<Output=C> + Div<Output=C> + Neg<Output=C> + ImaginaryUnit`。1/2・1/4・i を表せることも数学的契約。零は空の線型結合で返す |
@@ -414,11 +414,11 @@ Adjoint は SPlus / SMinus、Q1Plus / Q1Minus、Q2Plus / Q2Minus を交換し、
 
 ### 10.4. 係数能力と共通 API
 
-`SpinOne<C>` は QuantumSystem に状態・演算子・係数を関連付け、保持・係数計算を伴わない遅延構築には数値 bound を要求しない。primitive の能力は操作ごとに限定する。
+`SpinOne<C>` は ExpressionFactory の型エイリアスとして状態・演算子・係数を選び、保持・係数計算を伴わない遅延構築には数値 bound を要求しない。primitive の能力は操作ごとに限定する。
 
 | 能力 | C に要求する能力 |
 | --- | --- |
-| Identity・Dimension・QuantumSystem、primitive 保持 | なし |
+| Identity・Dimension・ExpressionFactory、primitive 保持 | なし |
 | InnerProduct・Trace | `Zero + One`。3は `one + one + one` |
 | Adjoint・SzBasis | `One` |
 | CartesianBasis | `One + Neg + ImaginaryUnit` |

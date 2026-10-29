@@ -62,7 +62,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                             tasks.push(Task::Rebuild(state.clone(), 1));
                             tasks.push(Task::Evaluate(s.operand.clone()));
                         }
-                        StateNode::Sum(s) | StateNode::Tensor(_, s) => {
+                        StateNode::Sum(s) | StateNode::Tensor(s) => {
                             tasks.push(Task::Rebuild(state.clone(), s.len()));
                             for child in s.iter().rev() {
                                 tasks.push(Task::Evaluate(child.clone()));
@@ -178,7 +178,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                             scope,
                         )),
                         OperatorNode::Primitive(p) if adjoint => {
-                            let local = LocalOperator::from_linear_combination(
+                            let local = LocalOperator::from_terms(
                                 p.adjoint().map(LocalOperator::primitive),
                             );
                             tasks.push(Task::Placed(state, factor, local, false, scope));
@@ -223,7 +223,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                         tasks.push(Task::Rebuild(state.clone(), 1));
                         tasks.push(Task::Local(s.operand.clone(), factor, operator, prefix));
                     }
-                    StateNode::Sum(s) | StateNode::Tensor(_, s) => {
+                    StateNode::Sum(s) | StateNode::Tensor(s) => {
                         tasks.push(Task::Rebuild(state.clone(), s.len()));
                         for child in s.iter().rev() {
                             tasks.push(Task::Local(
@@ -249,26 +249,20 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                     match original.node() {
                         StateNode::Scale(s) => {
                             let operand = parts.into_iter().next().expect("scale operand");
-                            if operand.same_node(&s.operand) {
+                            if operand.shares_node_with(&s.operand) {
                                 values.push(original);
                             } else {
                                 values.push(operand.scaled(s.coefficient.clone()));
                             }
                         }
-                        StateNode::Sum(s) | StateNode::Tensor(_, s) => {
-                            if s.iter().zip(&parts).all(|(a, b)| a.same_node(b)) {
+                        StateNode::Sum(s) | StateNode::Tensor(s) => {
+                            if s.iter().zip(&parts).all(|(a, b)| a.shares_node_with(b)) {
                                 values.push(original);
                             } else {
                                 let parts = parts.into_iter().collect();
                                 values.push(StateExpr::new(
-                                    if matches!(original.node(), StateNode::Tensor(_, _)) {
-                                        StateNode::Tensor(
-                                            match original.node() {
-                                                StateNode::Tensor(k, _) => *k,
-                                                _ => unreachable!(),
-                                            },
-                                            parts,
-                                        )
+                                    if matches!(original.node(), StateNode::Tensor(_)) {
+                                        StateNode::Tensor(parts)
                                     } else {
                                         StateNode::Sum(parts)
                                     },

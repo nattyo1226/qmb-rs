@@ -18,10 +18,10 @@ pub(crate) fn flat_index(digits: &[usize], local: Option<usize>) -> Result<usize
     Ok(index)
 }
 
-pub(crate) fn owned_entries<B, C, H>(
+pub(crate) fn into_flat_entries<B, C, H>(
     coordinates: Coordinates<'_, B, C, H>,
 ) -> impl ExactSizeIterator<Item = Result<(usize, C), ExportError>> {
-    let local = coordinates.local_dimension();
+    let local = coordinates.dim_local();
     coordinates
         .into_entries()
         .map(move |(digits, c)| Ok((flat_index(&digits, local)?, c)))

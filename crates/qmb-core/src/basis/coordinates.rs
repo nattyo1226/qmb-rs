@@ -43,7 +43,7 @@ pub struct Coordinates<'b, B, C, H = ()> {
     pub(crate) basis: &'b B,
     pub(crate) space: H,
     pub(crate) factor_count: usize,
-    pub(crate) local_dimension: Option<usize>,
+    pub(crate) dim_local: Option<usize>,
     pub(crate) entries: BTreeMap<Vec<usize>, C>,
 }
 
@@ -64,16 +64,16 @@ impl<'b, B, C, H> Coordinates<'b, B, C, H> {
     }
 
     /// Returns the local basis size, or `None` on the zero-factor unit space.
-    pub fn local_dimension(&self) -> Option<usize> {
-        self.local_dimension
+    pub fn dim_local(&self) -> Option<usize> {
+        self.dim_local
     }
 
     /// Computes the full coordinate-space dimension, detecting overflow.
     ///
     /// This can fail while sparse entries and basis expansion remain usable.
-    pub fn dimension(&self) -> Result<usize, DimensionOverflow> {
+    pub fn dim(&self) -> Result<usize, DimensionOverflow> {
         (0..self.factor_count).try_fold(1usize, |n, _| {
-            n.checked_mul(self.local_dimension.expect("nonempty factor space"))
+            n.checked_mul(self.dim_local.expect("nonempty factor space"))
                 .ok_or(DimensionOverflow)
         })
     }
@@ -102,7 +102,7 @@ impl<'b, B, C, H> Coordinates<'b, B, C, H> {
     ) -> impl ExactSizeIterator<Item = Result<(usize, &C), DimensionOverflow>> + '_ {
         self.entries().map(|(digits, c)| {
             let index = digits.iter().try_fold(0usize, |n, digit| {
-                n.checked_mul(self.local_dimension.expect("nonempty coordinate"))
+                n.checked_mul(self.dim_local.expect("nonempty coordinate"))
                     .and_then(|n| n.checked_add(*digit))
                     .ok_or(DimensionOverflow)
             })?;

@@ -129,7 +129,7 @@ where
                         if let Some((_, existing)) = branch.factors.iter_mut().find(|(other, _)| {
                             self.grouped && other.factor_index() == factor.factor_index()
                         }) {
-                            *existing = existing.product(&local);
+                            *existing = existing.clone() * &local;
                         } else {
                             branch.factors.push((factor, local));
                         }
@@ -179,7 +179,7 @@ where
     O: crate::HomogeneousParity + crate::Product<C, Term = O> + crate::Adjoint<C, Term = O>,
     C: Clone + Mul<Output = C> + Conjugate<Output = C>,
 {
-    let mut pending = vec![(local.evaluated(), None::<C>)];
+    let mut pending = vec![(local.evaluate(), None::<C>)];
     let mut even = Vec::new();
     let mut odd = Vec::new();
     while let Some((op, coefficient)) = pending.pop() {
@@ -328,7 +328,7 @@ where
             if let Some((_, _, previous, previous_odd)) =
                 sorted.iter_mut().find(|(p, _, _, _)| *p == position)
             {
-                *previous = previous.product(&local);
+                *previous = previous.clone() * &local;
                 *previous_odd ^= odd;
             } else {
                 sorted.push((position, factor, local, odd));
@@ -385,7 +385,7 @@ where
                 .iter_mut()
                 .find(|(f, _)| f.factor_index() == factor.factor_index())
             {
-                *previous = previous.product(&local);
+                *previous = previous.clone() * &local;
             } else {
                 factors.push((factor, local));
             }
@@ -439,7 +439,7 @@ mod tests {
         let lhs =
             Operator::<u8, (), MinimalComplex<Ring>>::scalar(MinimalComplex::new(Ring(3), Ring(4)));
         let rhs = Operator::scalar(MinimalComplex::new(Ring(2), Ring(-1)));
-        let operator = lhs.product(&rhs).unwrap().adjoint();
+        let operator = (lhs.clone() * &rhs).unwrap().adjoint();
         let mut terms = OpTerms::new(&operator.expression);
         let (coefficient, factors) = terms.next().unwrap();
         let coefficient = coefficient.unwrap();

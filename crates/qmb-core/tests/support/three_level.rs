@@ -7,7 +7,7 @@ use num_complex::Complex;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb_core::{
     Act, Adjoint, Basis, Dimension, DimensionOverflow, Identity, InnerProduct, LinearCombination,
-    Product, Term, Trace, operator_basis_len, state_basis_len,
+    Product, Term, Trace, dim_op, dim_state,
 };
 
 pub(super) trait Real:

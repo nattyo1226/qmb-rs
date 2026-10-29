@@ -25,14 +25,14 @@ struct Chain {
 | --- | --- |
 | `nn_site_pairs_with(&values)` | Site 順の任意の要素列から、要素をそのまま借用 |
 | `nn_pairs_with(&factors)` | Site 順の局所空間列から、最近接 Site 間の葉の全組み合わせ |
-| `nn_pairs_by_pos_with(&factors)` | 同じ葉位置同士を短い方まで zip |
-| `nn_site_pairs_on(&space)` | トップレベル因子を Site として、その局所空間を借用 |
-| `nn_pairs_on(&space)` | トップレベル Site 間の葉の全組み合わせ |
-| `nn_pairs_by_pos_on(&space)` | トップレベル Site 間の葉の位置対応 |
+| `nn_zip_with(&factors)` | 同じ葉位置同士を短い方まで zip |
+| `nn_site_pairs_in(&space)` | トップレベル因子を Site として、その局所空間を借用 |
+| `nn_pairs_in(&space)` | トップレベル Site 間の葉の全組み合わせ |
+| `nn_zip_in(&space)` | トップレベル Site 間の葉の位置対応 |
 
 `_with` は入力列の長さと site_count の一致を Iterator を返す前に検証し、過不足を `ChainError::SiteCountMismatch` とする。0・1 Site でも省略しない。葉ペアの入口は `nn_site_pairs_with` へ委譲し、`leaves()` で実際の葉を借用する。全組み合わせは左の葉を外側・右を内側とし、Site 対順を保つ。空 Site は位置を保ち、葉ペアを生成せず前後を直接接続し直さない。
 
-`_on` は保存されたトップレベルの分割を読み取り、収集や Index の複製なしで `_with` へ委譲する。葉入力は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site、単項 Tensor は一 Site と読む。局所空間内の grouping は保持する。全葉数から Site 数を決めない。
+`_in` は保存されたトップレベルの分割を読み取り、収集や Index の複製なしで `_with` へ委譲する。葉入力は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site、単項 Tensor は一 Site と読む。局所空間内の grouping は保持する。全葉数から Site 数を決めない。
 
 任意の要素 T に Clone・Eq・Default などを要求せず、葉ペアの列挙も Index の Clone・Eq を必要としない。Chain は入力列を保持しない。Index 重複は空間・モデル構築側の検証であり、幾何の列挙は重複を検証しない。
 
@@ -44,13 +44,13 @@ Site 順序と別途存在する全空間の因子順序を区別する。接続
 
 ## 4. SpinHalf のモデル構築
 
-モデル構築の公開入口は `qmb_spin_half::SpinHalf<C>` の関連関数である。旧 `utility` の自由関数は残さず、エラー型 `UtilityError` を crate root から公開する。
+モデル構築の公開入口は `qmb_spin_half::models::SpinHalfModels<SpinHalf<C>>` の関連関数である。以下では `type Models = SpinHalfModels<Spin>` とする。旧 `utility` の自由関数は残さず、エラー型 `UtilityError` を crate root から公開する。
 
 | 呼び出し | 成功時の戻り値 |
 | --- | --- |
-| `Spin::xyz(&chain, &factors, jx, jy, jz)` | `OperatorOf<Spin, I>` |
-| `Spin::heisenberg(&chain, &factors, coupling)` | `OperatorOf<Spin, I>` |
-| `Spin::neel(&chain, &factors, first)` | `StateOf<Spin, I>` |
+| `Models::xyz(&chain, &factors, jx, jy, jz)` | `OperatorOf<Spin, I>` |
+| `Models::heisenberg(&chain, &factors, coupling)` | `OperatorOf<Spin, I>` |
+| `Models::neel(&chain, &factors, first)` | `StateOf<Spin, I>` |
 
 全関数は Result を返し、列長と全葉の Index 重複を、辺がなくても検証する。列長の不一致は `UtilityError::Chain(ChainError::SiteCountMismatch)`、重複は `UtilityError::Space(SpaceError::DuplicateIndex)`、配置・束縛エラーは `UtilityError::Expression` とし、元エラーを source として保持する。Index には Eq のみを要求する。
 
@@ -66,7 +66,7 @@ Neel は Site 位置と first から向きを交互に決め、その Site の�
 
 ## 5. 検証対象
 
-geometry のテストは 0・1・2・3 以上の open／periodic、列長過不足、非 Clone・非 Eq 要素、借用の同一性、入れ子・空・可変長局所空間の順序、全組み合わせと位置対応、トップレベル分割の解釈と `_with`／`_on` の一致を検証する。
+geometry のテストは 0・1・2・3 以上の open／periodic、列長過不足、非 Clone・非 Eq 要素、借用の同一性、入れ子・空・可変長局所空間の順序、全組み合わせと位置対応、トップレベル分割の解釈と `_with`／`_in` の一致を検証する。
 
 spin-half のテストは複数葉の全組み合わせ結合、Site ごとの向き、空 Site の偶奇と辺、全空・0 Site、重複と列長拒否、非 Clone Index、深い grouping、最小の係数能力を検証する。examples の縦断テストは両精度の独立な Pauli 行列との一致、符号・norm・期待値、および密疎 export を検証する。
 
@@ -110,11 +110,11 @@ H_{\mathrm{symmetric}}(t,U)
 
 ### 6.2. 公開入口と配置
 
-既存の `SpinHalf<C>` と同様に `models.rs` で構築し、`Fermion<C>` の関連関数として公開する。QuantumSystem trait にモデル固有メソッドを追加しない。
+既存の `SpinHalf<C>` と同様に `models.rs` で構築し、`models::FermionModels<Fermion<C>>` の関連関数として公開する。QuantumSystem trait にモデル固有メソッドを追加しない。
 
 ```rust,ignore
-Fermion::hubbard(&chain, &sites, t, u)
-Fermion::symmetric_hubbard(&chain, &sites, t, u)
+FermionModels::<Fermion<C>>::hubbard(&chain, &sites, t, u)
+FermionModels::<Fermion<C>>::symmetric_hubbard(&chain, &sites, t, u)
 // いずれも Result<OperatorOf<Fermion<C>, I>, UtilityError> を返す。
 ```
 
@@ -141,7 +141,7 @@ Fermion::symmetric_hubbard(&chain, &sites, t, u)
 
 ## 7. SpinOne のモデル構築
 
-`qmb_spin_one::SpinOne<C>` は XYZ・Heisenberg・BLBQ の3モデルを関連関数として提供する。局所 primitive・基底・数値規約は [Spin-one の局所代数](local-structure.md#10-spin-one-の局所代数)に従い、構築は [models.rs](../../crates/qmb-spin-one/src/models.rs) に置く。
+`qmb_spin_one::models::SpinOneModels<SpinOne<C>>` は XYZ・Heisenberg・BLBQ の3モデルを関連関数として提供する。局所 primitive・基底・数値規約は [Spin-one の局所代数](local-structure.md#10-spin-one-の局所代数)に従い、構築は [models.rs](../../crates/qmb-spin-one/src/models.rs) に置く。
 
 ### 7.1. Hamiltonian の規約
 
@@ -170,9 +170,9 @@ BLBQ は bilinear 結合 J と biquadratic 結合 K を独立に受け取る。�
 
 | 公開入口 | 成功時の戻り値 |
 | --- | --- |
-| `SpinOne::<C>::xyz(&chain, &sites, jx, jy, jz)` | `OperatorOf<SpinOne<C>,I>` |
-| `SpinOne::<C>::heisenberg(&chain, &sites, j)` | `OperatorOf<SpinOne<C>,I>` |
-| `SpinOne::<C>::blbq(&chain, &sites, j, k)` | `OperatorOf<SpinOne<C>,I>` |
+| `SpinOneModels::<SpinOne<C>>::xyz(&chain, &sites, jx, jy, jz)` | `OperatorOf<SpinOne<C>,I>` |
+| `SpinOneModels::<SpinOne<C>>::heisenberg(&chain, &sites, j)` | `OperatorOf<SpinOne<C>,I>` |
+| `SpinOneModels::<SpinOne<C>>::blbq(&chain, &sites, j, k)` | `OperatorOf<SpinOne<C>,I>` |
 
 全関数は `&Chain` と `&[HilbertSpace<I>]` を受け取り、`Result<_,qmb_spin_one::UtilityError>` を返す。Site 列・全葉ペア・束縛の基本契約は第4節の SpinHalf の XYZ / Heisenberg とそろえる。
 
@@ -186,7 +186,7 @@ BLBQ は bilinear 結合 J と biquadratic 結合 K を独立に受け取る。�
 
 ### 7.3. 遅延構築と係数能力
 
-XYZ は配置した Cartesian 成分の積と和、Heisenberg は XYZ の等方的な場合として構築する。BLBQ は各葉ペアの `A_ab=Sx_a Sx_b+Sy_a Sy_b+Sz_a Sz_b` を一度構築し、式を共有して `A_ab.product(&A_ab)` を作る。J・K は最後に各項へ適用し、J の符号や大きさを二乗へ混入させない。
+XYZ は配置した Cartesian 成分の積と和、Heisenberg は XYZ の等方的な場合として構築する。BLBQ は各葉ペアの `A_ab=Sx_a Sx_b+Sy_a Sy_b+Sz_a Sz_b` を一度構築し、式を共有して `(&A_ab * &A_ab)` を作る。J・K は最後に各項へ適用し、J の符号や大きさを二乗へ混入させない。
 
 | 関数 | 構築に必要な bound |
 | --- | --- |

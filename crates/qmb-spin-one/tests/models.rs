@@ -1,7 +1,7 @@
 mod support;
 
 use num_complex::Complex;
-use qmb_core::{ExpressionError, HilbertSpace as H, OperatorOf, QuantumSystem, SpaceError};
+use qmb_core::{ExpressionError, HilbertSpace as H, OperatorOf, SpaceError};
 use qmb_export::{Export, Exported, MatrixArgs};
 use qmb_geometry::{Boundary, Chain, ChainError};
 use qmb_spin_one::{SpinOne, SpinOneOperator as O, SpinOneState as S, SzBasis, UtilityError};
@@ -20,9 +20,19 @@ impl Model {
     fn build<T: Real>(self, chain: &Chain, sites: &[H<u8>]) -> OperatorOf<Spin<T>, u8> {
         let real = |x| T::from_f64(x).unwrap();
         match self {
-            Self::Xyz([x, y, z]) => Spin::<T>::xyz(chain, sites, real(x), real(y), real(z)),
-            Self::Heisenberg(j) => Spin::<T>::heisenberg(chain, sites, real(j)),
-            Self::Blbq(j, k) => Spin::<T>::blbq(chain, sites, real(j), real(k)),
+            Self::Xyz([x, y, z]) => qmb_spin_one::models::SpinOneModels::<Spin<T>>::xyz(
+                chain,
+                sites,
+                real(x),
+                real(y),
+                real(z),
+            ),
+            Self::Heisenberg(j) => {
+                qmb_spin_one::models::SpinOneModels::<Spin<T>>::heisenberg(chain, sites, real(j))
+            }
+            Self::Blbq(j, k) => {
+                qmb_spin_one::models::SpinOneModels::<Spin<T>>::blbq(chain, sites, real(j), real(k))
+            }
         }
         .unwrap()
     }
@@ -69,7 +79,7 @@ fn reference(n: usize, pairs: &[(usize, usize)], model: Model) -> Matrix {
 
 fn exported<T: Real>(h: &OperatorOf<Spin<T>, u8>) -> Matrix {
     let dense: Exported<Vec<Complex<T>>, _> = h.export(MatrixArgs::<S, _>::new(&SzBasis)).unwrap();
-    let dimension = h.space().unwrap().dimension::<S>().unwrap();
+    let dimension = h.space().unwrap().dim::<S>().unwrap();
     assert_eq!(dense.metadata().shape(), [dimension, dimension]);
     assert!(
         dense
@@ -147,7 +157,7 @@ fn matrices_match_independent_small_chains_f64() {
 fn total_spin<T: Real>() {
     let sites = [H::factor(11), H::factor(7)];
     let chain = Chain::new(2, Boundary::Open);
-    let space = H::tensor(sites.iter().cloned()).unwrap();
+    let space = H::tensor_all(sites.iter().cloned()).unwrap();
     let singlet = vec![
         (1.0 / 3_f64.sqrt(), S::Plus, S::Minus),
         (-1.0 / 3_f64.sqrt(), S::Zero, S::Zero),
@@ -163,9 +173,13 @@ fn total_spin<T: Real>() {
         let psi = Spin::<T>::state_sum(
             &space,
             terms.into_iter().map(|(weight, left, right)| {
-                Spin::<T>::state_tensor_at([(&sites[0], left), (&sites[1], right)])
-                    .unwrap()
-                    .scaled(c::<T>(weight, 0.0))
+                Spin::<T>::product_state(
+                    &qmb_core::HilbertSpace::tensor_all([(sites[0]).clone(), (sites[1]).clone()])
+                        .unwrap(),
+                    [left, right],
+                )
+                .unwrap()
+                .scaled(c::<T>(weight, 0.0))
             }),
         )
         .unwrap();
@@ -205,7 +219,7 @@ fn site_spaces<T: Real>() {
     let a = H::factor(11);
     let b = H::factor(7);
     let c = H::factor(9);
-    let first = H::tensor([H::unit(), H::tensor([a.clone(), b.clone()]).unwrap()]).unwrap();
+    let first = H::tensor_all([H::unit(), H::tensor_all([a.clone(), b.clone()]).unwrap()]).unwrap();
     let sites = [first, c];
     let chain = Chain::new(2, Boundary::Periodic);
     for model in models {
@@ -250,11 +264,11 @@ fn site_spaces<T: Real>() {
         }
     }
     // A single composite site is a spectator; no within-site terms are added.
-    let sites = [H::tensor([a, b]).unwrap()];
+    let sites = [H::tensor_all([a, b]).unwrap()];
     for model in models {
         matches_reference::<T>(model, &Chain::new(1, Boundary::Periodic), &sites, &[]);
         let h = model.build::<T>(&Chain::new(1, Boundary::Open), &sites);
-        assert_eq!(h.space().unwrap().dimension::<S>().unwrap(), 9);
+        assert_eq!(h.space().unwrap().dim::<S>().unwrap(), 9);
         assert!(
             h.space()
                 .unwrap()
@@ -286,17 +300,40 @@ fn every_model_validates_even_with_no_edges_and_zero_couplings() {
                 let chain = Chain::new(n, boundary);
                 let expected =
                     (n != count).then_some(UtilityError::Chain(ChainError::SiteCountMismatch));
-                assert_eq!(Q::xyz(&chain, &sites, 0.0, 0.0, 0.0).err(), expected);
-                assert_eq!(Q::heisenberg(&chain, &sites, 0.0).err(), expected);
-                assert_eq!(Q::blbq(&chain, &sites, 0.0, 0.0).err(), expected);
+                assert_eq!(
+                    qmb_spin_one::models::SpinOneModels::<Q>::xyz(&chain, &sites, 0.0, 0.0, 0.0)
+                        .err(),
+                    expected
+                );
+                assert_eq!(
+                    qmb_spin_one::models::SpinOneModels::<Q>::heisenberg(&chain, &sites, 0.0).err(),
+                    expected
+                );
+                assert_eq!(
+                    qmb_spin_one::models::SpinOneModels::<Q>::blbq(&chain, &sites, 0.0, 0.0).err(),
+                    expected
+                );
             }
         }
-        let sites = [H::factor(0), H::unit(), H::tensor([H::factor(0)]).unwrap()];
+        let sites = [
+            H::factor(0),
+            H::unit(),
+            H::tensor_all([H::factor(0)]).unwrap(),
+        ];
         let chain = Chain::new(3, boundary);
         let expected = Some(UtilityError::Space(SpaceError::DuplicateIndex));
-        assert_eq!(Q::xyz(&chain, &sites, 0.0, 0.0, 0.0).err(), expected);
-        assert_eq!(Q::heisenberg(&chain, &sites, 0.0).err(), expected);
-        assert_eq!(Q::blbq(&chain, &sites, 0.0, 0.0).err(), expected);
+        assert_eq!(
+            qmb_spin_one::models::SpinOneModels::<Q>::xyz(&chain, &sites, 0.0, 0.0, 0.0).err(),
+            expected
+        );
+        assert_eq!(
+            qmb_spin_one::models::SpinOneModels::<Q>::heisenberg(&chain, &sites, 0.0).err(),
+            expected
+        );
+        assert_eq!(
+            qmb_spin_one::models::SpinOneModels::<Q>::blbq(&chain, &sites, 0.0, 0.0).err(),
+            expected
+        );
     }
 }
 
@@ -328,9 +365,10 @@ fn construction_needs_only_clone_from_and_neg_and_eq_indices() {
     let chain = Chain::new(2, Boundary::Open);
     type Q = SpinOne<Coefficient>;
     for h in [
-        Q::xyz(&chain, &sites, Input(1), Input(2), Input(3)).unwrap(),
-        Q::heisenberg(&chain, &sites, 1).unwrap(),
-        Q::blbq(&chain, &sites, Input(1), Input(2)).unwrap(),
+        qmb_spin_one::models::SpinOneModels::<Q>::xyz(&chain, &sites, Input(1), Input(2), Input(3))
+            .unwrap(),
+        qmb_spin_one::models::SpinOneModels::<Q>::heisenberg(&chain, &sites, 1).unwrap(),
+        qmb_spin_one::models::SpinOneModels::<Q>::blbq(&chain, &sites, Input(1), Input(2)).unwrap(),
     ] {
         assert_eq!(
             h.space()

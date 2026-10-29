@@ -1,6 +1,6 @@
 mod support;
 use num_complex::Complex;
-use qmb_core::{HilbertSpace as H, QuantumSystem, SpaceError, TensorKind};
+use qmb_core::{HilbertSpace as H, SpaceError, TensorKind};
 use qmb_fermion::{
     Fermion, FermionOperator as O, FermionState as S, LadderBasis, MajoranaBasis, OccupationBasis,
     UtilityError,
@@ -12,7 +12,7 @@ use support::*;
 fn sites(n: usize) -> Vec<H<usize>> {
     // Deliberately descending indices: ordering comes from the tensor.
     (0..n)
-        .map(|j| H::tensor_g([H::factor(2 * (n - j)), H::factor(2 * (n - j) - 1)]).unwrap())
+        .map(|j| H::tensor_all_g([H::factor(2 * (n - j)), H::factor(2 * (n - j) - 1)]).unwrap())
         .collect()
 }
 fn reference(n: usize, boundary: Boundary, t: f64, u: f64, symmetric: bool) -> Matrix {
@@ -57,20 +57,21 @@ fn check<T: Real>() {
         for boundary in [Boundary::Open, Boundary::Periodic] {
             let chain = Chain::new(n, boundary);
             for (t, u) in [(0.75, 1.25), (0., 2.), (1., 0.)] {
-                let standard = Fermion::<Complex<T>>::hubbard(
+                let standard = qmb_fermion::models::FermionModels::<Fermion<Complex<T>>>::hubbard(
                     &chain,
                     &sites,
                     T::from_f64(t).unwrap(),
                     T::from_f64(u).unwrap(),
                 )
                 .unwrap();
-                let symmetric = Fermion::<Complex<T>>::symmetric_hubbard(
-                    &chain,
-                    &sites,
-                    T::from_f64(t).unwrap(),
-                    T::from_f64(u).unwrap(),
-                )
-                .unwrap();
+                let symmetric =
+                    qmb_fermion::models::FermionModels::<Fermion<Complex<T>>>::symmetric_hubbard(
+                        &chain,
+                        &sites,
+                        T::from_f64(t).unwrap(),
+                        T::from_f64(u).unwrap(),
+                    )
+                    .unwrap();
                 let std = exported_matrix(&standard);
                 let sym = exported_matrix(&symmetric);
                 values::<T>(&std, &reference(n, boundary, t, u, false));
@@ -109,20 +110,16 @@ fn check<T: Real>() {
     }
     let sites = sites(1);
     let chain = Chain::new(1, Boundary::Open);
-    let sym = Fermion::<Complex<T>>::symmetric_hubbard(
+    let sym = qmb_fermion::models::FermionModels::<Fermion<Complex<T>>>::symmetric_hubbard(
         &chain,
         &sites,
         T::one(),
         T::from_f64(4.).unwrap(),
     )
     .unwrap();
-    let leaves: Vec<_> = sites[0].leaves().collect();
-    let double = Fermion::<Complex<T>>::state_tensor_g_at([
-        (leaves[0], S::Occupied),
-        (leaves[1], S::Occupied),
-    ])
-    .unwrap()
-    .scaled(c::<T>(0., 2.));
+    let double = Fermion::<Complex<T>>::product_state(&sites[0], [S::Occupied, S::Occupied])
+        .unwrap()
+        .scaled(c::<T>(0., 2.));
     let normalized = double.normalized().unwrap();
     close::<T>(
         normalized.norm().unwrap().to_f64().unwrap().into(),
@@ -134,9 +131,9 @@ fn check<T: Real>() {
     );
     assert_eq!(
         normalized
-            .coordinates_in(&OccupationBasis)
+            .coordinates(&OccupationBasis)
             .unwrap()
-            .dimension()
+            .dim()
             .unwrap(),
         4
     );
@@ -155,17 +152,17 @@ fn invalid_sites_lengths_kinds_indices_and_error_sources() {
     type F = Fermion<Complex<f64>>;
     for symmetric in [false, true] {
         let build = if symmetric {
-            F::symmetric_hubbard
+            qmb_fermion::models::FermionModels::<F>::symmetric_hubbard
         } else {
-            F::hubbard
+            qmb_fermion::models::FermionModels::<F>::hubbard
         };
         let chain = Chain::new(1, Boundary::Open);
         for bad in [
             H::unit(),
             H::factor(0),
-            H::tensor_g([H::factor(0)]).unwrap(),
-            H::tensor_g([H::factor(0), H::factor(1), H::factor(2)]).unwrap(),
-            H::tensor([H::factor(0), H::factor(1)]).unwrap(),
+            H::tensor_all_g([H::factor(0)]).unwrap(),
+            H::tensor_all_g([H::factor(0), H::factor(1), H::factor(2)]).unwrap(),
+            H::tensor_all([H::factor(0), H::factor(1)]).unwrap(),
         ] {
             assert!(matches!(
                 build(&chain, &[bad], 0., 0.),
@@ -187,13 +184,21 @@ fn invalid_sites_lengths_kinds_indices_and_error_sources() {
         assert_eq!(duplicate, UtilityError::Space(SpaceError::DuplicateIndex));
         assert!(std::error::Error::source(&duplicate).is_some());
     }
-    let nested = H::tensor([H::unit(), sites(1).pop().unwrap()]).unwrap();
-    assert!(F::hubbard(&Chain::new(1, Boundary::Open), &[nested], 1., 2.).is_ok());
+    let nested = H::tensor_all([H::unit(), sites(1).pop().unwrap()]).unwrap();
+    assert!(
+        qmb_fermion::models::FermionModels::<F>::hubbard(
+            &Chain::new(1, Boundary::Open),
+            &[nested],
+            1.,
+            2.
+        )
+        .is_ok()
+    );
 }
 
 fn graded<T: Real>() {
     let modes = [H::factor(9), H::factor(1)];
-    let space = H::tensor_g(modes.clone()).unwrap();
+    let space = H::tensor_all_g(modes.clone()).unwrap();
     let annihilate: Vec<_> = modes
         .iter()
         .map(|h| {
@@ -219,20 +224,16 @@ fn graded<T: Real>() {
             values::<T>(&exported_matrix(&ad), &expected);
         }
     }
-    let double = Fermion::<Complex<T>>::state_tensor_g_at([
-        (&modes[0], S::Occupied),
-        (&modes[1], S::Occupied),
-    ])
+    let double = Fermion::<Complex<T>>::product_state(
+        &qmb_core::HilbertSpace::tensor_all_g([(modes[0]).clone(), (modes[1]).clone()]).unwrap(),
+        [S::Occupied, S::Occupied],
+    )
     .unwrap();
     for (mode, labels, sign) in [
         (0, [S::Empty, S::Occupied], 1.),
         (1, [S::Occupied, S::Empty], -1.),
     ] {
-        let target = Fermion::<Complex<T>>::state_tensor_g_at([
-            (&modes[0], labels[0]),
-            (&modes[1], labels[1]),
-        ])
-        .unwrap();
+        let target = Fermion::<Complex<T>>::product_state(double.space(), labels).unwrap();
         close::<T>(
             to64(
                 target
@@ -251,8 +252,7 @@ fn graded<T: Real>() {
     .unwrap();
     let m = exported_matrix(&parity);
     assert_eq!([m[0].re, m[5].re, m[10].re, m[15].re], [1., -1., -1., 1.]);
-    let reversed = annihilate[1]
-        .product(&annihilate[0])
+    let reversed = (annihilate[1].clone() * &annihilate[0])
         .unwrap()
         .scaled(c::<T>(0.3, -0.7));
     let reference = scale(
@@ -260,18 +260,14 @@ fn graded<T: Real>() {
         Complex::new(0.3, -0.7),
     );
     let round = reversed
-        .expand_in(&MajoranaBasis)
+        .expand(&MajoranaBasis)
         .unwrap()
-        .expand_in(&LadderBasis)
+        .expand(&LadderBasis)
         .unwrap();
     values::<T>(&exported_matrix(&round), &reference);
     values::<T>(&exported_matrix(&round.adjoint()), &adjoint(&reference));
     assert_eq!(
-        round
-            .coordinates_in(&MajoranaBasis)
-            .unwrap()
-            .dimension()
-            .unwrap(),
+        round.coordinates(&MajoranaBasis).unwrap().dim().unwrap(),
         16
     );
 }

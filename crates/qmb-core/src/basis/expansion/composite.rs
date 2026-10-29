@@ -4,7 +4,7 @@ use super::{
     accumulate,
     local::{local_operator, local_state},
 };
-use crate::basis::enumeration::{leaves, local_size};
+use crate::basis::enumeration::{collect_leaves, local_size};
 use crate::{
     Act, Adjoint, Basis, BasisError, Conjugate, Coordinates, Dimension, HilbertSpace, Identity,
     LocalOperator, LocalState, Operator, Product, State,
@@ -90,7 +90,7 @@ where
                     tasks.push(StateTask::Scale(&s.coefficient));
                     tasks.push(StateTask::Visit(&s.operand));
                 }
-                StateNode::Sum(s) | StateNode::Tensor(_, s) => {
+                StateNode::Sum(s) | StateNode::Tensor(s) => {
                     tasks.push(if matches!(node.node(), StateNode::Sum(_)) {
                         StateTask::Sum(s.len())
                     } else {
@@ -178,14 +178,14 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     ///
     /// Returns state syntax preserving the tensor kind on the original shared space. No global
     /// dimension, primitive clone, or primitive operator product is required.
-    pub fn expand_in<B>(&self, basis: &B) -> Result<Self, BasisError>
+    pub fn expand<B>(&self, basis: &B) -> Result<Self, BasisError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Dimension + Act<C, Operator = O, Term = S>,
         O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
         B: Basis<S, C>,
     {
-        let factors = leaves(&self.space);
+        let factors = collect_leaves(&self.space);
         let dimension = local_size::<S>(factors.len())?;
         let terms = state_expansion(self, basis, dimension, |p| vec![LocalState::primitive(p)])?;
         let expressions = terms
@@ -201,12 +201,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                 let term = match nodes {
                     SumExpr::Empty => StateExpr::new(StateNode::Unit),
                     SumExpr::One(node) => node,
-                    nodes => StateExpr::new(StateNode::Tensor(
-                        self.space
-                            .effective_kind()
-                            .unwrap_or(crate::TensorKind::Ordinary),
-                        nodes,
-                    )),
+                    nodes => StateExpr::new(StateNode::Tensor(nodes)),
                 };
                 term.scaled(c)
             })
@@ -218,7 +213,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     }
 
     /// Obtains sparse coordinates with the original space and borrowed local basis.
-    pub fn coordinates_in<'b, B>(
+    pub fn coordinates<'b, B>(
         &self,
         basis: &'b B,
     ) -> Result<Coordinates<'b, B, C, HilbertSpace<I>>, BasisError>
@@ -235,7 +230,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
             basis,
             space: self.space.clone(),
             factor_count: count,
-            local_dimension: dimension,
+            dim_local: dimension,
             entries: terms.into_iter().map(|(k, (c, ()))| (k, c)).collect(),
         })
     }
@@ -243,7 +238,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
 
 impl<I: Eq, O, C> Operator<I, O, C> {
     /// Expands on the existing binding; an unbound operator returns an error.
-    pub fn expand_in<B>(&self, basis: &B) -> Result<Self, BasisError>
+    pub fn expand<B>(&self, basis: &B) -> Result<Self, BasisError>
     where
         C: Clone + Zero + One + Conjugate<Output = C> + core::ops::Neg<Output = C>,
         O: crate::HomogeneousParity
@@ -253,18 +248,14 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             + Adjoint<C, Term = O>,
         B: Basis<O, C>,
     {
-        self.expand_in_space(basis, self.select_space(None, None)?)
+        self.expand_in(basis, self.select_space(None, None)?)
     }
 
     /// Expands on an explicit space, overriding any previous binding.
     ///
     /// Spectators are expanded as local identities in the same basis, even when
     /// identity itself is not a basis primitive. Zero retains the selected space.
-    pub fn expand_in_space<B>(
-        &self,
-        basis: &B,
-        ambient: &HilbertSpace<I>,
-    ) -> Result<Self, BasisError>
+    pub fn expand_in<B>(&self, basis: &B, ambient: &HilbertSpace<I>) -> Result<Self, BasisError>
     where
         C: Clone + Zero + One + Conjugate<Output = C> + core::ops::Neg<Output = C>,
         O: crate::HomogeneousParity
@@ -275,7 +266,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
         B: Basis<O, C>,
     {
         let ambient = self.select_space(Some(ambient), None)?;
-        let factors = leaves(ambient);
+        let factors = collect_leaves(ambient);
         let dimension = local_size::<O>(factors.len())?;
         let terms = operator_expansion(self, basis, ambient, &factors, dimension, |p| {
             vec![LocalOperator::primitive(p)]
@@ -306,7 +297,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     }
 
     /// Obtains operator-basis coordinates using the existing binding.
-    pub fn coordinates_in<'b, B>(
+    pub fn coordinates<'b, B>(
         &self,
         basis: &'b B,
     ) -> Result<Coordinates<'b, B, C, HilbertSpace<I>>, BasisError>
@@ -319,11 +310,11 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             + Adjoint<C, Term = O>,
         B: Basis<O, C>,
     {
-        self.coordinates_in_space(basis, self.select_space(None, None)?)
+        self.coordinates_in(basis, self.select_space(None, None)?)
     }
 
     /// Obtains operator-basis coordinates on an explicit space, overriding a binding.
-    pub fn coordinates_in_space<'b, B>(
+    pub fn coordinates_in<'b, B>(
         &self,
         basis: &'b B,
         ambient: &HilbertSpace<I>,
@@ -338,14 +329,14 @@ impl<I: Eq, O, C> Operator<I, O, C> {
         B: Basis<O, C>,
     {
         let ambient = self.select_space(Some(ambient), None)?;
-        let factors = leaves(ambient);
+        let factors = collect_leaves(ambient);
         let dimension = local_size::<O>(factors.len())?;
         let terms = operator_expansion(self, basis, ambient, &factors, dimension, |_| ())?;
         Ok(Coordinates {
             basis,
             space: ambient.clone(),
             factor_count: factors.len(),
-            local_dimension: dimension,
+            dim_local: dimension,
             entries: terms.into_iter().map(|(k, (c, ()))| (k, c)).collect(),
         })
     }

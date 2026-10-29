@@ -10,10 +10,9 @@ fn check<T: Real>() {
             HilbertSpace::factor(1),
             HilbertSpace::factor(4),
         ];
-        let h = HilbertSpace::tensor_with_kind(kind, factors.clone()).unwrap();
-        let op = placed::<T>(A, &factors[2])
-            .scaled(c(0.3, -0.7))
-            .add(&placed(CREATE, &factors[0]))
+        let h = HilbertSpace::tensor_all_with(kind, factors.clone()).unwrap();
+        let op = (placed::<T>(A, &factors[2]).scaled(c(0.3, -0.7)).clone()
+            + &placed(CREATE, &factors[0]))
             .unwrap();
         let expected: Vec<_> = embedding::<T>(A, 2, 3, kind)
             .into_iter()
@@ -33,9 +32,7 @@ fn check<T: Real>() {
                 .collect::<Vec<_>>(),
             [7, 1, 4]
         );
-        let psi = ket(7, &factors, kind)
-            .scaled(c(0.2, 0.8))
-            .add(&ket(0, &factors, kind))
+        let psi = (ket(7, &factors, kind).scaled(c(0.2, 0.8)).clone() + &ket(0, &factors, kind))
             .unwrap()
             .act(&op)
             .unwrap();
@@ -67,7 +64,7 @@ fn check<T: Real>() {
         // Explicit space overrides the old ordinary binding, and invalid zero
         // references propagate before the matrix builder allocates storage.
         let old = op
-            .bind(&HilbertSpace::tensor(factors.clone()).unwrap())
+            .bind(&HilbertSpace::tensor_all(factors.clone()).unwrap())
             .unwrap();
         let rebound: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>> = (&old)
             .export(MatrixArgs::new(&States).in_space(&h))

@@ -41,16 +41,19 @@ fn basis<T: Real>(
     factors: &[HilbertSpace<Id128>],
     bits: usize,
 ) -> qmb_core::StateOf<SpinHalf<Complex<T>>, Id128> {
-    State::tensor(factors.iter().enumerate().map(|(i, factor)| {
-        // Independent equal-index handles need not share the original nodes.
-        LocalState::primitive(if (bits >> (factors.len() - 1 - i)) & 1 == 0 {
-            SpinHalfState::Up
-        } else {
-            SpinHalfState::Down
-        })
-        .at(&HilbertSpace::factor(*factor.factor_index().unwrap()))
-        .unwrap()
-    }))
+    State::tensor_in(
+        &HilbertSpace::tensor_all(factors.iter().cloned()).unwrap(),
+        factors.iter().enumerate().map(|(i, factor)| {
+            // Independent equal-index handles need not share the original nodes.
+            LocalState::primitive(if (bits >> (factors.len() - 1 - i)) & 1 == 0 {
+                SpinHalfState::Up
+            } else {
+                SpinHalfState::Down
+            })
+            .at(&HilbertSpace::factor(*factor.factor_index().unwrap()))
+            .unwrap()
+        }),
+    )
     .unwrap()
 }
 fn factors(n: usize) -> Vec<HilbertSpace<Id128>> {
@@ -107,13 +110,19 @@ fn check<T: Real>() {
         for boundary in [Boundary::Open, Boundary::Periodic] {
             let chain = Chain::new(n, boundary);
             let factors = factors(n);
-            let space = HilbertSpace::tensor(factors.iter().cloned()).unwrap();
+            let space = HilbertSpace::tensor_all(factors.iter().cloned()).unwrap();
             let j = real::<T>(1.3);
-            let h = SpinHalf::<Complex<T>>::heisenberg(&chain, &factors, j).unwrap();
+            let h = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::heisenberg(
+                &chain, &factors, j,
+            )
+            .unwrap();
             assert!(h.space().unwrap().is_compatible_with(&space));
             let before: Vec<_> = space.indices().copied().collect();
             for first in [SpinHalfState::Up, SpinHalfState::Down] {
-                let psi = SpinHalf::<Complex<T>>::neel(&chain, &factors, first).unwrap();
+                let psi = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::neel(
+                    &chain, &factors, first,
+                )
+                .unwrap();
                 close(
                     Complex::new(psi.norm_squared().unwrap(), T::zero()),
                     c(1.0, 0.0),
@@ -169,7 +178,10 @@ fn check<T: Real>() {
             let chain = Chain::new(n, boundary);
             let factors = factors(n);
             for j in [real::<T>(1.3), real::<T>(-0.7)] {
-                let h = SpinHalf::<Complex<T>>::heisenberg(&chain, &factors, j).unwrap();
+                let h = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::heisenberg(
+                    &chain, &factors, j,
+                )
+                .unwrap();
                 let adj = h.adjoint();
                 for row in 0..(1 << n) {
                     for col in 0..(1 << n) {
@@ -207,11 +219,17 @@ fn check_exports<T: Real + num_traits::NumAssign + Default + Send + Sync + 'stat
         for boundary in [Boundary::Open, Boundary::Periodic] {
             let chain = Chain::new(n, boundary);
             let factors = factors(n);
-            let space = HilbertSpace::tensor(factors.iter().cloned()).unwrap();
+            let space = HilbertSpace::tensor_all(factors.iter().cloned()).unwrap();
             let j = real::<T>(1.3);
-            let h = SpinHalf::<Complex<T>>::heisenberg(&chain, &factors, j).unwrap();
+            let h = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::heisenberg(
+                &chain, &factors, j,
+            )
+            .unwrap();
             for first in [SpinHalfState::Up, SpinHalfState::Down] {
-                let psi = SpinHalf::<Complex<T>>::neel(&chain, &factors, first).unwrap();
+                let psi = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::neel(
+                    &chain, &factors, first,
+                )
+                .unwrap();
                 let raw: Exported<Vec<Complex<T>>, _> = (&psi).export(&SzBasis).unwrap();
                 let pointer = raw.data().as_ptr();
                 let vector: Exported<Array1<_>, _> = raw.export(()).unwrap();
@@ -308,7 +326,10 @@ fn check_norms<T: Real + Float>() {
         for first in [SpinHalfState::Up, SpinHalfState::Down] {
             let chain = Chain::new(n, Boundary::Open);
             let factors = factors(n);
-            let psi = SpinHalf::<Complex<T>>::neel(&chain, &factors, first).unwrap();
+            let psi = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::neel(
+                &chain, &factors, first,
+            )
+            .unwrap();
             close(Complex::new(psi.norm().unwrap(), T::zero()), c(1.0, 0.0));
             let normalized = psi.scaled(c(2.0, -3.0)).normalized().unwrap();
             close(
@@ -330,7 +351,7 @@ fn check_xyz<T: Real>() {
         for boundary in [Boundary::Open, Boundary::Periodic] {
             let chain = Chain::new(n, boundary);
             let factors = factors(n);
-            let space = HilbertSpace::tensor(factors.iter().cloned()).unwrap();
+            let space = HilbertSpace::tensor_all(factors.iter().cloned()).unwrap();
             for values in [
                 [0.7, -1.3, 2.1],
                 [1.0, 0.0, 0.0],
@@ -340,9 +361,16 @@ fn check_xyz<T: Real>() {
                 [0.8, 0.8, 0.8],
             ] {
                 let [jx, jy, jz] = values.map(real::<T>);
-                let h = SpinHalf::<Complex<T>>::xyz(&chain, &factors, jx, jy, jz).unwrap();
+                let h = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::xyz(
+                    &chain, &factors, jx, jy, jz,
+                )
+                .unwrap();
                 assert!(h.space().unwrap().is_compatible_with(&space));
-                let isotropic = SpinHalf::<Complex<T>>::heisenberg(&chain, &factors, jx).unwrap();
+                let isotropic =
+                    qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<T>>>::heisenberg(
+                        &chain, &factors, jx,
+                    )
+                    .unwrap();
                 for row in 0..(1 << n) {
                     for col in 0..(1 << n) {
                         let left = basis::<T>(&factors, row);

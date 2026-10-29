@@ -5,7 +5,7 @@ use num_complex::Complex;
 use num_traits::One;
 use qmb_core::{
     Adjoint, Basis, HilbertSpace, Identity, ImaginaryUnit, InnerProduct, LinearCombination as Lc,
-    Product, QuantumSystem, Trace,
+    Product, Trace,
 };
 use qmb_spin_one::{
     CartesianBasis, LadderBasis, SpinOne, SpinOneOperator as O, SpinOneState as S, SzBasis,
@@ -248,11 +248,19 @@ fn storage_identity_placement_and_delayed_operations_need_no_numbers() {
     type Spin = SpinOne<Opaque>;
     let psi = Spin::state(S::Zero);
     let op = Spin::operator(O::identity());
-    let _ = psi.act(&op.product(&op.adjoint()));
+    let _ = psi.act(&(op.clone() * &op.adjoint()));
     let _ = qmb_core::LocalOperator::<O, Opaque>::identity();
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let psi = Spin::state_tensor_at([(&a, S::Plus), (&b, S::Minus)]).unwrap();
+    let psi = Spin::product_state(
+        &qmb_core::HilbertSpace::tensor_all([(a).clone(), (b).clone()]).unwrap(),
+        [S::Plus, S::Minus],
+    )
+    .unwrap();
     let _ = psi.act(&op.at(&a).unwrap()).unwrap();
-    let _ = Spin::state_tensor_g_at([(&a, S::Zero), (&b, S::Minus)]).unwrap();
+    let _ = Spin::product_state(
+        &qmb_core::HilbertSpace::tensor_all_g([(a).clone(), (b).clone()]).unwrap(),
+        [S::Zero, S::Minus],
+    )
+    .unwrap();
 }

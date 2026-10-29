@@ -251,34 +251,38 @@ Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要�
 | 対象 | 主な API と契約 |
 | --- | --- |
 | 局所式の配置 | `LocalState::at(&factor)`・`LocalOperator::at(&factor)` は因子への配置を検証し、局所式を共有する。状態は所属空間を持ち、演算子は未束縛とする |
-| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`try_sum`・`add`・`tensor_with_kind`・`tensor`・`tensor_g`・`try_tensor_with_kind`・`try_tensor`・`try_tensor_g`・`tensor_product_with_kind`・`tensor_product`・`tensor_product_g`・`scaled` と、`space`・`domain`・`codomain` を提供する |
+| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`try_sum`・`tensor_in(&space, states)`・`try_tensor_in(&space, states)`・`scaled` と、`space`・`domain`・`codomain` を提供する |
 | `State<I, S, O, C>` の演算・評価 | `act`・`act_in`・`evaluate`・`inner_product`・`norm_squared`・`expectation`・`expectation_in` を提供する。作用は遅延構築する |
-| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`try_sum`・`add`・`product_all`・`try_product_all`・`product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
-| `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hilbert_schmidt_inner_product`・`hilbert_schmidt_inner_product_in` を提供する。交換子は遅延構築する |
+| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`try_sum`・`product`・`try_product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
+| `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hs_inner_product`・`hs_inner_product_in` を提供する。交換子は遅延構築する |
 | エラー | 空間の重複には `SpaceError`、複合式の接続・評価には `ExpressionError`、次元取得には `DimensionOverflow` を使う |
 
-Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
+通常の和・積の名前付き構築は列を受け取る `sum` / `product` とし、二項には標準の `+` / `*` を使う。Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
 
-## 11. QuantumSystem の構築入口と fallible 集約（2026-10-28）
+## 11. ExpressionFactory の構築入口と fallible 集約（2026-10-28）
 
-QuantumSystem は状態・演算子 primitive と係数型を関連付け、以下の既定メソッドから既存の core 式を構築する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
+QuantumSystem は状態・演算子 primitive と係数型だけを関連付ける。構築は ExpressionFactory の以下の inherent method から既存の core 式を生成する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
+
+`ExpressionFactory<S,O,C>` は値を保持せず、インスタンス生成を必要としない構築入口であり、QuantumSystem を一括実装する。`SpinHalf<C>`・`SpinOne<C>`・`Fermion<C>` は具体的な primitive を選ぶ型エイリアスで、構築に trait の import は不要である。独自の primitive も ExpressionFactory の型エイリアスから利用できる。同じ primitive と係数型からは同じ式型を構築し、システム名を式の同一性へ追加しない。
+
+`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は型注釈として維持する。システム単位のジェネリック API では `Q: QuantumSystem` から型情報を取得し、構築には `LocalStateOf::<Q>::primitive(...)` などの式型の入口、または `ExpressionFactory<Q::State,Q::Operator,Q::Coeff>` を使う。QuantumSystem 自体に構築メソッドは置かない。モデル固有の構築は各 primitive crate の公開 `models` module に分離し、[幾何とモデルの設計](geometry.md)に従う。
 
 | 入口 | 入力・契約 |
 | --- | --- |
-| state_tensor_at | 葉と状態 primitive の組の列。入力順に tensor 合成し、重複 Index は拒否。空入力は単位状態 |
+| product_state | 明示空間と状態 primitive の列。空間の葉の順に一つずつ配置し、個数の完全一致を検証する |
 | operator_product_at | 葉と演算子 primitive の組の列。同一 Index の再登場を許可し、入力順に積を構築。右端が先に作用。空入力は未束縛 identity |
 | state_sum / try_state_sum | 明示空間と状態列。空入力はその空間の zero |
 | operator_sum / try_operator_sum | 演算子列。空入力は未束縛 zero |
-| state_tensor / try_state_tensor | 配置済み状態列の入力順 tensor。空入力は単位状態 |
+| tensor_in / try_tensor_in | 明示空間と配置済み状態列。葉の連結が指定空間を順序も含めて完全に覆い、部分系の種類も互換であることを検証する |
 | operator_product / try_operator_product | 配置済み演算子列の入力順の積。空入力は未束縛 identity |
 
-_at は配置も行う入口を意味し、裸の primitive の列ではなく (&factor, primitive) の IntoIterator を受け取る。配置先は葉のみで、Tensor の自動展開はしない。演算子は明示的に bind するまで未束縛であり、spectator を含む全作用空間を積の配置先から自動構築しない。入力スライスや配置先の変数の生存期間を越えて、共有した式・空間を保持できる。
+operator_product_at の _at は配置も行う入口を意味し、裸の primitive の列ではなく (&factor, primitive) の IntoIterator を受け取る。配置先は葉のみで、Tensor の自動展開はしない。演算子は明示的に bind するまで未束縛であり、spectator を含む全作用空間を積の配置先から自動構築しない。入力スライスや配置先の変数の生存期間を越えて、共有した式・空間を保持できる。
 
 try_ は Result 入力を表し、通常版も複合式では Result を返す。エラー型は ExpressionError に固定する。最初の入力 Err をそのまま返し、その後は Iterator の next を呼ばない。全入力が Ok の場合だけ合成を検証するため、入力エラーは先の項の空間不整合・重複より優先する。事前に配列・Vec を作った場合の生成処理や副作用は巻き戻さない。全入力成功後の合成検証が失敗する場合も、入力生成は最後まで行う。
 
-State::try_sum・try_tensor、Operator::try_sum・try_product_all を基礎 API として公開し、QuantumSystem はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
+State::try_sum・try_tensor_in、Operator::try_sum・try_product を基礎 API として公開し、ExpressionFactory はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
 
-各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の QuantumSystem 補助、局所式の集約用転送メソッドは後続候補として維持する。
+各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の ExpressionFactory 補助、局所式の集約用転送メソッドは後続候補として維持する。
 
 ## 12. Ordinary / graded の共通評価と移行
 
@@ -286,20 +290,23 @@ State::try_sum・try_tensor、Operator::try_sum・try_product_all を基礎 API 
 
 ### 12.1. 構築入口
 
-| 対象 | 種類指定 | ordinary | graded |
-| --- | --- | --- | --- |
-| State | `tensor_with_kind(kind, states)` | `tensor(states)` | `tensor_g(states)` |
-| State の二項積 | `tensor_product_with_kind(kind, &rhs)` | `tensor_product(&rhs)` | `tensor_product_g(&rhs)` |
-| fallible な State | `try_tensor_with_kind(kind, states)` | `try_tensor(states)` | `try_tensor_g(states)` |
-| QuantumSystem | `state_tensor_with_kind(kind, states)` | `state_tensor(states)` | `state_tensor_g(states)` |
-| fallible な QuantumSystem | `try_state_tensor_with_kind(kind, states)` | `try_state_tensor(states)` | `try_state_tensor_g(states)` |
-| 配置を伴う QuantumSystem | `state_tensor_at_with_kind(kind, assignments)` | `state_tensor_at(assignments)` | `state_tensor_g_at(assignments)` |
+| 対象 | ordinary / graded 共通の入口 |
+| --- | --- |
+| State | `tensor_in(&space, states)` |
+| fallible な State | `try_tensor_in(&space, states)` |
+| ExpressionFactory | `tensor_in(&space, states)` |
+| fallible な ExpressionFactory | `try_tensor_in(&space, states)` |
+| primitive の配置・合成 | `product_state(&space, primitives)` |
 
-種類指定版は kind を第一引数に受け、共通 constructor で状態の空間と Tensor 構文を同じ種類で構築する。第11節の入力エラー優先・消費停止を全入口で維持し、全入力の成功後に重複・種類の混在を検証する。空入力は指定した種類の単位状態となる。
+所属空間を先に構築し、状態構築ではその空間を共有する。状態の Tensor 節点は子の列だけを保持し、種類を重複して保存しない。状態側の種類指定版・`_g` 版・二項専用版は撤去した。HilbertSpace 側の種類指定 API は維持する。
+
+入力状態の葉の連結は指定空間の葉と順序も含めて完全一致し、複数因子の部分系の有効な種類も互換でなければならない。grouping は異なっていてよい。不足・過剰・重複・順序違い・種類不整合、primitive 数の不一致は `ExpressionError::IncompatibleSpaces` とする。第11節の入力エラー優先・消費停止を try_ 入口で維持する。
+
+空入力は零因子の単位空間だけで受理し、指定した空間のハンドルと grouping を保持する。単項も検証後に指定空間を保持する。`State::unit()` は正準的な単位空間を作る便宜として維持し、`State::zero(&space)` は指定空間上の零状態を作る。構築に Index・primitive の Clone や係数演算を追加要求しない。
 
 ### 12.2. 共通 API と最小能力
 
-`evaluate`・`trace`・`expand_in`・`coordinates_in` と各明示空間版を ordinary / graded 共通の入口とし、種類別の評価 API や adapter を追加しない。Rust の trait bound は実行時の kind で切り替えられないため、ordinary 空間でも操作に必要な grading 能力を要求する。実際の符号処理は選択空間の `effective_kind()` で決め、ordinary では P の挿入や交差符号を加えない。
+`evaluate`・`trace`・`expand`・`coordinates` と各明示空間版を ordinary / graded 共通の入口とし、種類別の評価 API や adapter を追加しない。Rust の trait bound は実行時の kind で切り替えられないため、ordinary 空間でも操作に必要な grading 能力を要求する。実際の符号処理は選択空間の `effective_kind()` で決め、ordinary では P の挿入や交差符号を加えない。
 
 | 操作 | 従来の能力に追加するもの |
 | --- | --- |
@@ -317,8 +324,8 @@ State::try_sum・try_tensor、Operator::try_sum・try_product_all を基礎 API 
 Odd な B と odd な状態 `s_a` に対し、次の二つを区別する。
 
 ```text
-tensor_g(s_a, s_b.act(B_b))      // B の作用は H_b 内で構築済み
-tensor_g(s_a, s_b).act(B_b)      // B は H_a ⊗g H_b 上で作用
+tensor_in(&H_ab, [s_a, s_b.act(B_b)])      // B の作用は H_b 内で構築済み
+tensor_in(&H_ab, [s_a, s_b]).act(B_b)      // B は H_a ⊗g H_b 上で作用
 ```
 
 後者だけが `s_a` の parity による負号を持つ。評価タスクは Act ごとの scope に切り替わり、先に単因子上で構築した作用を外側の tensor に組み込んでも scope を拡大しない。先に評価してから tensor 合成する経路と遅延したまま合成する経路は一致し、展開・再構築でも意味を保存する。

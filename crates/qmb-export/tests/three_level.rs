@@ -68,7 +68,7 @@ fn check<T: Real>() {
         let y = matvec(expected, expected_coords);
         close(dot(expected_coords, matvec(gram, y)), psi.expectation(&op));
         close(expected[0][0] + expected[1][1] + expected[2][2], op.trace());
-        let expanded = op.expand_in(&MatrixUnits).unwrap();
+        let expanded = op.expand(&MatrixUnits).unwrap();
         let again: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, ()>> =
             (&expanded).export(MatrixArgs::new(&basis)).unwrap();
         for (&a, &b) in again.data().iter().zip(output.data()) {
@@ -110,7 +110,7 @@ fn check<T: Real>() {
     // Non-orthogonal tensor-product bases, with a spectator identity.
     let f = HilbertSpace::factor(0u8);
     let g = HilbertSpace::factor(1u8);
-    let space = f.tensor_product(&g).unwrap();
+    let space = f.tensor(&g).unwrap();
     let op = O::<T>::primitive(Operator::Unit(Axis::A, Axis::B))
         .at(&f)
         .unwrap();

@@ -20,7 +20,7 @@ fn check_local<T: Real>() {
     assert_eq!(vector.metadata().shape(), [2]);
     assert_eq!(vector.metadata().factor_count(), 1);
     assert!(std::ptr::eq(vector.metadata().basis(), &basis));
-    let coordinates = psi.coordinates_in(&basis).unwrap();
+    let coordinates = psi.coordinates(&basis).unwrap();
     let borrowed: Exported<Vec<_>, VectorMetadata<'_, _, (), ()>> =
         (&coordinates).export(()).unwrap();
     let owned: Exported<Vec<_>, VectorMetadata<'_, _, (), ()>> = coordinates.export(()).unwrap();
@@ -36,7 +36,7 @@ fn check_local<T: Real>() {
         assert_eq!(pointer, array.data().as_ptr());
         values(array.data().as_slice().unwrap(), &reference);
         values(direct.data().as_slice().unwrap(), &reference);
-        let coords = psi.coordinates_in(&basis).unwrap();
+        let coords = psi.coordinates(&basis).unwrap();
         let borrowed: Exported<qmb_export::ndarray::Array1<_>, VectorMetadata<'_, _, (), ()>> =
             (&coords).export(()).unwrap();
         let owned: Exported<qmb_export::ndarray::Array1<_>, VectorMetadata<'_, _, (), ()>> =
@@ -55,8 +55,7 @@ fn check_local<T: Real>() {
     let ops = [Op::I, Op::Sx, Op::Sy, Op::Sz, Op::SPlus, Op::SMinus];
     for a in ops {
         for b in ops {
-            let op = Lo::<T>::primitive(a)
-                .product(&Lo::primitive(b))
+            let op = (Lo::<T>::primitive(a).clone() * &Lo::primitive(b))
                 .adjoint()
                 .scaled(c(0.4, -0.2));
             let expected: Vec<_> = adjoint(&product(&local::<T>(a), &local(b), 2), 2)
@@ -78,8 +77,8 @@ fn check_local<T: Real>() {
             );
             close(op.trace(), expected[0] + expected[3]);
             for expanded in [
-                op.expand_in(&CartesianBasis).unwrap(),
-                op.expand_in(&LadderBasis).unwrap(),
+                op.expand(&CartesianBasis).unwrap(),
+                op.expand(&LadderBasis).unwrap(),
             ] {
                 let data: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, ()>> =
                     (&expanded).export(MatrixArgs::new(&basis)).unwrap();
@@ -127,7 +126,8 @@ fn check_composite<T: Real>() {
     let f = HilbertSpace::factor(3u8);
     let g = HilbertSpace::factor(8u8);
     let space =
-        HilbertSpace::tensor([HilbertSpace::tensor([f.clone()]).unwrap(), g.clone()]).unwrap();
+        HilbertSpace::tensor_all([HilbertSpace::tensor_all([f.clone()]).unwrap(), g.clone()])
+            .unwrap();
     let basis = SzBasis;
     let inputs: Vec<_> = space
         .basis_states::<Ket, Op, Complex<T>, _>(&basis)
@@ -136,21 +136,18 @@ fn check_composite<T: Real>() {
         .collect();
     let x = [c(0.3, -0.7), c(-0.2, 0.6), c(0.4, 0.2), c(-0.9, -0.3)];
     let psi = State::sum(&space, inputs.iter().zip(x).map(|(s, c)| s.scaled(c))).unwrap();
-    let a = Lo::<T>::primitive(Op::Sx)
+    let a = (Lo::<T>::primitive(Op::Sx)
         .at(&f)
         .unwrap()
         .scaled(c(0.2, 0.7))
-        .add(&Lo::primitive(Op::Sy).at(&g).unwrap().scaled(c(-0.3, 0.4)))
+        .clone()
+        + &Lo::primitive(Op::Sy).at(&g).unwrap().scaled(c(-0.3, 0.4)))
         .unwrap();
-    let b = Lo::<T>::primitive(Op::Sz)
-        .at(&f)
-        .unwrap()
-        .add(
-            &Lo::primitive(Op::SMinus)
-                .at(&g)
-                .unwrap()
-                .scaled(c(0.1, -0.6)),
-        )
+    let b = (Lo::<T>::primitive(Op::Sz).at(&f).unwrap().clone()
+        + &Lo::primitive(Op::SMinus)
+            .at(&g)
+            .unwrap()
+            .scaled(c(0.1, -0.6)))
         .unwrap();
     let am: Vec<_> = kron(&local::<T>(Op::Sx), &local(Op::I))
         .into_iter()
@@ -163,7 +160,7 @@ fn check_composite<T: Real>() {
         .map(|(a, b)| a + b * c(0.1, -0.6))
         .collect();
     let expected = adjoint(&product(&am, &bm, 4), 4);
-    let op = a.product(&b).unwrap().adjoint(); // Unbound; explicit space is required.
+    let op = (a.clone() * &b).unwrap().adjoint(); // Unbound; explicit space is required.
     let dense: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>> = (&op)
         .export(MatrixArgs::new(&basis).in_space(&space))
         .unwrap();
@@ -193,8 +190,8 @@ fn check_composite<T: Real>() {
         (0..4).fold(c(0., 0.), |s, i| s + expected[i * 4 + i]),
     );
     for expanded in [
-        op.expand_in_space(&CartesianBasis, &space).unwrap(),
-        op.expand_in_space(&LadderBasis, &space).unwrap(),
+        op.expand_in(&CartesianBasis, &space).unwrap(),
+        op.expand_in(&LadderBasis, &space).unwrap(),
     ] {
         let d: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>> =
             (&expanded).export(MatrixArgs::new(&basis)).unwrap();
@@ -251,7 +248,7 @@ fn check_composite<T: Real>() {
                 expected,
             );
         }
-        let coordinates = psi.coordinates_in(&basis).unwrap();
+        let coordinates = psi.coordinates(&basis).unwrap();
         let borrowed: Exported<qmb_export::sprs::CsVec<_>, VectorMetadata<'_, _, _, ()>> =
             (&coordinates).export(()).unwrap();
         let moved: Exported<qmb_export::sprs::CsVec<_>, VectorMetadata<'_, _, _, ()>> =
@@ -259,7 +256,7 @@ fn check_composite<T: Real>() {
         assert_eq!(borrowed.data(), moved.data());
     }
     // Grouping and a re-created compatible space preserve the flat order.
-    let flat = f.tensor_product(&g).unwrap();
+    let flat = f.tensor(&g).unwrap();
     let other: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>> = (&op)
         .export(MatrixArgs::new(&basis).in_space(&flat))
         .unwrap();

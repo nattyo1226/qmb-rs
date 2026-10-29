@@ -1,7 +1,6 @@
 mod support;
 
 use num_complex::Complex;
-use qmb_core::QuantumSystem;
 use qmb_export::{Export, Exported, MatrixArgs};
 use qmb_normalize::{Norm, NormalizationError, Normalize, NormalizedExpectation};
 use qmb_spin_one::{
@@ -66,9 +65,9 @@ fn check<T: Real>() {
     ];
     let n2 = dot(&v, &v).re;
     values::<T>(&vector(&psi), &v);
-    values::<T>(&vector(&psi.expand_in(&SzBasis).unwrap()), &v);
-    let coords = psi.coordinates_in(&SzBasis).unwrap();
-    assert_eq!(coords.dimension().unwrap(), 3);
+    values::<T>(&vector(&psi.expand(&SzBasis).unwrap()), &v);
+    let coords = psi.coordinates(&SzBasis).unwrap();
+    assert_eq!(coords.dim().unwrap(), 3);
     for (i, z) in coords.flat_entries().map(Result::unwrap) {
         close::<T>(to64(*z), v[i]);
     }
@@ -95,8 +94,8 @@ fn check<T: Real>() {
             dot(&v, &expected) / n2,
         );
         for expanded in [
-            a.expand_in(&CartesianBasis).unwrap(),
-            a.expand_in(&LadderBasis).unwrap(),
+            a.expand(&CartesianBasis).unwrap(),
+            a.expand(&LadderBasis).unwrap(),
         ] {
             values::<T>(&exported(&expanded), &m);
             values::<T>(&vector(&psi.act(&expanded)), &expected);
@@ -116,7 +115,7 @@ fn check<T: Real>() {
     values::<T>(&exported(&a), &reference);
     values::<T>(&exported(&a.adjoint()), &adjoint(&reference));
     values::<T>(
-        &exported(&a.adjoint().product(&a)),
+        &exported(&(a.adjoint().clone() * &a)),
         &product(&adjoint(&reference), &reference),
     );
     close::<T>(to64(a.trace()), trace(&reference));
