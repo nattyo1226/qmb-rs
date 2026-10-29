@@ -2,7 +2,7 @@
 
 作成日: 2026-10-29
 更新日: 2026-10-30
-状態: `qmb-spin-one` に実装済み。局所規則・基底・共通 API 接続の検証は第10節に記録する。
+状態: 局所 primitive は `qmb-spin-one` に実装済み。局所規則・基底・共通 API 接続の検証は第10節に記録する。モデル utility の確定仕様を第11節に追加し、実装を進める。
 
 ## 1. 対象と参照した実装
 
@@ -275,7 +275,7 @@ I・Sz・Q0 は両基底で共有する。どちらの基底でも全15 primitiv
 
 ## 7. Crate 構成と共通 API への接続
 
-実装は `src/{lib,state,operator,basis,coefficient}.rs`、検証は `tests/{contracts,minimal_scalar,local_expressions,tensor_products}.rs` と `tests/support/mod.rs` に置く。本番依存は既存 workspace の `qmb-core`・`num-traits`・`num-complex` である。num-complex は Act の係数型を表すため、本番依存とする。num-traits はこの crate 側で std feature を有効にし、qmb-normalize と同様に Float を利用する。workspace 全体の既定 feature や core の公開契約は変更していない。geometry・数値 backend は本番依存に含めない。
+局所 primitive の実装は `src/{lib,state,operator,basis,coefficient}.rs`、検証は `tests/{contracts,minimal_scalar,local_expressions,tensor_products}.rs` と `tests/support/mod.rs` に置く。モデル utility は `src/models.rs` と `tests/models.rs` に追加する。本番依存は既存 workspace の `qmb-core`・`num-traits`・`num-complex` と、モデル構築に使う `qmb-geometry`・`thiserror` とする。num-complex は Act の係数型を表すため、本番依存とする。num-traits はこの crate 側で std feature を有効にし、qmb-normalize と同様に Float を利用する。workspace 全体の既定 feature や core の公開契約は変更しない。数値 backend は本番依存に含めない。
 
 依存宣言は以下のとおりである。
 
@@ -289,7 +289,7 @@ num-complex.workspace = true
 3. [operator.rs](../../../crates/qmb-spin-one/src/operator.rs)・[state.rs](../../../crates/qmb-spin-one/src/state.rs) に直接の match 規則、[basis.rs](../../../crates/qmb-spin-one/src/basis.rs) に3基底を実装した。
 4. 共通 LocalState / LocalOperator・State / Operator、export / normalize へ接続した。[spin_one.rs](../../../examples/src/bin/spin_one.rs) は単イオン異方性・横磁場、基底変換、二因子の作用を使う例であり、normalize / export feature も確認できる。
 
-標準の spin-half の型・数値 bound を変更しない。Grading trait は core の実装済み契約へ接続し、共通機構を再実装しない。専用 Heisenberg / bilinear-biquadratic モデル utility は primitive の動作確認例とは分けて設計する。
+標準の spin-half の型・数値 bound を変更しない。Grading trait は core の実装済み契約へ接続し、共通機構を再実装しない。モデル utility は primitive の動作確認例と分け、第11節の仕様で提供する。
 
 ## 8. 受入条件
 
@@ -315,7 +315,7 @@ std の利用を許可し、Act は `Complex<R>`・`R: Float` 向けに実装す
 
 variant 名と基底の列挙順も3節の内容で確定し、そのまま実装した。係数は非零による除算に閉じることを要求し、定数係数は C の算術で生成する。局所規則は既存実装と同様に match で直接記述した。独自の有理数型・記号係数や実行時の行列単位分解を導入する旧案は採用していない。
 
-追加基底・専用モデル utility・一般 spin-S・異種代数の混在は後続の範囲とする。今回の局所 primitive の完成には含めない。
+追加基底・一般 spin-S・異種代数の混在は後続の範囲とする。局所 primitive の完成後に追加するモデル utility の範囲は第11節に記録する。
 
 ## 10. 実装と受入検証
 
@@ -340,3 +340,68 @@ variant 名と基底の列挙順も3節の内容で確定し、そのまま実�
 利用例は `cargo run -p examples --bin spin_one --no-default-features` と `--all-features` で実行した。未正規化期待値1.2、正規化期待値0.4、SPlus² の Q2Plus 座標、二因子の期待値−1、3×3の密疎行列の一致を確認した。
 
 MSRV 1.85 の実ビルド・性能計測は未実施であり、今回のホスト上の検証で代替したとは扱わない。no_std 対応は第3節のとおり初期要件に含めない。
+
+## 11. XYZ・Heisenberg・BLBQ モデル utility
+
+2026-10-30 に以下の3モデルの定義を確定した。既存の [spin-half の models](../../../crates/qmb-spin-half/src/models.rs) と同じ符号規約・Chain・外部 Site 空間列を使い、`SpinOne<C>` の関連関数として提供する。
+
+### 11.1. Hamiltonian と公開入口
+
+`hbar=1` とし、まず1 Site が1 spin の場合の定義を示す。各最近接結合を一度ずつ数える。
+
+```math
+H_{\mathrm{XYZ}}=-\sum_{\langle ij\rangle}
+\left(J_x S_i^xS_j^x+J_y S_i^yS_j^y+J_z S_i^zS_j^z\right),
+```
+
+```math
+H_{\mathrm{Heisenberg}}=-J\sum_{\langle ij\rangle}\mathbf S_i\cdot\mathbf S_j,
+```
+
+```math
+H_{\mathrm{BLBQ}}=-\sum_{\langle ij\rangle}
+\left[J\,\mathbf S_i\cdot\mathbf S_j
++K\,(\mathbf S_i\cdot\mathbf S_j)^2\right].
+```
+
+| 公開入口 | 結合定数 |
+| --- | --- |
+| `SpinOne::<C>::xyz(&chain, &sites, jx, jy, jz)` | 各 Cartesian 成分の結合 |
+| `SpinOne::<C>::heisenberg(&chain, &sites, j)` | 等方的な bilinear 結合 |
+| `SpinOne::<C>::blbq(&chain, &sites, j, k)` | bilinear 結合 J と biquadratic 結合 K |
+
+`heisenberg(j)` は `xyz(j,j,j)`、`blbq(j,0)` は `heisenberg(j)` と数学的に同じである。J>0 の bilinear 結合は強磁性的、J<0 は反強磁性的となる。結合定数は Hermite Hamiltonian に対して実数値を渡す契約とし、型による実数制限や実行時の判定は追加しない。単イオン異方性・磁場項・追加の定数シフトは設けず、上の式のエネルギー原点を保持する。
+
+角度表示 `H=sum[cos(theta) A_ij+sin(theta) A_ij²]`、`A_ij=S_i·S_j` は `blbq(-cos(theta),-sin(theta))` で表せる。初期の入口は独立した J・K の2引数とし、角度専用の関数は追加しない。
+
+### 11.2. Site・空間・境界条件
+
+Site が複数葉を持つ場合、隣接 Site の全葉ペア `(a,b)` に各相互作用を加える。BLBQ の項は `-J A_ab-K A_ab²` であり、二乗は葉ペアごとに取る。Site 内の結合や、異なる葉ペアの間の交差項は加えない。
+
+全関数は `&Chain` と `&[HilbertSpace<I>]` を受け取り、`Result<OperatorOf<SpinOne<C>,I>,UtilityError>` を返す。Chain の境界条件と重複のない最近接辺の列挙を使う。0・1 Site は辺なし、2 Site は open / periodic のどちらも一辺とする。
+
+列長と全 Site 間の Index の一意性を、辺の有無・結合定数によらず検証する。返す Hamiltonian は、入力 Site の空間ハンドルを順に tensor した全空間へ束縛する。内部 grouping・葉順・相互作用に現れない Site を保持し、Index には Eq だけを要求する。空 Site は位置を保ち、その前後を直接つなぎ直さない。0 Site は単位空間上の zero Hamiltonian、1 Site や全空 Site はその入力空間へ束縛した zero Hamiltonian を返す。
+
+`UtilityError` は spin-half と同じ `Chain(ChainError)`・`Space(SpaceError)`・`Expression(ExpressionError)` の3 variant とし、crate root から公開する。
+
+### 11.3. 遅延構築と係数能力
+
+XYZ は配置した Cartesian 成分の積と和、Heisenberg は XYZ の等方的な場合として構築する。BLBQ は各葉ペアについて `A_ab=Sx_a Sx_b+Sy_a Sy_b+Sz_a Sz_b` を一度構築し、その式を共有して `A_ab.product(&A_ab)` を構築する。J の符号を二乗へ混入させず、J・K は最後に各項へ適用する。
+
+局所規則の評価・基底展開・係数同士の加算や乗算は構築時に行わない。密行列・数値 backend・追加の局所規則は使わない。
+
+| 関数 | 構築に必要な bound |
+| --- | --- |
+| `xyz<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C>` |
+| `heisenberg<I: Eq,R: Clone>` | `C: Clone + From<R> + Neg<Output=C>` |
+| `blbq<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C>` |
+
+係数 C の Float・Zero・One・加算・乗算・除算・共役や、Index の Clone / Hash / Ord は要求しない。評価・trace・export 時には既存 core と局所 primitive の操作別の bound が適用される。
+
+### 11.4. モデルの受入条件
+
+- 両精度で XYZ・Heisenberg・BLBQ の全行列成分を、独立な3×3スピン行列から作った小規模鎖の参照行列と比較する。開放 / 周期境界、異方的結合、正負の J・K を含める。
+- `heisenberg(j)=xyz(j,j,j)`、`blbq(j,0)=heisenberg(j)`、pure biquadratic 項を確認する。二 spin の全スピン0・1・2に対する `A_ij` の固有値は -2・-1・1、BLBQ のエネルギーは `2J-4K`・`J-K`・`-J-K` となることを独立した状態で検証する。
+- 複数葉 Site では全葉ペアへ結合し、二乗がペアごとであることを検証する。空 Site・0 / 1 Site・2 Site の周期辺の重複防止・非連番の因子順・grouping の共有と spectator の保持を確認する。
+- 辺なし・zero 結合でも列長不一致と重複 Index を拒否し、エラーの source を保持することを確認する。
+- 数値演算を実装しない Clone・From・Neg だけの係数、非 Clone の結合入力と Index で構築できることを確認する。モデルの使用例と関連ドキュメントも更新する。
