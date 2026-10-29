@@ -3,11 +3,13 @@
 作成日: 2026-10-30
 更新日: 2026-10-30
 
-現在の実装を読み、同種の操作で名前の規則が揃っていない箇所と、公開 API として長くなっている名前を記録する。実装名・入力・動作はソースで確認した事実であり、使いにくさの評価・優先度・新しい名前は検討案である。第1〜3節は候補の調査記録、第5節はそれらを比較した推奨案とする。推奨は採用決定ではなく、改名の採用や v2 での実施は未決である。
+現在の実装を読み、同種の操作で名前の規則が揃っていない箇所と、公開 API として長くなっている名前を記録する。実装名・入力・動作はソースで確認した事実であり、使いにくさの評価・優先度・新しい名前は検討案である。第1〜3節は候補の調査記録、第5節はそれらを比較した推奨案とする。N1 の通常の加算・乗算については、二項を `add` / `mul`、列の集約を `sum` / `product` とする方針を採用済みとする。状態構築には下記の別文書の設計変更を採用した。それ以外は推奨段階であり、実装時期は未決である。
 
 確認対象は `crates/` 以下の `qmb-core`・`qmb-basic`・`qmb-geometry`・`qmb-spin-half`・`qmb-spin-one`・`qmb-fermion`・`qmb-normalize`・`qmb-export` の関数・メソッド・公開 trait と、`examples/src/bin/` の呼び出しである。非公開 module 内でも公開型の inherent method や再公開された trait は公開 API に含める。内部関数は後段に分ける。
 
 優先度「高」は日常的な構築・計算で長さや名前の衝突が目立つ候補、「中」は API 間の規則を揃える候補、「低」は現行名を残す判断も有力な候補とする。識別子の長さは `_` を含み、型名・module path は含めない。文字数だけを改名の基準にはしない。
+
+追記（2026-10-30）: 状態構築に所属空間を明示し、状態側の `_g` / 種類指定と Tensor 節点の種類情報を廃止する[設計変更を採用した](explicit-state-space.md)。N2・L2・L4 と第5.3節の **State / QuantumSystem のテンソル系の旧推奨名は本設計変更で置き換える**。以下の表は変更前の候補の検討記録として残す。HilbertSpace 側の種類指定入口と命名検討は継続する。
 
 ## 1. 名前の規則が揃っていない箇所
 
@@ -22,11 +24,26 @@
 
 列を表す印が積では `_all`、テンソル積では無印になり、QuantumSystem に移ると `_all` が消える。各シグネチャは明確だが、別の型で同じ操作を探す際に規則を推測しにくい。
 
-候補は二項版を `product` / `tensor`、列を `product_all` / `tensor_all` に揃え、QuantumSystem 側も列であることを同じ規則で示すこと。ただし現行の `tensor` は列を受け取るため、`tensor_product` だけを `tensor` に変えることはできない。和の `add` / `sum` は既に二項と列を区別できており、同じ語尾へ機械的に揃える必要はない。
+**採用決定（2026-10-30）**：通常の加算・乗算は、二項演算の動詞と列の集約名で区別する。
+
+| 操作 | 二項演算 | 列の集約 |
+| --- | --- | --- |
+| 加算 | `add` | `sum` |
+| 乗算 | `mul` | `product` |
+
+`LocalOperator` / `Operator` の二項 `product` は `mul`、列の `product_all` は `product`、Operator の `try_product_all` は `try_product` に変更する方針とする。列の集約には空入力・単項入力も含む。`sum` / `sum_all`、`product` / `product_all` という `_all` による区別案は通常の加算・乗算には採用しない。
+
+ここでの名前付き二項メソッドは式型の inherent method を指す。`core::ops::Add::add` / `Mul::mul` による `+` / `*` の実装も存在するが、名前を揃えることで借用・所有権や戻り値の契約を変更するものではない。`Iterator::sum` / `product` と語彙は揃うが、新たな iterator 集約 trait の実装を決めるものでもない。
+
+primitive の二項規則 `Product::product` もメソッド名を `mul` に揃える対象とする。独自の `Product` trait 自体の名前、および標準の `core::ops::Mul` との呼び分けは別途整理する。局所規則が線型結合を返す契約は維持する。
+
+テンソル積の `tensor` / `tensor_all` は通常の乗算とは別の推奨案として残し、今回の採用決定には含めない。現行の `tensor` は列を受け取るため、この案を採用する場合も二項・列を同時に移行する必要がある。
 
 根拠: [State の構築](../../../crates/qmb-core/src/expr/composite.rs#L261)、[Operator の積](../../../crates/qmb-core/src/expr/composite.rs#L529)、[局所演算子の積](../../../crates/qmb-core/src/expr/local.rs#L233)、[空間のテンソル積](../../../crates/qmb-core/src/space.rs#L181)、[QuantumSystem の積](../../../crates/qmb-core/src/system.rs#L182)。
 
 ### N2. graded・配置・種類指定の修飾順序（中）
+
+状態側は修飾順序の統一から[明示空間による構築](explicit-state-space.md)へ方針を変更した。状態構築での `_g` / `_with_kind` を廃止し、種類を指定空間から取得する。以下は現行実装と旧案の記録である。
 
 `tensor_g` / `tensor_product_g` / `state_tensor_g` は末尾の `_g` が graded を表す。一方、配置も行う入口は `state_tensor_g_at`、種類指定版は `state_tensor_at_with_kind` で、`_at` と合成規則の修飾順序が異なる。
 
@@ -82,9 +99,9 @@ N1〜N5 と同じ関数を含む。以下の候補名は相互に独立して採
 | ID・優先度 | 現行の関数名と長さ | 使いにくさと候補 |
 | --- | --- | --- |
 | L1・高 | `LocalOperator::hilbert_schmidt_inner_product`、`Operator::hilbert_schmidt_inner_product`（29）、`Operator::hilbert_schmidt_inner_product_in`（32） | 数値計算の呼び出しで長い数式名を毎回綴る。`hs_inner_product` / `hs_inner_product_in`（16 / 19）を候補とする。`hs` の意味を rustdoc で示し、非正規化の `Tr(A†B)` という契約を残す。単に `dot` とすると左側の随伴が読み取りにくい。 |
-| L2・高 | `QuantumSystem::state_tensor_at_with_kind`（25）、`state_tensor_with_kind`（22）、`try_state_tensor_with_kind`（26） | `state`・`tensor`・配置・種類指定・fallible 入力が積み重なる。現在この trait の tensor 構築は状態だけなので、`state_` を省く余地がある。N1 の列名と組み合わせて検討し、例えば現行の種類指定付き列集約を `tensor_all_with` / `try_tensor_all_with`（15 / 19）へ整理する案。配置版も同じ語順で揃える。 |
-| L3・中 | `QuantumSystem::operator_product_at`（19）、`try_operator_product`（20） | 基本構築では繰り返し現れる。現在の積構築は演算子だけなので、N1 と合わせて `product_all_at` / `try_product_all`（14 / 15）などへ寄せる余地がある。`state_sum` と `operator_sum` は両方存在するため、全入口から型の接頭辞を取り除くことはできない。 |
-| L4・高 | `State::tensor_product_with_kind`、`HilbertSpace::tensor_product_with_kind`（24）、`State::try_tensor_with_kind`（20） | 二項／列の区別と種類指定が長さを増やす。N1 の整理後なら二項の `tensor_with(kind, &rhs)`（11）、列の `try_tensor_all_with(kind, states)`（19）などが候補。引数の `TensorKind` で明示性を保てるか確認する。列版と二項版の両方を同じ `tensor_with` にしない。 |
+| L2・高 | `QuantumSystem::state_tensor_at_with_kind`（25）、`state_tensor_with_kind`（22）、`try_state_tensor_with_kind`（26） | `state`・`tensor`・配置・種類指定・fallible 入力が積み重なる。現在この trait の tensor 構築は状態だけなので、`state_` を省く余地がある。テンソル系の列名の推奨案と組み合わせて検討し、例えば現行の種類指定付き列集約を `tensor_all_with` / `try_tensor_all_with`（15 / 19）へ整理する案。配置版も同じ語順で揃える。 |
+| L3・中 | `QuantumSystem::operator_product_at`（19）、`try_operator_product`（20） | 基本構築では繰り返し現れる。現在の積構築は演算子だけなので、採用済みの N1 に合わせて `product_at` / `try_product`（10 / 11）などへ寄せる余地がある。`state_sum` と `operator_sum` は両方存在するため、全入口から型の接頭辞を取り除くことはできない。 |
+| L4・高 | `State::tensor_product_with_kind`、`HilbertSpace::tensor_product_with_kind`（24）、`State::try_tensor_with_kind`（20） | 二項／列の区別と種類指定が長さを増やす。テンソル系の二項／列の区別案を採用するなら二項の `tensor_with(kind, &rhs)`（11）、列の `try_tensor_all_with(kind, states)`（19）などが候補。引数の `TensorKind` で明示性を保てるか確認する。列版と二項版の両方を同じ `tensor_with` にしない。 |
 | L5・中 | `LocalState::from_linear_combination`、`LocalOperator::from_linear_combination`（23） | 変換元の型名をすべて綴る。`from_combination`（16）、または `From<LinearCombination<Self, C>>` を実装して `.into()` で変換する案。現在の入力は primitive ではなく局所式の線型結合であり、primitive の規則結果には `map(Self::primitive)` が必要な点を隠さない。`from_terms` に寄せて iterator を受け取るなら、単なる改名とは別に入力型も検討する。 |
 | L6・低 | `NormalizedExpectation::normalized_expectation`（22）、`NormalizedExpectationIn::normalized_expectation_in`（25） | `mean` / `mean_in` のような短い名前を候補にできるが、計算の意味を明確にする利点が現行名にはある。core の `expectation` は非正規化なので、正規化版だけを `expectation` へ改名すると既存の inherent method と衝突する。単独の改名は避け、必要なら期待値の名前全体を再検討する。 |
 | L7・中 | `Operator::coordinates_in_space`（20）、`Chain::nn_pairs_by_pos_with`（20） | N3 の基底／空間の語尾と、N5 の葉の zip の整理で短縮できる。名前だけを切り詰めず、それぞれのファミリを同時に揃える。 |
@@ -125,8 +142,8 @@ N1〜N5 と同じ関数を含む。以下の候補名は相互に独立して採
 
 | 対象 | 推奨 | 判断理由・選ばなかった案 |
 | --- | --- | --- |
-| N1 | **改名**。二項は `product` / `tensor`、列は `product_all` / `tensor_all` に揃える。QuantumSystem の列集約も同じ名前にする。`add` / `sum` は維持する。 | 二項のテンソル積を短くし、列であることを `_all` で明示できる。全てを `product` に統合すると演算子積とテンソル積を区別できず、`sum_all` の追加は既に集約を意味する `sum` を長くするだけなので採らない。 |
-| N2 | **修飾順序を統一**。`[try_]操作[_all][_at][_g または _with]` とする。`_g` は graded の略記として維持し、配置版では `_at_g` に揃える。 | 既存の短い `_g` と ordinary の無印を保ちながら、配置版だけ修飾順序が異なる問題を解消できる。全てを `graded_*` にすると列・配置の名前が再び長くなるため採らない。テンソル系の `_with` の先頭引数は必ず `TensorKind` とし、種類の暗黙推論にはしない。 |
+| N1 | **採用済み**。通常の二項演算は `add` / `mul`、列の集約は `sum` / `product` とする。テンソル積の `tensor` / `tensor_all` は別途推奨段階とする。 | 標準の二項演算と iterator 集約の語彙に揃い、加算・乗算の区別方法が対称になる。通常の積の `product_all` は不要となる。`_all` を通常の和・積にも共通適用する案は採らない。 |
+| N2 | **テンソル系の修飾順序を統一**。`[try_]tensor[_all][_at][_g または _with]` とする。`_g` は graded の略記として維持し、配置版では `_at_g` に揃える。 | 既存の短い `_g` と ordinary の無印を保ちながら、配置版だけ修飾順序が異なる問題を解消できる。全てを `graded_*` にすると列・配置の名前が再び長くなるため採らない。テンソル系の `_with` の先頭引数は必ず `TensorKind` とし、種類の暗黙推論にはしない。 |
 | N3 | **改名**。基底を指定する基本名を `expand` / `coordinates`、明示空間版を `expand_in` / `coordinates_in` とする。`act_in`・`expectation_in`・`trace_in` と `MatrixArgs::in_space` は維持する。 | 式の計算メソッドで `_in` の対象を作用空間へ揃えられる。基底は必須引数なので無印でも情報を失わない。全計算名を `_in_space` に長くする案や、配置の `_at` を流用する案は採らない。builder は計算ではないため `in_space` を残す。 |
 | N4 | **`dimension` に統一**。`Dimension::dim` → `dimension`、`state_basis_len` → `state_dimension`、`operator_basis_len` → `operator_dimension` とする。 | 基底を受け取らない自由関数の意味も名前に反映できる。二つの自由関数は `usize` を返す便宜を残すため削除しない。既存の `dimension_with`・`local_dimension`・`Coordinates::len` は維持し、戻り値・overflow の契約も変更しない。 |
 | N5 | **葉を明示して改名**。全組み合わせは `nn_leaf_pairs_with` / `nn_leaf_pairs_on`、位置対応は `nn_leaf_zip_with` / `nn_leaf_zip_on` とする。Site の三入口は維持する。 | `leaf` で返す対象、`zip` で短い側までの位置対応を示す。`nn_` の削除は最近接という情報を失い、`_with` と `_on` の統合は入力の解釈を隠すため採らない。全組み合わせ版が少し長くなることは意味の明確化のために受け入れる。 |
@@ -137,9 +154,9 @@ N1〜N5 と同じ関数を含む。以下の候補名は相互に独立して採
 | 対象 | 推奨する公開名 | 判断理由・移行範囲 |
 | --- | --- | --- |
 | L1 | **改名**。`hs_inner_product` / `hs_inner_product_in` | Hilbert–Schmidt の部分だけを `hs` とし、内積であることは省略しない。局所版・複合版を同時に変える。`inner_product` だけにする案は内積の種類を隠し、`dot` / `hs_inner` はさらに語彙を減らす必要がないため採らない。rustdoc の冒頭に正式名と `Tr(A†B)`、非正規化であることを残す。 |
-| L2 | **改名**。`tensor_all_at_with`、`tensor_all_with`、`try_tensor_all_with` | N1・N2 と組み合わせて `state_` と `_kind` を省く。配置版は25文字から18文字、fallible な種類指定版は26文字から19文字になる。`tensor_at_with` まで縮めると列の `_all` 規則を外れるため採らない。ordinary・graded の短縮入口も5.3節の対応表で揃える。 |
-| L3 | **改名**。`product_all_at`、`try_product_all`。通常の `operator_product` も `product_all` とする。 | QuantumSystem の積は演算子だけを受け取るので `operator_` を省ける。式型の列集約と同名になり、配置も `_at` で表せる。`op_product` のような新しい略語は導入しない。状態・演算子の双方がある `state_sum` / `operator_sum` とそれぞれの `try_` 版は維持する。 |
-| L4 | **改名**。二項は `tensor_with`、列は `tensor_all_with` / `try_tensor_all_with` | N1 により二項と列が名前で分かれ、引数型 `TensorKind` と合わせれば `_kind` を省いても種類指定であることを説明できる。`_with_kind` を一部だけ残す案は採らない。この `_with` を任意のオプションを受け取る入口へ拡張することも今回の案には含めない。 |
+| L2 | **改名**。`tensor_all_at_with`、`tensor_all_with`、`try_tensor_all_with` | 未採用のテンソル系の二項／列の区別案と N2 を組み合わせて `state_` と `_kind` を省く。配置版は25文字から18文字、fallible な種類指定版は26文字から19文字になる。`tensor_at_with` まで縮めると列の `_all` 規則を外れるため採らない。ordinary・graded の短縮入口も5.3節の対応表で揃える。 |
+| L3 | **改名を推奨**。`product_at`、`try_product`。通常の `operator_product` も `product` とする。 | QuantumSystem の積は演算子だけを受け取るので `operator_` を省ける。式型の列集約と同名になり、配置も `_at` で表せる。`op_product` のような新しい略語は導入しない。状態・演算子の双方がある `state_sum` / `operator_sum` とそれぞれの `try_` 版は維持する。 |
+| L4 | **改名**。二項は `tensor_with`、列は `tensor_all_with` / `try_tensor_all_with` | テンソル系の二項／列の区別案により名前が分かれ、引数型 `TensorKind` と合わせれば `_kind` を省いても種類指定であることを説明できる。`_with_kind` を一部だけ残す案は採らない。この `_with` を任意のオプションを受け取る入口へ拡張することも今回の案には含めない。 |
 | L5 | **改名**。両局所式型で `from_combination` | `LinearCombination<Self, C>` という既存の入力型と型推論を保ち、名前だけを短縮できる。主入口を `From` / `.into()` に置き換える案は変換先の推論に依存し、`from_terms` は入力を iterator へ広げる別の API 変更になるため今回は採らない。primitive の線型結合を受け取る別 overload も追加しない。 |
 | L6 | **現状維持**。`normalized_expectation` / `normalized_expectation_in` と二つの trait 名を残す。 | 非正規化の `expectation` と式上で明確に区別できることを優先する。`mean` は短いが正規化規約が名前に表れず、`expectation` への単独改名は既存メソッドと競合する。名前の短縮のために平方根を要する正規化処理へ置き換えない。 |
 | L7 | **N3・N5 に統合して改名**。`coordinates_in_space` → `coordinates_in`、`nn_pairs_by_pos_with` → `nn_leaf_zip_with` | それぞれのファミリ全体に対する決定を適用し、この二関数だけ別の略称を追加しない。対応する基本版・`_on` 版も同時に移行する。 |
@@ -148,7 +165,7 @@ N1〜N5 と同じ関数を含む。以下の候補名は相互に独立して採
 
 ### 5.3. テンソル・積の統合対応表
 
-以下は**推奨する変更後の名前**であり、現在利用できる API の一覧ではない。引数順序・入力型・戻り値・trait bound は現行のままとする。`_with` の先頭引数が `kind`、`_at` の入力が `(&factor, primitive)` の列である点も維持する。
+以下は**採用方針と推奨案に基づく変更後の名前**であり、現在利用できる API の一覧ではない。通常の加算・乗算の二項／集約名は採用済み、テンソル系と QuantumSystem の接頭辞省略は推奨段階である。引数順序・入力型・戻り値・trait bound は現行のままとする。`_with` の先頭引数が `kind`、`_at` の入力が `(&factor, primitive)` の列である点も維持する。
 
 #### State / HilbertSpace
 
@@ -164,7 +181,20 @@ N1〜N5 と同じ関数を含む。以下の候補名は相互に独立して採
 | State のみ | `try_tensor_g` | `try_tensor_all_g` |
 | State のみ | `try_tensor_with_kind` | `try_tensor_all_with` |
 
-HilbertSpace に `try_` 版を新設する提案は含まない。`LocalOperator` / `Operator` の `product` / `product_all` と、Operator の `try_product_all` はそのまま使う。
+HilbertSpace に `try_` 版を新設する提案は含まない。
+
+#### 通常の加算・乗算（採用済みの命名方針）
+
+| 提供型 | 現行名 | 変更後の名前 |
+| --- | --- | --- |
+| State / Operator | `add` | `add`（維持） |
+| 四つの式型 | `sum` / `try_sum` | `sum` / `try_sum`（維持） |
+| LocalOperator / Operator | `product`（二項） | `mul` |
+| LocalOperator / Operator | `product_all`（列） | `product` |
+| Operator | `try_product_all` | `try_product` |
+| primitive の Product trait | `product`（二項） | `mul`（trait 自体の名前は別途検討） |
+
+局所式に新しい inherent `add` や `try_product` を追加する判断は含めない。既存の `core::ops::Add` / `Mul` の実装は維持する。
 
 #### QuantumSystem
 
@@ -179,9 +209,9 @@ HilbertSpace に `try_` 版を新設する提案は含まない。`LocalOperator
 | `state_tensor_at` | `tensor_all_at` |
 | `state_tensor_g_at` | `tensor_all_at_g` |
 | `state_tensor_at_with_kind` | `tensor_all_at_with` |
-| `operator_product` | `product_all` |
-| `try_operator_product` | `try_product_all` |
-| `operator_product_at` | `product_all_at` |
+| `operator_product` | `product` |
+| `try_operator_product` | `try_product` |
+| `operator_product_at` | `product_at` |
 
 #### 呼び出しの比較（移行案）
 
@@ -191,7 +221,9 @@ HilbertSpace に `try_` 版を新設する提案は含まない。`LocalOperator
 | `State::tensor(states)?` | `State::tensor_all(states)?` |
 | `Spin::state_tensor_at_with_kind(kind, assignments)?` | `Spin::tensor_all_at_with(kind, assignments)?` |
 | `F::state_tensor_g_at(assignments)?` | `F::tensor_all_at_g(assignments)?` |
-| `Spin::try_operator_product(terms)?` | `Spin::try_product_all(terms)?` |
+| `Spin::try_operator_product(terms)?` | `Spin::try_product(terms)?` |
+| `a.product(&b)?`（複合演算子） | `a.mul(&b)?` |
+| `Operator::product_all(terms)?` | `Operator::product(terms)?` |
 
 ### 5.4. 基底・幾何の統合対応表
 
@@ -221,16 +253,19 @@ HilbertSpace に `try_` 版を新設する提案は含まない。`LocalOperator
 
 ### 5.6. 採用時の移行単位
 
-N1・N2・L2・L3・L4 は一つの命名体系として同時に適用する。N3・L7 の基底側も、基本名と明示空間版を一緒に変更する。古い名前を新しい意味で再利用する箇所は、互換 alias を残すだけでは移行できないため、v2 の破壊的変更として対応表を公開する方針を推奨する。
+採用済みの N1 では通常の積の二項 `product` → `mul` と列の `product_all` → `product` を同時に適用し、primitive の二項規則も合わせて整理する。L3 の QuantumSystem の接頭辞省略を採用する場合も、この集約名に揃える。状態テンソル系は、採用済みの明示空間による構築の設計文書に従って移行する。N2・L2・L4 の旧案のうち、HilbertSpace 側の短縮名は引き続き検討する。N3・L7 の基底側も、基本名と明示空間版を一緒に変更する。古い名前を新しい意味で再利用する箇所は、互換 alias を残すだけでは移行できないため、v2 の破壊的変更として対応表を公開する方針を推奨する。
 
-具体的には、旧 `State::tensor(states)` を新しい二項 `tensor` として解決させないよう、呼び出し先の型と引数を見て変更する。`tensor` → `tensor_all` と `tensor_product` → `tensor` を単純な文字列の一括置換で処理すると、別の既存名の一部や置換済みの新名まで変更する恐れがある。`expand_in` / `coordinates_in` も同様に、基底だけの呼び出しと明示空間付きの呼び出しを区別する。
+通常の積では旧 `product` が二項、新 `product` が列を受け取るため、同じ型に旧名の互換 alias を残せない。`product_all` → `product` の後に `product` → `mul` を一括置換して、新しい集約名まで変えないようにする。
+
+状態テンソル系の旧名は、所属空間の明示が必要な新しい構築へ置き換える。旧案の `tensor_all*` への単純な改名では移行しない。HilbertSpace 側で `tensor` → `tensor_all` と `tensor_product` → `tensor` の短縮案を採用する場合も、別の既存名の一部や置換済みの新名まで一括置換しないようにする。`expand_in` / `coordinates_in` も同様に、基底だけの呼び出しと明示空間付きの呼び出しを区別する。
 
 名前を再利用しない改名も、新名を正式な入口に揃える。互換期間が必要になった場合に限り、同じシグネチャで旧名から新名へ委譲する deprecated alias を検討し、両名を恒久的な選択肢にはしない。`Dimension` の必須メソッドの改名は独自実装側の更新も必要であり、旧名と新名のデフォルト実装を相互に委譲させて対応しない。
 
-採用後は該当 crate の既存テスト・rustdoc・examples を更新して実行し、第4節の契約を確認する。特に fallible 集約のエラー優先順位、graded の符号、明示空間の優先、基底座標と行列の区別を検証対象にする。今回の成果物は推奨案の記録であり、上記の新名を実装・コンパイル検証したものではない。
+採用後は該当 crate の既存テスト・rustdoc・examples を更新して実行し、第4節の契約を確認する。特に fallible 集約のエラー優先順位、graded の符号、明示空間の優先、基底座標と行列の区別を検証対象にする。今回の成果物は採用決定と推奨案の記録であり、上記の新名を実装・コンパイル検証したものではない。
 
 ## 関連文書
 
+- [所属空間を明示する状態のテンソル構築](explicit-state-space.md)：状態側のテンソル構築に関する採用済みの設計変更。
 - [API の使いやすさに関する残る検討事項](../api-usability/README.md)：補助 API、型推論、利用開始の導線など。
 - [局所式の設計](../../design/primitive-expression.md)：構築・評価・数値能力と正規化の境界。
 - [複合式の設計](../../design/composite-expression.md)：集約・束縛・ordinary / graded の契約。
