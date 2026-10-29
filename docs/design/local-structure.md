@@ -290,11 +290,60 @@ no-default-features の確認はホスト上のビルドである。専用 no_st
 
 ## 10. Spin-one の局所代数
 
-`qmb-spin-one` は三状態の spin-1 を実装する。`std` を許可し、unsafe を禁止する。公開入口は [lib.rs](../../crates/qmb-spin-one/src/lib.rs)、局所規則は [operator.rs](../../crates/qmb-spin-one/src/operator.rs)・[state.rs](../../crates/qmb-spin-one/src/state.rs)、基底は [basis.rs](../../crates/qmb-spin-one/src/basis.rs) に置く。[実装仕様と受入検証](../plans/v2/spin-one-primitives.md)に全規約・係数能力・検証項目を記録する。
+`qmb-spin-one` は三状態の spin-1 を実装する。`std` を許可し、unsafe を禁止する。公開入口は [lib.rs](../../crates/qmb-spin-one/src/lib.rs)、局所規則は [operator.rs](../../crates/qmb-spin-one/src/operator.rs)・[state.rs](../../crates/qmb-spin-one/src/state.rs)、基底は [basis.rs](../../crates/qmb-spin-one/src/basis.rs) に置く。XYZ・Heisenberg・BLBQ の定義と構築契約は [SpinOne のモデル構築](geometry.md#7-spinone-のモデル構築)にまとめる。
 
-`hbar=1`、状態は `Plus,Zero,Minus` の順で、Sz 固有値は `+1,0,−1` とする。Zero は正規化状態であり、zero vector は共通の空の線型結合で表す。演算子 primitive は `I,Sx,Sy,Sz,SPlus,SMinus,Dxy,Q0,Qxy,Qyz,Qzx,Q1Plus,Q1Minus,Q2Plus,Q2Minus` の15値であり、状態の Dimension は3、演算子は9となる。
+### 10.1. Primitive と規約
 
-四重極は `Dxy=Sx²−Sy²`、`Q0=3Sz²−2I`、`Qxy={Sx,Sy}` とその巡回置換、`Q1±={Sz,S±}`、`Q2±=S±²` とする。Cartesian の5成分と昇降型4成分は同じ5次元空間を張る。随伴は SPlus / SMinus、Q1Plus / Q1Minus、Q2Plus / Q2Minus を交換し、残りの Hermite な値は保存する。Tr(I)=3、他の14値は trace 0とする。
+公開 variant とその列挙順は次のとおりである。
+
+```rust
+enum SpinOneState { Plus, Zero, Minus }
+
+enum SpinOneOperator {
+    I, Sx, Sy, Sz, SPlus, SMinus,
+    Dxy, Q0, Qxy, Qyz, Qzx,
+    Q1Plus, Q1Minus, Q2Plus, Q2Minus,
+}
+```
+
+`hbar=1`、状態の順序を `(|+1>,|0>,|-1>)` とし、正規直交内積を使う。`SpinOneState::Zero` は磁気量子数0の正規化状態であり、zero vector は共通の空の線型結合で表す。
+
+```math
+S_z|m\rangle=m|m\rangle,\qquad
+S_\pm|m\rangle=\sqrt{2-m(m\pm1)}|m\pm1\rangle,
+\qquad S_\pm=S_x\pm iS_y.
+```
+
+端の状態への ladder 作用は zero とする。`r=√2` と書くと、参照行列は次である。
+
+```math
+S_z=\begin{pmatrix}1&0&0\\0&0&0\\0&0&-1\end{pmatrix},\quad
+S_+=r\begin{pmatrix}0&1&0\\0&0&1\\0&0&0\end{pmatrix},\quad S_-=S_+^\dagger,
+```
+
+```math
+S_x=\frac r2\begin{pmatrix}0&1&0\\1&0&1\\0&1&0\end{pmatrix},\quad
+S_y=\frac r2\begin{pmatrix}0&-i&0\\i&0&-i\\0&i&0\end{pmatrix}.
+```
+
+反交換子を `{A,B}=AB+BA` とし、全演算子を以下で定義する。
+
+| Primitive | 定義 |
+| --- | --- |
+| `I` | 恒等演算子 |
+| `Sx`, `Sy`, `Sz` | スピンの Cartesian 3成分 |
+| `SPlus`, `SMinus` | `S±=Sx±iSy` |
+| `Dxy` | `Sx²−Sy²` |
+| `Q0` | `3Sz²−2I` |
+| `Qxy`, `Qyz`, `Qzx` | それぞれ `{Sx,Sy}`, `{Sy,Sz}`, `{Sz,Sx}` |
+| `Q1Plus`, `Q1Minus` | `Q1±={Sz,S±}=Qzx±iQyz` |
+| `Q2Plus`, `Q2Minus` | `Q2±=S±²=Dxy±iQxy` |
+
+恒等元1個、スピン5値、四重極9値の計15値を持つ。Cartesian の四重極5値と昇降型4値は同じ5次元空間を張る。対応する構成は[双極子・四重極による spin-one の構成（式3–7）](https://arxiv.org/pdf/1305.2560)と[球面テンソルによる多重極展開（式29–30）](https://arxiv.org/pdf/1409.1106)を参照し、規格化・位相は上表の定義を使う。
+
+両 primitive は `Clone, Copy, Debug, PartialEq, Eq, Hash` を実装し、構造的な等値性は variant を区別する。Dimension は状態が3、演算子が9であり、15という variant 数とは異なる。`Identity::identity()` は I を返し、係数の数値能力を要求しない。
+
+### 10.2. 基底と展開
 
 | 基底 | 列挙順 |
 | --- | --- |
@@ -302,10 +351,130 @@ no-default-features の確認はホスト上のビルドである。専用 no_st
 | `CartesianBasis` | `[I,Sx,Sy,Sz,Dxy,Q0,Qxy,Qyz,Qzx]` |
 | `LadderBasis` | `[I,SPlus,SMinus,Sz,Q0,Q1Plus,Q1Minus,Q2Plus,Q2Minus]` |
 
-演算子基底は完全・直交であり、正規直交化はしない。同じ基底に含まれる primitive 同士の積は、その基底内の線型結合として返す。共通要素 I・Sz・Q0 同士では共通部分に閉じ、混在時は Cartesian を使う。I との積は相手を一項で保持する。係数は非零による数学的な除算に閉じることを要求し、定数は C の算術で生成する。規則は既存代数と同様に直接の match で記述し、独自の有理数型・記号係数・実行時の行列単位分解は導入しない。
+両演算子基底は完全・線型独立で、Hilbert–Schmidt 内積 `Tr(A†B)` に関して直交する。正規直交化はしない。CartesianBasis のノルム二乗は I が3、Q0 が6、他が2、LadderBasis では I が3、Sz が2、Q0 が6、他が4となる。
 
-`SpinOne<C>` は QuantumSystem に状態・演算子・係数を関連付ける。保持・構築は数値 bound を要求しない。作用だけは `Complex<R>`・`R: Float` を標準とし、R の精度で √2 を生成する。Product・基底変換等は Float・係数の Clone / Copy を要求しない。全状態・演算子は even、P=I として共通の ordinary / graded 評価に接続し、m の整数としての偶奇を parity にしない。export / normalize も既存 API を利用する。
+CartesianBasis の全要素は Hermite である。LadderBasis の要素 B は `[Sz,B]=qB` を満たし、q は I・Sz・Q0 では0、S±・Q1± では±1、Q2± では±2となる。回転に対して I は rank 0、スピンは rank 1、四重極は rank 2に対応するが、標準的な球面テンソルの規格化・位相係数は付けない。
 
-[contracts.rs](../../crates/qmb-spin-one/tests/contracts.rs) は両精度で全225積・45作用・3,375三重積と基底の完全性・変換を確認する。[minimal_scalar.rs](../../crates/qmb-spin-one/tests/minimal_scalar.rs) は非 Clone / Copy / Zero / Float の厳密係数で Product と基底を確認する。[local_expressions.rs](../../crates/qmb-spin-one/tests/local_expressions.rs)・[tensor_products.rs](../../crates/qmb-spin-one/tests/tensor_products.rs) は作用・期待値・正規化、ordinary 二因子の9状態 / 81演算子基底、graded の一致と全 export backend を独立な行列に照合する。利用例は [spin_one.rs](../../examples/src/bin/spin_one.rs) に置く。
+両演算子基底の和集合が15個の公開 primitive となる。各 `elements()` は選択した基底の要素だけを上表の順に列挙し、`index` は非メンバーに `None` を返す。SzBasis は状態をそのまま展開する。演算子基底のメンバーも自身一項に展開し、他の要素は次の相互変換で展開する。
 
-モデル構築は `SpinOne::xyz`・`heisenberg`・`blbq` に Chain と Site 空間列を渡す。bilinear 結合 J>0 は強磁性的で、BLBQ は葉ペアごとに `-J(S_a·S_b)-K(S_a·S_b)²` を加え、定数シフトを落とさない。構築は局所規則を評価せず、係数には `Clone + From<R> + Neg` だけを要求する。定義・空間・境界・係数能力は[実装仕様第11節](../plans/v2/spin-one-primitives.md#11-xyzheisenbergblbq-モデル-utility)、独立な行列と全スピン別エネルギーによる検証は [models.rs](../../crates/qmb-spin-one/tests/models.rs) に置く。
+```math
+\begin{aligned}
+S_\pm&=S_x\pm iS_y,&
+S_x&=\tfrac12(S_++S_-),& S_y&=\tfrac1{2i}(S_+-S_-),\\
+Q_{1\pm}&=Q_{zx}\pm iQ_{yz},&
+Q_{zx}&=\tfrac12(Q_{1+}+Q_{1-}),& Q_{yz}&=\tfrac1{2i}(Q_{1+}-Q_{1-}),\\
+Q_{2\pm}&=D_{xy}\pm iQ_{xy},&
+D_{xy}&=\tfrac12(Q_{2+}+Q_{2-}),& Q_{xy}&=\tfrac1{2i}(Q_{2+}-Q_{2-}).
+\end{aligned}
+```
+
+I・Sz・Q0 は両基底で共有する。通常の局所評価は基底を要求せず、基底選択は展開・座標取得時に明示する。9個の演算子基底係数と SzBasis 上の3×3作用行列、および局所基底番号と export の格納順序を区別する。
+
+### 10.3. 局所規則と返却表現
+
+`Product<C,Term=SpinOneOperator>` の返却規則は次の優先順とする。
+
+| 入力の組 | 返却する primitive |
+| --- | --- |
+| I との積 | 相手をそのまま一項で返す |
+| 両方が共通要素 I・Sz・Q0 | 共通部分 `[I,Sz,Q0]` に閉じる |
+| 両方が CartesianBasis の要素 | CartesianBasis の要素で返す |
+| 両方が LadderBasis の要素 | LadderBasis の要素で返す |
+| Cartesian 専用要素と Ladder 専用要素の混在 | CartesianBasis の要素で返す |
+
+返却順は対象基底の列挙順、項数は最大9個とする。入力 primitive の値から決め、式へ基底情報を保持させたり Product に基底引数を追加したりしない。各基底内の線型結合同士の積も同じ基底内に閉じる。数学的に同じ結果の式構造の一致は要求しない。
+
+局所積の全225組と作用の全45組を、既存代数と同様に `match` で直接記述する。各分岐で有限線型結合を生成し、数学的に zero の項を含めず、zero は空の線型結合で返す。浮動小数点の近似零判定で項を削除しない。行列単位 `E_ab=|a><b|` と `E_ab E_cd=δ_bc E_ad` は導出・参照に使えるが、製品の実行時には行列単位への分解・逆変換、密行列、独自の有理数型や記号係数の演算機構を使わない。
+
+代表的な規則は以下である。
+
+```math
+\begin{aligned}
+S_z^2&=\tfrac23 I+\tfrac13 Q_0,& S_zQ_0&=Q_0S_z=S_z,& Q_0^2&=2I-Q_0,\\
+S_xS_y&=\tfrac12(Q_{xy}+iS_z),&
+S_+^2&=Q_{2+},& S_-^2&=Q_{2-},\\
+S_+S_-&=\tfrac43I-\tfrac13Q_0+S_z,&
+S_-S_+&=\tfrac43I-\tfrac13Q_0-S_z,& S_+^3&=S_-^3=0.
+\end{aligned}
+```
+
+`Act<Complex<R>>` は `Operator=SpinOneOperator,Term=SpinOneState` とする。`r=√2` として、I は状態を保存し、スピンの作用は次のとおりである。
+
+| 演算子 | Plus | Zero | Minus |
+| --- | --- | --- | --- |
+| Sz | Plus | 0 | −Minus |
+| SPlus | 0 | r Plus | r Zero |
+| SMinus | r Zero | r Minus | 0 |
+| Sx | (r/2) Zero | (r/2)(Plus + Minus) | (r/2) Zero |
+| Sy | i(r/2) Zero | −i(r/2) Plus + i(r/2) Minus | −i(r/2) Zero |
+
+表中の `0` は zero vector、`Zero` は m=0 の状態である。InnerProduct は3状態の Kronecker delta とし、式の半双線型性と係数の共役は core に委ねる。
+
+Adjoint は SPlus / SMinus、Q1Plus / Q1Minus、Q2Plus / Q2Minus を交換し、追加の符号を付けない。他の9値は自身を返す。Trace は通常の非正規化 trace とし、Tr(I)=3、他の14値は0を直接返す。
+
+### 10.4. 係数能力と共通 API
+
+`SpinOne<C>` は QuantumSystem に状態・演算子・係数を関連付け、保持・係数計算を伴わない遅延構築には数値 bound を要求しない。primitive の能力は操作ごとに限定する。
+
+| 能力 | C に要求する能力 |
+| --- | --- |
+| Identity・Dimension・QuantumSystem、primitive 保持 | なし |
+| InnerProduct・Trace | `Zero + One`。3は `one + one + one` |
+| Adjoint・SzBasis | `One` |
+| CartesianBasis | `One + Neg + ImaginaryUnit` |
+| LadderBasis・Product | `One + Add + Div + Neg + ImaginaryUnit` |
+| Act | `C=Complex<R>`、`R: num_traits::Float` |
+
+Add・Div・Neg はそれぞれ `Output=C` とする。One と Zero は num-traits の trait であり、それぞれ乗算・加算能力を含む。係数は非零による数学的な除算に閉じ、必要な1/2・1/3・iを表せることを要求する。Rust の Div だけでは整数の切り捨て除算も通るため、この数学的な契約も適用する。浮動小数点では精度に応じた近似を許容する。
+
+1/2・1/3・1/6等の定数は C の One・加算・除算、虚係数は ImaginaryUnit・乗算・符号反転で生成し、private な [coefficient.rs](../../crates/qmb-spin-one/src/coefficient.rs) で共有する。局所 Product は C の Clone / Copy / Zero / Float / Num / 型変換を要求しない。全 variant を扱う impl の bound は、実際に渡す primitive の値によらず同じである。現在の Basis は expand と metadata が同じ impl にあるため、index / elements にもその基底の bound が適用される。
+
+作用は `Complex<f32>` / `Complex<f64>` を標準の利用対象とし、√2 は R の精度で次のように生成する。
+
+```rust
+fn sqrt_two<R: num_traits::Float>() -> R {
+    (R::one() + R::one()).sqrt()
+}
+```
+
+helper は private とし、公開の SqrtTwo trait は追加しない。実係数の埋め込みは `Complex::new(value,R::zero())` を使い、f64 経由のキャストやパースを行わない。num-traits 0.2.19 の Float が要求する R の Copy / Clone 等は許容する。Product・基底変換・primitive の内積・随伴・trace には Float を要求しない。f32 / f64 自体は虚数単位を表せず、全 variant を扱う Product / Act の係数には使えない。
+
+共通式の能力は [primitive / 式の設計](primitive-expression.md)に従う。局所状態式の evaluate は C の Clone・Conjugate と primitive の Act / Adjoint、内積・期待値・trace・基底展開・座標取得はさらに必要な Zero・乗算等を要求する。primitive の bound を一律に強めない。norm squared は RealPart、norm は実数成分の Float、normalized は実係数の From も使い、正規化 API は qmb-normalize が提供する。
+
+本番依存は既存 workspace の qmb-core・qmb-geometry・thiserror・num-traits・num-complex とする。num-traits の std feature をこの crate で有効にする。数値 backend は本番依存に含めず、core の公開契約や workspace 全体の既定 feature は変更しない。no_std 対応は初期要件に含めない。
+
+### 10.5. 合成・export と grading
+
+共通の LocalState / LocalOperator・State / Operator を使い、評価・期待値・随伴・trace・展開・座標取得・正規化へ接続する。作用行列は既存 export の列ごとの作用で生成し、primitive に backend 固有の行列化を実装しない。ordinary 二因子は9状態・81演算子基底を持ち、既存の mixed-radix 順序を使う。
+
+全状態・演算子を even、P=I として HomogeneousParity / ParityOperator を明示実装する。磁気量子数 m の整数としての偶奇を fermion parity と解釈しない。符号は[ordinary / graded の共通評価](composite-expression.md#12-ordinary--graded-の共通評価と移行)に委ね、自明な grading により両方で同じ数値結果を得る。
+
+### 10.6. 実装時の検証記録
+
+2026-10-30、Rust 1.99.1 の direnv devShell で受入確認した。以下は実装時の検証記録であり、文書整理時の再実行結果ではない。モデル追加後は spin-one の統合テスト25件と doctest 4件（異精度の混在を拒否する compile-fail を含む）、workspace の全231テストが成功した。
+
+参照計算は直接記述したスピン行列と四重極の定義から作り、製品の match や係数 helper を使わない。両精度で、複素数の絶対値による `|a−b| <= atol + rtol * max(|a|,|b|)` を使い、f32 は atol=rtol=2e-5、f64 は atol=rtol=1e-12とする。
+
+| 検証ファイル | 確認した内容 |
+| --- | --- |
+| [contracts.rs](../../crates/qmb-spin-one/tests/contracts.rs) | 全225積・45作用・15随伴 / trace・9内積、基底内閉性・返却順・零項、3,375三重積・675作用整合性、単位元・随伴の反準同型性と内積整合性・trace 巡回性、交換則・Casimir `Sx²+Sy²+Sz²=2I`・`Tr(Sα²)=2`・ladder 二乗 / 三乗、両基底の列挙・index・展開・往復・座標・Gram 行列、公開型・次元・trivial grading |
+| [minimal_scalar.rs](../../crates/qmb-spin-one/tests/minimal_scalar.rs) | 非 Clone / Copy / Zero / Float / Num / NumCast / Conjugate の厳密な複素有理係数で全225積と全15値の両基底展開。加算・除算のない係数で CartesianBasis、One だけで随伴・SzBasis、整数で primitive 内積・trace、数値能力なしで恒等元・遅延構築・配置 |
+| [local_expressions.rs](../../crates/qmb-spin-one/tests/local_expressions.rs) | 複素線型結合の作用・内積・期待値・trace・随伴・積、norm / 正規化 / 正規化期待値・zero-norm 拒否、全15値の3×3行列と Vec / ndarray / sprs、状態と演算子の座標の区別 |
+| [tensor_products.rs](../../crates/qmb-spin-one/tests/tensor_products.rs) | 二因子の9状態・両81演算子基底、mixed-radix 順序、全列の作用・trace・座標、spectator の I、複素係数の積・随伴・作用・期待値・再展開・正規化、ordinary / graded の一致、全 backend |
+| [models.rs](../../crates/qmb-spin-one/tests/models.rs) | 3モデルの独立な参照行列、全スピン別エネルギー、Site・境界・空間共有・不正入力・最小係数能力。詳細は[モデルの検証](geometry.md#74-検証と実装時の記録) |
+
+以下の確認が成功した。
+
+- `cargo test -p qmb-spin-one`（局所 primitive の初回受入時）
+- `cargo test -p qmb-spin-one --test models`
+- `cargo test --workspace --all-features`
+- `cargo check -p qmb-spin-one`
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`
+- `cargo fmt --all -- --check`
+- `RUSTDOCFLAGS='-D warnings' cargo doc -p qmb-spin-one --no-deps`
+
+利用例 [spin_one.rs](../../examples/src/bin/spin_one.rs) は `--no-default-features` と `--all-features` で実行した。局所 Hamiltonian の未正規化期待値1.2・正規化期待値0.4、SPlus² の Q2Plus 座標、二因子の期待値−1、3×3とモデルの9×9の密疎行列の一致を確認した。MSRV 1.85 の実ビルド・性能ベンチマークは[未実施事項](../future-work.md#3-未実施の検証と性能)に残す。
+
+### 10.7. 後続の範囲
+
+Gell-Mann 基底、公開の MatrixUnitBasis、正規直交化した球面テンソル基底、一般 spin-S、異種局所代数の混在は後続とする。Float を満たさない厳密な実数や非 Copy の実数、Complex<R> 以外の係数への作用も、標準の Act 実装の対象外とする。これらを初期の局所 primitive・2演算子基底・3モデルの完成条件には含めない。

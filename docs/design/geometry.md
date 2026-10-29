@@ -1,6 +1,6 @@
 # Chain・Site と自由度の配置
 
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 ## 1. 対象と責任分担
 
@@ -138,3 +138,73 @@ Fermion::symmetric_hubbard(&chain, &sites, t, u)
 - `Complex<f32>` / `Complex<f64>` と Vec・ndarray・sprs の同じ基底順で値を比較し、構築の係数 bound に評価能力が混入していないことも確認する。
 
 [モデルのテスト](../../crates/qmb-fermion/tests/models.rs)で局所規則と独立した Fock 空間の参照行列を使う。各辺に一度だけホッピングを追加すること、同じ spin のみが接続すること、symmetric 相互作用の定数項を保存することを確認する。実装時の実行結果・コマンド・未実施事項は [受入確認の記録](local-structure.md#96-実装時の検証記録)にまとめる。
+
+## 7. SpinOne のモデル構築
+
+`qmb_spin_one::SpinOne<C>` は XYZ・Heisenberg・BLBQ の3モデルを関連関数として提供する。局所 primitive・基底・数値規約は [Spin-one の局所代数](local-structure.md#10-spin-one-の局所代数)に従い、構築は [models.rs](../../crates/qmb-spin-one/src/models.rs) に置く。
+
+### 7.1. Hamiltonian の規約
+
+`hbar=1` とし、まず1 Site が1 spin の場合を示す。和は Chain の最近接結合を各1回数える。
+
+```math
+H_{\mathrm{XYZ}}=-\sum_{\langle ij\rangle}
+\left(J_xS_i^xS_j^x+J_yS_i^yS_j^y+J_zS_i^zS_j^z\right),
+```
+
+```math
+H_{\mathrm{Heisenberg}}=-J\sum_{\langle ij\rangle}\mathbf S_i\cdot\mathbf S_j,
+```
+
+```math
+H_{\mathrm{BLBQ}}=-\sum_{\langle ij\rangle}
+\left[J\,\mathbf S_i\cdot\mathbf S_j
++K\,(\mathbf S_i\cdot\mathbf S_j)^2\right].
+```
+
+符号は既存 SpinHalf のモデルにそろえる。J>0 の bilinear 結合は強磁性的、J<0 は反強磁性的となる。`heisenberg(j)` は `xyz(j,j,j)`、`blbq(j,0)` は `heisenberg(j)` と数学的に同じである。単イオン異方性・磁場項・追加の定数シフトは設けず、上の式のエネルギー原点を保持する。
+
+BLBQ は bilinear 結合 J と biquadratic 結合 K を独立に受け取る。角度表示 `H=sum[cos(theta) A_ij+sin(theta) A_ij²]`、`A_ij=S_i·S_j` は `blbq(-cos(theta),-sin(theta))` で表せる。角度専用の入口は設けない。Hermite Hamiltonian に対して実数値の結合を渡す契約とし、型による実数制限や実行時の判定は追加しない。
+
+### 7.2. 公開入口と空間
+
+| 公開入口 | 成功時の戻り値 |
+| --- | --- |
+| `SpinOne::<C>::xyz(&chain, &sites, jx, jy, jz)` | `OperatorOf<SpinOne<C>,I>` |
+| `SpinOne::<C>::heisenberg(&chain, &sites, j)` | `OperatorOf<SpinOne<C>,I>` |
+| `SpinOne::<C>::blbq(&chain, &sites, j, k)` | `OperatorOf<SpinOne<C>,I>` |
+
+全関数は `&Chain` と `&[HilbertSpace<I>]` を受け取り、`Result<_,qmb_spin_one::UtilityError>` を返す。Site 列・全葉ペア・束縛の基本契約は第4節の SpinHalf の XYZ / Heisenberg とそろえる。
+
+- 一つの入力空間を一 Site とし、隣接 Site 間の全葉ペア `(a,b)` に相互作用を加える。BLBQ の二乗は各葉ペアの `A_ab=S_a·S_b` に個別に適用し、Site 内の結合や異なる葉ペア間の交差項を加えない。
+- 列長と全 Site にわたる Index の一意性を、辺の有無・結合定数によらず検証する。Index には Eq のみを要求し、Clone・Hash・Ord は要求しない。
+- 入力 Site の空間ハンドルを列順に tensor した全空間へ Hamiltonian を bind し、内部 grouping・葉順・相互作用に現れない Site を保持する。既存の別の全空間の上位 grouping や因子順は復元しない。
+- 空 Site は位置を保ち、前後を直接つなぎ直さない。0 Site は単位空間上の zero Hamiltonian、1 Site と全空 Site は入力の空間構造に束縛した zero Hamiltonian を返す。
+- 境界条件と辺は第2節の Chain に従う。0・1 Site は辺なし、2 Site は open / periodic とも一辺とする。
+
+エラーは `Chain(ChainError)`・`Space(SpaceError)`・`Expression(ExpressionError)` の3 variant とし、元エラーを source として保持する。列長不一致は SiteCountMismatch、重複 Index は DuplicateIndex とし、UtilityError を crate root から公開する。
+
+### 7.3. 遅延構築と係数能力
+
+XYZ は配置した Cartesian 成分の積と和、Heisenberg は XYZ の等方的な場合として構築する。BLBQ は各葉ペアの `A_ab=Sx_a Sx_b+Sy_a Sy_b+Sz_a Sz_b` を一度構築し、式を共有して `A_ab.product(&A_ab)` を作る。J・K は最後に各項へ適用し、J の符号や大きさを二乗へ混入させない。
+
+| 関数 | 構築に必要な bound |
+| --- | --- |
+| `xyz<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C>` |
+| `heisenberg<I: Eq,R: Clone>` | `C: Clone + From<R> + Neg<Output=C>` |
+| `blbq<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C>` |
+
+構築時には局所規則の評価・基底展開・係数同士の加算や乗算を行わず、密行列・数値 backend・追加の局所規則は使わない。C の Float・Zero・One・除算・共役等も要求しない。評価・trace・export 時には既存 core と局所 primitive の操作別の bound が適用される。モデル固有メソッドを QuantumSystem trait に追加しない。
+
+### 7.4. 検証と実装時の記録
+
+[models.rs](../../crates/qmb-spin-one/tests/models.rs) では、直接記述した3×3スピン行列から参照行列を構成し、モデル実装や Chain の辺列挙を参照計算に使わない。
+
+- `Complex<f32>` / `Complex<f64>` の両方で0〜3 Site・両境界の全行列成分・Hermite 性・trace を比較する。異方的結合、正負の J・K、zero 結合、pure biquadratic 項、等方的・bilinear 極限を含める。
+- 二 spin の全スピン0・1・2に対する `A_ij` の固有値 -2・-1・1と、BLBQ のエネルギー `2J-4K`・`J-K`・`-J-K` を、独立した状態の期待値と作用の残差で検証する。
+- 複数葉 Site の全葉ペアとペアごとの二乗、空 Site、0 / 1 Site、2 Site の周期辺の重複防止、非連番の因子順、grouping の共有と spectator の保持を確認する。
+- 辺なし・zero 結合でも列長不一致と重複 Index を拒否すること、エラーの source、Clone・From・Neg だけの係数と非 Clone の結合入力・Index で構築できることを確認する。
+
+2026-10-30、Rust 1.99.1 の direnv devShell で `cargo test -p qmb-spin-one --test models` の9件が成功した。これは実装時の記録であり、文書整理時の再実行結果ではない。workspace 全体を含む確認コマンドと未実施事項は [Spin-one の検証記録](local-structure.md#106-実装時の検証記録)を参照する。
+
+利用例 [spin_one.rs](../../examples/src/bin/spin_one.rs) は `--no-default-features` と `--all-features` で実行した。`|+,->` の期待値は J=1 の等方的 XYZ / Heisenberg で1、J=1・K=0.25 の BLBQ で0.5となり、export 有効時には9×9の Vec / sprs 行列が一致した。

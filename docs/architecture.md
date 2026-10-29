@@ -60,9 +60,9 @@ qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs �
 
 ### 2.5. Spin-one（実装済み）
 
-`qmb-spin-one` は三状態と I・スピン5値・四重極9値の計15演算子 primitive を提供し、状態空間3次元・演算子空間9次元を表す。状態基底は SzBasis、演算子基底は CartesianBasis / LadderBasis。同じ基底の primitive 同士の積はその基底内に閉じる。std を許可し、作用は `Complex<R>`・`R: Float`、他の局所規則は操作ごとの小さい bound とする。規則は直接の match で実装し、全要素 even・P=I で共通の ordinary / graded 評価へ接続する。[Spin-one の局所代数](design/local-structure.md#10-spin-one-の局所代数)と[実装仕様・検証](plans/v2/spin-one-primitives.md)を参照。
+`qmb-spin-one` は三状態と I・スピン5値・四重極9値の計15演算子 primitive を提供し、状態空間3次元・演算子空間9次元を表す。状態基底は SzBasis、演算子基底は CartesianBasis / LadderBasis。同じ基底の primitive 同士の積はその基底内に閉じる。std を許可し、作用は `Complex<R>`・`R: Float`、他の局所規則は操作ごとの小さい bound とする。規則は直接の match で実装し、全要素 even・P=I で共通の ordinary / graded 評価へ接続する。規約・係数能力・検証は [Spin-one の局所代数](design/local-structure.md#10-spin-one-の局所代数)にまとめる。
 
-`SpinOne::xyz`・`heisenberg`・`blbq` は Chain と外部の Site 空間列から束縛済み Hamiltonian を構築する。符号・全葉ペア・空 Site・空間共有の扱いは spin-half にそろえ、BLBQ は各葉ペアの内積を個別に二乗する。構築に必要な係数能力は `Clone + From<R> + Neg` だけで、局所評価は遅延する。[モデルの定義と受入条件](plans/v2/spin-one-primitives.md#11-xyzheisenbergblbq-モデル-utility)に詳述する。
+`SpinOne::xyz`・`heisenberg`・`blbq` は Chain と外部の Site 空間列から束縛済み Hamiltonian を構築する。符号・全葉ペア・空 Site・空間共有の扱いは spin-half にそろえ、BLBQ は各葉ペアの内積を個別に二乗する。構築に必要な係数能力は `Clone + From<R> + Neg` だけで、局所評価は遅延する。[SpinOne のモデル構築](design/geometry.md#7-spinone-のモデル構築)に定義と検証を記録する。
 
 ## 3. Index・自由度・局所構造・空間
 

@@ -13,13 +13,9 @@
 | --- | --- |
 | Graded tensor product | 共通機構を実装済み。[共通評価と移行](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照 |
 | Fermion | `qmb-fermion` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#9-fermion-の局所代数)と[標準／symmetric Hubbard](../../design/geometry.md#6-fermion-の-hubbard-モデル)を参照 |
-| Spin-one | `qmb-spin-one` に実装済み。[局所代数の概要](../../design/local-structure.md#10-spin-one-の局所代数)と[実装仕様・検証記録](spin-one-primitives.md)を参照 |
+| Spin-one | `qmb-spin-one` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#10-spin-one-の局所代数)と[XYZ・Heisenberg・BLBQ](../../design/geometry.md#7-spinone-のモデル構築)を参照 |
 
-3機能とも実装済みである。Graded tensor product と Fermion の仕様・検証記録は設計文書に集約し、Spin-one は設計文書の概要と、このディレクトリの実装仕様・検証記録を対応付ける。
-
-## 実装仕様と検証
-
-- [Spin-one の局所 primitive 実装仕様](spin-one-primitives.md)：三状態、15演算子 primitive、Cartesian / ladder の2完全基底、基底内で閉じる局所積、std と `Act<Complex<R>>`・`R: Float`、除算に閉じる係数型と match による局所規則、受入検証。
+3機能とも実装済みであり、仕様・検証記録は上表の設計文書に集約する。この文書は v2 の対象範囲と参照先を案内する。
 
 ## 関連文書
 
