@@ -2,7 +2,7 @@ use crate::{
     Export, ExportError, Exported, MatrixArgs, MatrixMetadata,
     args::Ambient,
     backend::{MatrixBuilder, MatrixStorage},
-    coordinates::owned_entries,
+    coordinates::into_flat_entries,
 };
 use num_traits::{One, Zero};
 use qmb_core::{
@@ -34,8 +34,8 @@ where
             }
             let column = LocalState::primitive(primitive)
                 .act(self)
-                .coordinates_in(args.basis)?;
-            builder.column(count, owned_entries(column))?;
+                .coordinates(args.basis)?;
+            builder.column(count, into_flat_entries(column))?;
             count += 1;
         }
         if count != dimension {
@@ -48,7 +48,7 @@ where
                 space: (),
                 dimension,
                 factor_count: 1,
-                local_dimension: Some(dimension),
+                dim_local: Some(dimension),
                 state: PhantomData,
             },
         })
@@ -61,7 +61,7 @@ impl<'b, I: Eq, S, O, C, B, A, D>
 where
     C: Clone + Zero + One + Conjugate<Output = C>,
     S: Dimension + Act<C, Operator = O, Term = S>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
     B: Basis<S, C>,
     A: Ambient<I>,
     D: MatrixStorage<C>,
@@ -78,17 +78,17 @@ where
             .ok_or(ExpressionError::UnboundOperator)?;
         // Validate every reference even for a zero operator, before allocating output.
         let bound = self.bind(space)?;
-        let dimension = space.dimension::<S>()?;
+        let dimension = space.dim::<S>()?;
         let factor_count = space.indices().count();
-        let local_dimension = if factor_count == 0 {
+        let dim_local = if factor_count == 0 {
             None
         } else {
             Some(S::dim()?.get())
         };
         let mut builder = D::builder(dimension)?;
         for (col, input) in space.basis_states::<S, O, C, _>(args.basis)?.enumerate() {
-            let column = input?.act(&bound)?.coordinates_in(args.basis)?;
-            builder.column(col, owned_entries(column))?;
+            let column = input?.act(&bound)?.coordinates(args.basis)?;
+            builder.column(col, into_flat_entries(column))?;
         }
         Ok(Exported {
             data: builder.finish()?,
@@ -97,7 +97,7 @@ where
                 space: space.clone(),
                 dimension,
                 factor_count,
-                local_dimension,
+                dim_local,
                 state: PhantomData,
             },
         })

@@ -300,7 +300,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         if !self.space.is_compatible_with(&rhs.space) {
             return Err(ExpressionError::IncompatibleSpaces);
@@ -318,7 +318,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C> + RealPart,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         Ok(self.inner_product(self)?.real_part())
     }
@@ -328,7 +328,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         self.inner_product(&self.act(operator)?)
     }
@@ -342,7 +342,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         self.inner_product(&self.act_in(operator, ambient)?)
     }

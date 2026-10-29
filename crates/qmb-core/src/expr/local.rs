@@ -1,7 +1,7 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::{ExpressionError, Identity, LinearCombination};
+use crate::{ExpressionError, Identity, Term};
 
 /// A shared local state over state primitive S, operator primitive O and coefficient C.
 ///
@@ -133,8 +133,10 @@ impl<S, O, C> LocalState<S, O, C> {
             operands.into_iter().collect::<Result<_, _>>()?,
         ))
     }
-    /// Incorporates mapped terms as ordinary scale and sum nodes.
-    pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
+    /// Moves coefficient/operand terms into ordinary scale and sum nodes.
+    /// Preserves order, duplicates and zero coefficients without evaluating rules.
+    /// Accepts arrays, iterators and owned linear combinations without numeric bounds.
+    pub fn from_terms(terms: impl IntoIterator<Item = Term<Self, C>>) -> Self {
         Self::sum(
             terms
                 .into_iter()
@@ -200,8 +202,10 @@ impl<O, C> LocalOperator<O, C> {
             operands.into_iter().collect::<Result<_, _>>()?,
         ))
     }
-    /// Incorporates mapped terms as ordinary scale and sum nodes.
-    pub fn from_linear_combination(terms: LinearCombination<Self, C>) -> Self {
+    /// Moves coefficient/operand terms into ordinary scale and sum nodes.
+    /// Preserves order, duplicates and zero coefficients without evaluating rules.
+    /// Accepts arrays, iterators and owned linear combinations without numeric bounds.
+    pub fn from_terms(terms: impl IntoIterator<Item = Term<Self, C>>) -> Self {
         Self::sum(
             terms
                 .into_iter()
@@ -229,12 +233,8 @@ impl<O, C> LocalOperator<O, C> {
     pub(crate) fn into_product(self, rhs: Self) -> Self {
         Self::new(OperatorNode::Product(ProductExpr { lhs: self, rhs }))
     }
-    /// Constructs the ordered product `self * rhs`; `rhs` acts first.
-    pub fn product(&self, rhs: &Self) -> Self {
-        self.clone().into_product(rhs.clone())
-    }
     /// Constructs a product in input order. The empty product is identity.
-    pub fn product_all(operands: impl IntoIterator<Item = Self>) -> Self
+    pub fn product(operands: impl IntoIterator<Item = Self>) -> Self
     where
         O: Identity,
     {
@@ -253,7 +253,7 @@ impl<O, C> LocalOperator<O, C> {
     }
     /// Constructs `self * rhs + rhs * self`.
     pub fn anticommutator(&self, rhs: &Self) -> Self {
-        Self::sum([self.product(rhs), rhs.product(self)])
+        Self::sum([(self * rhs), (rhs * self)])
     }
 }
 

@@ -2,8 +2,8 @@
 
 use core::num::NonZeroUsize;
 use qmb_core::{
-    Dimension, DimensionOverflow, HilbertSpace, Identity, LocalOperator, LocalState,
-    operator_basis_len, state_basis_len,
+    Dimension, DimensionOverflow, HilbertSpace, Identity, LocalOperator, LocalState, dim_op,
+    dim_state,
 };
 
 struct Ket;
@@ -62,13 +62,14 @@ fn unrelated_primitive_types_share_and_bind_the_same_index_structure() {
 
 #[test]
 fn span_queries_distinguish_state_and_operator_spaces_without_squaring_twice() {
-    assert_eq!(state_basis_len::<Ket>(), Ok(3));
-    assert_eq!(operator_basis_len::<Op>(), Ok(9));
-    let space = HilbertSpace::tensor([HilbertSpace::factor(1u8), HilbertSpace::factor(2)]).unwrap();
-    assert_eq!(space.dimension::<Ket>(), Ok(9));
-    assert_eq!(space.dimension::<Op>(), Ok(81));
+    assert_eq!(dim_state::<Ket>(), Ok(3));
+    assert_eq!(dim_op::<Op>(), Ok(9));
+    let space =
+        HilbertSpace::tensor_all([HilbertSpace::factor(1u8), HilbertSpace::factor(2)]).unwrap();
+    assert_eq!(space.dim::<Ket>(), Ok(9));
+    assert_eq!(space.dim::<Op>(), Ok(81));
     // Querying a dimension does not attach its primitive type to the space.
-    assert_eq!(space.dimension_with(NonZeroUsize::new(2).unwrap()), Ok(4));
+    assert_eq!(space.dim_with(NonZeroUsize::new(2).unwrap()), Ok(4));
     assert_eq!(space.indices().copied().collect::<Vec<_>>(), [1, 2]);
 }
 
@@ -86,10 +87,10 @@ fn local_dimension_errors_are_requested_only_for_queries_on_actual_factors() {
         .at(&space)
         .unwrap();
     assert!(state.space().shares_node_with(&space));
-    assert_eq!(state_basis_len::<Overflow>(), Err(DimensionOverflow));
-    assert_eq!(operator_basis_len::<Overflow>(), Err(DimensionOverflow));
-    assert_eq!(space.dimension::<Overflow>(), Err(DimensionOverflow));
-    assert_eq!(HilbertSpace::<u8>::unit().dimension::<Overflow>(), Ok(1));
+    assert_eq!(dim_state::<Overflow>(), Err(DimensionOverflow));
+    assert_eq!(dim_op::<Overflow>(), Err(DimensionOverflow));
+    assert_eq!(space.dim::<Overflow>(), Err(DimensionOverflow));
+    assert_eq!(HilbertSpace::<u8>::unit().dim::<Overflow>(), Ok(1));
 }
 
 #[test]
@@ -102,7 +103,7 @@ fn identities_share_a_trait_without_numeric_or_unrelated_primitive_bounds() {
     let local: LocalOperator<Op, Opaque> = identity();
     let factor = HilbertSpace::factor(0u8);
     assert!(local.at(&factor).is_ok());
-    let _: LocalOperator<Op, Opaque> = LocalOperator::product_all([]);
+    let _: LocalOperator<Op, Opaque> = LocalOperator::product([]);
 
     // Neither index, operator primitive nor coefficient has any capabilities.
     let unbound: qmb_core::Operator<Opaque, OtherOp, Opaque> = identity();
@@ -120,11 +121,11 @@ fn identities_share_a_trait_without_numeric_or_unrelated_primitive_bounds() {
 
 #[test]
 fn moved_common_parts_and_dimension_capabilities_keep_their_public_paths() {
-    fn dimension<P: qmb_core::ops::Dimension>() -> usize {
+    fn dim<P: qmb_core::ops::Dimension>() -> usize {
         P::dim().unwrap().get()
     }
-    assert_eq!(dimension::<Ket>(), 3);
-    assert_eq!(dimension::<Op>(), 9);
+    assert_eq!(dim::<Ket>(), 3);
+    assert_eq!(dim::<Op>(), 9);
     let terms = qmb_core::expr::parts::LinearCombination::term(Opaque, OtherOp);
     let _: qmb_core::LinearCombination<OtherOp, Opaque> = terms;
 }
@@ -139,6 +140,16 @@ fn local_identity_uses_primitive_rules_without_dimension_queries() {
     static ADJOINTS: AtomicUsize = AtomicUsize::new(0);
     struct UnitState;
     struct UnitOperator;
+    impl qmb_core::HomogeneousParity for UnitOperator {
+        fn parity(&self) -> qmb_core::Parity {
+            qmb_core::Parity::Even
+        }
+    }
+    impl qmb_core::ParityOperator for UnitOperator {
+        fn parity_operator() -> Self {
+            Self
+        }
+    }
     impl Identity for UnitOperator {
         fn identity() -> Self {
             Self
@@ -181,7 +192,7 @@ fn local_identity_uses_primitive_rules_without_dimension_queries() {
     let state = LocalState::primitive(UnitState);
     assert_eq!(state.act(&identity).inner_product(&state), 1.0);
     assert_eq!(ACTIONS.load(Relaxed), 1);
-    assert_eq!(identity.product(&identity).trace(), 1.0);
+    assert_eq!((identity.clone() * &identity).trace(), 1.0);
     assert_eq!(PRODUCTS.load(Relaxed), 1);
     assert_eq!(identity.adjoint().trace(), 1.0);
     assert_eq!(ADJOINTS.load(Relaxed), 1);

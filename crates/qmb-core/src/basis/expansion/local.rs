@@ -67,7 +67,7 @@ where
     O: Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
     B: Basis<O, C>,
 {
-    let op = op.evaluated();
+    let op = op.evaluate();
     local_expansion(LinearTerms::new(&op, operator_view), basis, dimension, make)
 }
 
@@ -80,7 +80,7 @@ fn local_coordinates<B, C>(
         basis,
         space: (),
         factor_count: 1,
-        local_dimension: Some(dimension),
+        dim_local: Some(dimension),
         entries: terms.into_iter().map(|(i, (c, ()))| (vec![i], c)).collect(),
     }
 }
@@ -90,7 +90,7 @@ impl<S, O, C> LocalState<S, O, C> {
     ///
     /// The input is unchanged. No basis metadata, dense coordinates, operator
     /// multiplication capability, or primitive cloning is required.
-    pub fn expand_in<B>(&self, basis: &B) -> Result<Self, BasisError>
+    pub fn expand<B>(&self, basis: &B) -> Result<Self, BasisError>
     where
         C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
         S: Dimension + Act<C, Operator = O, Term = S>,
@@ -104,7 +104,7 @@ impl<S, O, C> LocalState<S, O, C> {
     }
 
     /// Obtains aggregated sparse basis coordinates, without building an expanded tree.
-    pub fn coordinates_in<'b, B>(&self, basis: &'b B) -> Result<Coordinates<'b, B, C>, BasisError>
+    pub fn coordinates<'b, B>(&self, basis: &'b B) -> Result<Coordinates<'b, B, C>, BasisError>
     where
         C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
         S: Dimension + Act<C, Operator = O, Term = S>,
@@ -125,7 +125,7 @@ impl<O, C> LocalOperator<O, C> {
     ///
     /// Equal basis indices are aggregated without comparing primitives. Exact
     /// zeros are removed; no tolerance-based pruning is performed.
-    pub fn expand_in<B>(&self, basis: &B) -> Result<Self, BasisError>
+    pub fn expand<B>(&self, basis: &B) -> Result<Self, BasisError>
     where
         C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
         O: Dimension + Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
@@ -138,7 +138,7 @@ impl<O, C> LocalOperator<O, C> {
     }
 
     /// Obtains coordinates in an operator basis, not a matrix acting on states.
-    pub fn coordinates_in<'b, B>(&self, basis: &'b B) -> Result<Coordinates<'b, B, C>, BasisError>
+    pub fn coordinates<'b, B>(&self, basis: &'b B) -> Result<Coordinates<'b, B, C>, BasisError>
     where
         C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
         O: Dimension + Identity + Product<C, Term = O> + Adjoint<C, Term = O>,

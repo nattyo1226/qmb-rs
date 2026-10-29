@@ -9,7 +9,22 @@ use std::num::NonZeroUsize;
 
 // These primitives deliberately lack Clone/Eq, and the operator lacks Product/Identity.
 struct Ket(u8);
-struct Op;
+enum Op {
+    Flip,
+    Parity,
+}
+#[allow(non_upper_case_globals)]
+const Op: Op = Op::Flip;
+impl qmb_core::HomogeneousParity for Op {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Op {
+    fn parity_operator() -> Self {
+        Self::Parity
+    }
+}
 struct Ordered;
 impl Dimension for Ket {
     fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
@@ -19,14 +34,21 @@ impl Dimension for Ket {
 impl Act<f64> for Ket {
     type Operator = Op;
     type Term = Self;
-    fn act(&self, _: &Op) -> LinearCombination<Self, f64> {
-        LinearCombination::primitive(Ket(1 - self.0))
+    fn act(&self, op: &Op) -> LinearCombination<Self, f64> {
+        LinearCombination::primitive(Ket(if matches!(op, Op::Parity) {
+            self.0
+        } else {
+            1 - self.0
+        }))
     }
 }
 impl Adjoint<f64> for Op {
     type Term = Self;
     fn adjoint(&self) -> LinearCombination<Self, f64> {
-        LinearCombination::primitive(Op)
+        LinearCombination::primitive(match self {
+            Self::Flip => Self::Flip,
+            Self::Parity => Self::Parity,
+        })
     }
 }
 impl Basis<Ket, f64> for Ordered {
@@ -52,7 +74,7 @@ fn exports_need_neither_primitive_cloning_nor_operator_products_or_index_cloning
     assert_eq!(local.data(), &[0., 1., 1., 0.]);
     let a = HilbertSpace::factor(Index(0));
     let b = HilbertSpace::factor(Index(1));
-    let space = a.tensor_product(&b).unwrap();
+    let space = a.tensor(&b).unwrap();
     let op = op.at(&a).unwrap();
     let matrix: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>> = (&op)
         .export(MatrixArgs::new(&Ordered).in_space(&space))
@@ -61,11 +83,16 @@ fn exports_need_neither_primitive_cloning_nor_operator_products_or_index_cloning
     assert_eq!(matrix.data()[2], 1.);
     assert_eq!(matrix.data()[7], 1.);
     assert_eq!(matrix.data().iter().sum::<f64>(), 4.);
-    let state = LocalState::<Ket, Op, f64>::primitive(Ket(1))
-        .at(&a)
-        .unwrap()
-        .tensor_product(&LocalState::primitive(Ket(0)).at(&b).unwrap())
-        .unwrap();
+    let state = qmb_core::State::tensor_in(
+        &space,
+        [
+            LocalState::<Ket, Op, f64>::primitive(Ket(1))
+                .at(&a)
+                .unwrap(),
+            LocalState::primitive(Ket(0)).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
     let v: Exported<Vec<_>, VectorMetadata<'_, _, _, Ket>> = (&state).export(&Ordered).unwrap();
     assert_eq!(v.data(), &[0., 0., 1., 0.]);
     #[cfg(feature = "sprs")]
@@ -148,7 +175,7 @@ fn malformed_bases_and_unbound_or_invalid_spaces_are_errors_even_for_zero() {
         Err(ExportError::Expression(ExpressionError::MissingIndex))
     ));
     let bound = op.bind(&a).unwrap();
-    let larger = a.tensor_product(&b).unwrap();
+    let larger = a.tensor(&b).unwrap();
     let matrix: Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>> = (&bound)
         .export(MatrixArgs::new(&Ordered).in_space(&larger))
         .unwrap();
@@ -166,7 +193,7 @@ fn unit_zero_and_identity_preserve_spaces_and_shapes() {
     let vector: Exported<Vec<_>, VectorMetadata<'_, _, _, S>> = (&state).export(&SzBasis).unwrap();
     assert_eq!(vector.data(), &[Complex::new(1., 0.)]);
     assert_eq!(vector.metadata().factor_count(), 0);
-    assert_eq!(vector.metadata().local_dimension(), None);
+    assert_eq!(vector.metadata().dim_local(), None);
     let identity = Operator::<u8, O, Complex<f64>>::identity();
     let matrix: Exported<Vec<_>, MatrixMetadata<'_, S, _, _>> = (&identity)
         .export(MatrixArgs::new(&SzBasis).in_space(&space))
@@ -190,7 +217,7 @@ fn unit_zero_and_identity_preserve_spaces_and_shapes() {
         assert_eq!(matrix.data().nnz(), 0);
     }
     let space =
-        HilbertSpace::tensor([HilbertSpace::factor(0u8), HilbertSpace::factor(1u8)]).unwrap();
+        HilbertSpace::tensor_all([HilbertSpace::factor(0u8), HilbertSpace::factor(1u8)]).unwrap();
     let identity: Exported<Vec<_>, MatrixMetadata<'_, S, _, _>> = (&identity)
         .export(MatrixArgs::new(&SzBasis).in_space(&space))
         .unwrap();
@@ -201,7 +228,7 @@ fn unit_zero_and_identity_preserve_spaces_and_shapes() {
 
 #[test]
 fn export_detects_axis_and_dense_storage_overflow_before_allocating() {
-    let space = HilbertSpace::tensor((0..usize::BITS).map(HilbertSpace::factor)).unwrap();
+    let space = HilbertSpace::tensor_all((0..usize::BITS).map(HilbertSpace::factor)).unwrap();
     let op = Operator::<u32, Op, f64>::identity();
     let result: Result<Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>>, _> =
         (&op).export(MatrixArgs::new(&Ordered).in_space(&space));
@@ -212,7 +239,8 @@ fn export_detects_axis_and_dense_storage_overflow_before_allocating() {
     assert!(matches!(result, Err(ExportError::Dimension(_))));
 
     // The axis fits, but its square does not; no dense allocation is attempted.
-    let space = HilbertSpace::tensor((0..usize::BITS / 2 + 1).map(HilbertSpace::factor)).unwrap();
+    let space =
+        HilbertSpace::tensor_all((0..usize::BITS / 2 + 1).map(HilbertSpace::factor)).unwrap();
     let result: Result<Exported<Vec<_>, MatrixMetadata<'_, Ket, _, _>>, _> =
         (&op).export(MatrixArgs::new(&Ordered).in_space(&space));
     assert!(matches!(result, Err(ExportError::SizeOverflow)));
@@ -248,7 +276,7 @@ fn owned_sparse_coordinate_exports_do_not_add_clone_or_numeric_bounds() {
     }
     let basis = Ordered;
     let state = LocalState::<Ket, Op, f64>::primitive(Ket(1));
-    let coords = state.coordinates_in(&basis).unwrap();
+    let coords = state.coordinates(&basis).unwrap();
     let sparse = convert(coords);
     assert_eq!(sparse.data().indices(), &[1]);
 }
@@ -257,7 +285,7 @@ fn owned_sparse_coordinate_exports_do_not_add_clone_or_numeric_bounds() {
 fn deep_spaces_are_walked_without_recursive_export_calls() {
     let mut space = HilbertSpace::factor(1u8);
     for _ in 0..20_000 {
-        space = HilbertSpace::tensor([space]).unwrap();
+        space = HilbertSpace::tensor_all([space]).unwrap();
     }
     std::thread::Builder::new()
         .stack_size(128 * 1024)

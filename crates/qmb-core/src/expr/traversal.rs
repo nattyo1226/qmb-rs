@@ -78,6 +78,7 @@ pub(crate) fn operator_view<O, C>(
     }
 }
 
+type SortedFactor<'a, I, O, C> = (usize, &'a HilbertSpace<I>, LocalOperator<O, C>, bool);
 type OperatorFactors<'a, I, O, C> = Vec<(&'a HilbertSpace<I>, LocalOperator<O, C>)>;
 struct OpBranch<'a, I, O, C> {
     pending: Vec<(&'a OpExpr<I, O, C>, bool)>,
@@ -94,11 +95,13 @@ impl<I, O, C: Clone> Clone for OpBranch<'_, I, O, C> {
     }
 }
 pub(crate) struct OpTerms<'a, I, O, C> {
+    grouped: bool,
     branches: Vec<OpBranch<'a, I, O, C>>,
 }
 impl<'a, I, O, C> OpTerms<'a, I, O, C> {
     pub(crate) fn new(root: &'a OpExpr<I, O, C>) -> Self {
         Self {
+            grouped: true,
             branches: vec![OpBranch {
                 pending: vec![(root, false)],
                 coefficient: None,
@@ -123,12 +126,10 @@ where
                         } else {
                             local.clone()
                         };
-                        if let Some((_, existing)) = branch
-                            .factors
-                            .iter_mut()
-                            .find(|(other, _)| other.factor_index() == factor.factor_index())
-                        {
-                            *existing = existing.product(&local);
+                        if let Some((_, existing)) = branch.factors.iter_mut().find(|(other, _)| {
+                            self.grouped && other.factor_index() == factor.factor_index()
+                        }) {
+                            *existing = existing.clone() * &local;
                         } else {
                             branch.factors.push((factor, local));
                         }
@@ -171,6 +172,240 @@ where
     }
 }
 
+// Split only local expressions, never a global state or basis. Handles preserve
+// borrowed/non-Clone primitives and scales do not require generating one.
+fn parity_parts<O, C>(local: &LocalOperator<O, C>) -> Vec<(crate::Parity, LocalOperator<O, C>)>
+where
+    O: crate::HomogeneousParity + crate::Product<C, Term = O> + crate::Adjoint<C, Term = O>,
+    C: Clone + Mul<Output = C> + Conjugate<Output = C>,
+{
+    let mut pending = vec![(local.evaluate(), None::<C>)];
+    let mut even = Vec::new();
+    let mut odd = Vec::new();
+    while let Some((op, coefficient)) = pending.pop() {
+        match op.node() {
+            OperatorNode::Primitive(p) => {
+                let parity = p.parity();
+                let term = if let Some(c) = coefficient {
+                    op.scaled(c)
+                } else {
+                    op
+                };
+                if parity == crate::Parity::Odd {
+                    odd.push(term);
+                } else {
+                    even.push(term);
+                }
+            }
+            OperatorNode::Scale(s) => {
+                let c = match coefficient {
+                    None => s.coefficient.clone(),
+                    Some(c) => multiply(c, s.coefficient.clone()),
+                };
+                pending.push((s.operand.clone(), Some(c)));
+            }
+            OperatorNode::Sum(s) => pending.extend(
+                s.iter()
+                    .rev()
+                    .map(|child| (child.clone(), coefficient.clone())),
+            ),
+            _ => unreachable!("evaluated local operator"),
+        }
+    }
+    let mut parts = Vec::new();
+    if !even.is_empty() {
+        parts.push((crate::Parity::Even, LocalOperator::sum(even)));
+    }
+    if !odd.is_empty() {
+        parts.push((crate::Parity::Odd, LocalOperator::sum(odd)));
+    }
+    parts
+}
+
+// Ordered homogeneous placements, before either Koszul sorting or lowering.
+struct HomogeneousBranch<'a, I, O, C> {
+    pending: OperatorFactors<'a, I, O, C>,
+    factors: Vec<(&'a HilbertSpace<I>, LocalOperator<O, C>, crate::Parity)>,
+    coefficient: Option<C>,
+}
+struct HomogeneousTerms<'a, I, O, C> {
+    raw: OpTerms<'a, I, O, C>,
+    branches: Vec<HomogeneousBranch<'a, I, O, C>>,
+}
+impl<'a, I, O, C> HomogeneousTerms<'a, I, O, C> {
+    fn new(root: &'a OpExpr<I, O, C>) -> Self {
+        let mut raw = OpTerms::new(root);
+        raw.grouped = false;
+        Self {
+            raw,
+            branches: Vec::new(),
+        }
+    }
+}
+impl<'a, I: Eq, O, C> Iterator for HomogeneousTerms<'a, I, O, C>
+where
+    O: crate::HomogeneousParity + crate::Product<C, Term = O> + crate::Adjoint<C, Term = O>,
+    C: Clone + Mul<Output = C> + Conjugate<Output = C>,
+{
+    type Item = (
+        Option<C>,
+        Vec<(&'a HilbertSpace<I>, LocalOperator<O, C>, crate::Parity)>,
+    );
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.branches.is_empty() {
+                let (coefficient, mut pending) = self.raw.next()?;
+                pending.reverse();
+                self.branches.push(HomogeneousBranch {
+                    pending,
+                    factors: Vec::new(),
+                    coefficient,
+                });
+            }
+            let mut branch = self.branches.pop().expect("branch");
+            if let Some((factor, local)) = branch.pending.pop() {
+                for (parity, local) in parity_parts(&local).into_iter().rev() {
+                    let mut factors = branch.factors.clone();
+                    factors.push((factor, local, parity));
+                    self.branches.push(HomogeneousBranch {
+                        pending: branch.pending.clone(),
+                        factors,
+                        coefficient: branch.coefficient.clone(),
+                    });
+                }
+            } else {
+                return Some((branch.coefficient, branch.factors));
+            }
+        }
+    }
+}
+
+/// Intrinsic graded factors. Never contains inserted parity strings.
+pub(crate) struct IntrinsicOpTerms<'a, I, O, C> {
+    ordinary: OpTerms<'a, I, O, C>,
+    graded: Option<HomogeneousTerms<'a, I, O, C>>,
+    ambient: &'a HilbertSpace<I>,
+}
+impl<'a, I, O, C> IntrinsicOpTerms<'a, I, O, C> {
+    pub(crate) fn new(root: &'a OpExpr<I, O, C>, ambient: &'a HilbertSpace<I>) -> Self {
+        Self {
+            ordinary: OpTerms::new(root),
+            graded: (ambient.effective_kind() == Some(crate::TensorKind::Graded))
+                .then(|| HomogeneousTerms::new(root)),
+            ambient,
+        }
+    }
+}
+impl<'a, I: Eq, O, C> Iterator for IntrinsicOpTerms<'a, I, O, C>
+where
+    O: crate::HomogeneousParity + crate::Product<C, Term = O> + crate::Adjoint<C, Term = O>,
+    C: Clone
+        + Mul<Output = C>
+        + Conjugate<Output = C>
+        + num_traits::One
+        + core::ops::Neg<Output = C>,
+{
+    type Item = (Option<C>, OperatorFactors<'a, I, O, C>);
+    fn next(&mut self) -> Option<Self::Item> {
+        let Some(graded) = &mut self.graded else {
+            return self.ordinary.next();
+        };
+        let (mut coefficient, factors) = graded.next()?;
+        let mut sorted: Vec<SortedFactor<'a, I, O, C>> = Vec::new();
+        let mut negative = false;
+        for (factor, local, parity) in factors {
+            let position = self
+                .ambient
+                .indices()
+                .position(|i| Some(i) == factor.factor_index())
+                .expect("validated factor");
+            let odd = parity == crate::Parity::Odd;
+            for (p, _, _, previous_odd) in &sorted {
+                if *p > position && *previous_odd && odd {
+                    negative = !negative;
+                }
+            }
+            if let Some((_, _, previous, previous_odd)) =
+                sorted.iter_mut().find(|(p, _, _, _)| *p == position)
+            {
+                *previous = previous.clone() * &local;
+                *previous_odd ^= odd;
+            } else {
+                sorted.push((position, factor, local, odd));
+            }
+        }
+        sorted.sort_by_key(|(position, _, _, _)| *position);
+        if negative {
+            coefficient = Some(-coefficient.unwrap_or_else(C::one));
+        }
+        Some((
+            coefficient,
+            sorted
+                .into_iter()
+                .map(|(_, f, local, _)| (f, local))
+                .collect(),
+        ))
+    }
+}
+
+/// Ordinary representation after lowering placements, for full trace only.
+/// These factors must never be interpreted as intrinsic graded coordinates.
+pub(crate) struct OrdinaryOpTerms<'a, I, O, C> {
+    ordinary: OpTerms<'a, I, O, C>,
+    graded: Option<HomogeneousTerms<'a, I, O, C>>,
+    ambient: &'a HilbertSpace<I>,
+}
+impl<'a, I, O, C> OrdinaryOpTerms<'a, I, O, C> {
+    pub(crate) fn new(root: &'a OpExpr<I, O, C>, ambient: &'a HilbertSpace<I>) -> Self {
+        Self {
+            ordinary: OpTerms::new(root),
+            graded: (ambient.effective_kind() == Some(crate::TensorKind::Graded))
+                .then(|| HomogeneousTerms::new(root)),
+            ambient,
+        }
+    }
+}
+impl<'a, I: Eq, O, C> Iterator for OrdinaryOpTerms<'a, I, O, C>
+where
+    O: crate::HomogeneousParity
+        + crate::ParityOperator
+        + crate::Product<C, Term = O>
+        + crate::Adjoint<C, Term = O>,
+    C: Clone + Mul<Output = C> + Conjugate<Output = C>,
+{
+    type Item = (Option<C>, OperatorFactors<'a, I, O, C>);
+    fn next(&mut self) -> Option<Self::Item> {
+        let Some(graded) = &mut self.graded else {
+            return self.ordinary.next();
+        };
+        let (coefficient, placements) = graded.next()?;
+        let mut factors: OperatorFactors<'a, I, O, C> = Vec::new();
+        let mut append = |factor: &'a HilbertSpace<I>, local: LocalOperator<O, C>| {
+            if let Some((_, previous)) = factors
+                .iter_mut()
+                .find(|(f, _)| f.factor_index() == factor.factor_index())
+            {
+                *previous = previous.clone() * &local;
+            } else {
+                factors.push((factor, local));
+            }
+        };
+        for (factor, local, parity) in placements {
+            if parity == crate::Parity::Odd {
+                for prefix in self
+                    .ambient
+                    .leaves()
+                    .take_while(|f| f.factor_index() != factor.factor_index())
+                {
+                    append(prefix, LocalOperator::primitive(O::parity_operator()));
+                }
+            }
+            append(factor, local);
+        }
+        Some((coefficient, factors))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,7 +439,7 @@ mod tests {
         let lhs =
             Operator::<u8, (), MinimalComplex<Ring>>::scalar(MinimalComplex::new(Ring(3), Ring(4)));
         let rhs = Operator::scalar(MinimalComplex::new(Ring(2), Ring(-1)));
-        let operator = lhs.product(&rhs).unwrap().adjoint();
+        let operator = (lhs.clone() * &rhs).unwrap().adjoint();
         let mut terms = OpTerms::new(&operator.expression);
         let (coefficient, factors) = terms.next().unwrap();
         let coefficient = coefficient.unwrap();

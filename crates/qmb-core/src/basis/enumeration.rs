@@ -12,7 +12,7 @@ use alloc::{vec, vec::Vec};
 
 type BasisElement<T> = Result<T, BasisError>;
 
-pub(super) fn leaves<I>(space: &HilbertSpace<I>) -> Vec<&HilbertSpace<I>> {
+pub(super) fn collect_leaves<I>(space: &HilbertSpace<I>) -> Vec<&HilbertSpace<I>> {
     let mut pending = vec![space];
     let mut result = Vec::new();
     while let Some(space) = pending.pop() {
@@ -93,7 +93,7 @@ impl<I> HilbertSpace<I> {
         S: Dimension,
         B: Basis<S, C>,
     {
-        let factors = leaves(self);
+        let factors = collect_leaves(self);
         let dimension = local_size::<S>(factors.len())?;
         Ok(basis_indices(factors.len(), dimension).map(move |digits| {
             let nodes = digits
@@ -132,7 +132,7 @@ impl<I> HilbertSpace<I> {
         O: Dimension,
         B: Basis<O, C>,
     {
-        let factors = leaves(self);
+        let factors = collect_leaves(self);
         let dimension = local_size::<O>(factors.len())?;
         Ok(basis_indices(factors.len(), dimension).map(move |digits| {
             let mut nodes = Vec::new();
@@ -159,13 +159,13 @@ impl<I> HilbertSpace<I> {
 }
 
 /// Returns the state basis size from the span of state primitive S.
-pub fn state_basis_len<S: Dimension>() -> Result<usize, DimensionOverflow> {
+pub fn dim_state<S: Dimension>() -> Result<usize, DimensionOverflow> {
     Ok(S::dim()?.get())
 }
 
 /// Returns the operator basis size from the span of operator primitive O.
 ///
 /// This is already the operator-space dimension, not a value to square again.
-pub fn operator_basis_len<O: Dimension>() -> Result<usize, DimensionOverflow> {
+pub fn dim_op<O: Dimension>() -> Result<usize, DimensionOverflow> {
     Ok(O::dim()?.get())
 }

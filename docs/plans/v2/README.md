@@ -1,7 +1,7 @@
 # v2（0.2.0）の範囲
 
 作成日: 2026-10-29
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 0.2.0 に向けた機能追加の範囲を記録する。今後の合意に応じて、このディレクトリへ詳細を追記する。
 
@@ -11,11 +11,22 @@
 
 | 機能 | 内容 |
 | --- | --- |
-| Graded tensor product | Grading と parity に基づく tensor product・合成則への対応 |
-| Fermion | Fermion の局所代数、反交換関係・符号規則への対応 |
-| Spin-one | Spin-1 の局所代数の提供 |
+| Graded tensor product | 共通機構を実装済み。[共通評価と移行](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照 |
+| Fermion | `qmb-fermion` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#9-fermion-の局所代数)と[標準／symmetric Hubbard](../../design/geometry.md#6-fermion-の-hubbard-モデル)を参照 |
+| Spin-one | `qmb-spin-one` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#10-spin-one-の局所代数)と[XYZ・Heisenberg・BLBQ](../../design/geometry.md#7-spinone-のモデル構築)を参照 |
 
-各機能の詳細仕様、公開 API、crate 構成、および3機能間の実装順序は今後決定する。
+3機能とも実装済みであり、仕様・検証記録は上表の設計文書に集約する。この文書は v2 の対象範囲と参照先を案内する。
+
+## 公開 API
+
+名前の整理と構築入口の分離は実装済みであり、現在の API と契約は以下の設計文書で管理する。
+
+- [局所式の構築](../../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)：二項演算・列集約と係数付きの項列。
+- [共通の構築入口と型情報](../../design/composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)：ExpressionFactory・QuantumSystem と型注釈。
+- [基底処理と座標](../../design/basis.md)：展開・座標取得・次元問い合わせ。
+- [幾何とモデル構築](../../design/geometry.md)：Chain の接続と各 Models 型。
+
+補助 API や利用開始の導線など、残る検討事項は [API の使いやすさ](../api-usability/README.md)に記録する。
 
 ## 関連文書
 

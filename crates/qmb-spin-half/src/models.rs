@@ -3,9 +3,7 @@
 use crate::{SpinHalf, SpinHalfOperator, SpinHalfState};
 use alloc::vec::Vec;
 use core::ops::Neg;
-use qmb_core::{
-    ExpressionError, HilbertSpace, OperatorOf, QuantumSystem, SpaceError, State, StateOf,
-};
+use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError, State, StateOf};
 use qmb_geometry::{Chain, ChainError};
 
 /// Failure to construct a spin model on a site-ordered space assignment.
@@ -28,10 +26,15 @@ fn model_space<I: Eq>(
     factors: &[HilbertSpace<I>],
 ) -> Result<HilbertSpace<I>, UtilityError> {
     let _ = chain.nn_site_pairs_with(factors)?;
-    Ok(HilbertSpace::tensor(factors.iter().cloned())?)
+    Ok(HilbertSpace::tensor_all(factors.iter().cloned())?)
 }
 
-impl<C> SpinHalf<C> {
+/// Model constructors for the selected SpinHalf system.
+///
+/// No values are stored; select the coefficient type through `SpinHalf<C>`.
+pub struct SpinHalfModels<Q>(core::marker::PhantomData<fn() -> Q>);
+
+impl<C> SpinHalfModels<SpinHalf<C>> {
     /// Builds `-sum_(i,j) sum_(a in i,b in j) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)`.
     ///
     /// Each input space is one site, with any number of leaves. All leaf pairs
@@ -46,7 +49,7 @@ impl<C> SpinHalf<C> {
         jx: R,
         jy: R,
         jz: R,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<SpinHalf<C>, I>, UtilityError>
     where
         C: Clone + From<R> + Neg<Output = C>,
     {
@@ -59,16 +62,11 @@ impl<C> SpinHalf<C> {
         let mut terms = Vec::new();
         for (left, right) in chain.nn_pairs_with(factors)? {
             for (primitive, coupling) in &axes {
-                let local = Self::operator(*primitive);
-                terms.push(
-                    local
-                        .at(left)?
-                        .product(&local.at(right)?)?
-                        .scaled(coupling.clone()),
-                );
+                let local = SpinHalf::<C>::operator(*primitive);
+                terms.push((local.at(left)? * local.at(right)?)?.scaled(coupling.clone()));
             }
         }
-        Ok(OperatorOf::<Self, I>::sum(terms)?.bind(&space)?)
+        Ok(OperatorOf::<SpinHalf<C>, I>::sum(terms)?.bind(&space)?)
     }
 
     /// Builds isotropic XYZ, with positive coupling ferromagnetic.
@@ -77,7 +75,7 @@ impl<C> SpinHalf<C> {
         chain: &Chain,
         factors: &[HilbertSpace<I>],
         coupling: R,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<SpinHalf<C>, I>, UtilityError>
     where
         C: Clone + From<R> + Neg<Output = C>,
     {
@@ -94,8 +92,8 @@ impl<C> SpinHalf<C> {
         chain: &Chain,
         factors: &[HilbertSpace<I>],
         first: SpinHalfState,
-    ) -> Result<StateOf<Self, I>, UtilityError> {
-        let _space = model_space(chain, factors)?;
+    ) -> Result<StateOf<SpinHalf<C>, I>, UtilityError> {
+        let space = model_space(chain, factors)?;
         let mut states = Vec::new();
         for (i, site) in factors.iter().enumerate() {
             let orientation = if i % 2 == 0 {
@@ -107,9 +105,9 @@ impl<C> SpinHalf<C> {
                 }
             };
             for leaf in site.leaves() {
-                states.push(Self::state(orientation).at(leaf)?);
+                states.push(SpinHalf::<C>::state(orientation).at(leaf)?);
             }
         }
-        Ok(State::tensor(states)?)
+        Ok(State::tensor_in(&space, states)?)
     }
 }

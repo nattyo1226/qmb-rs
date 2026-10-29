@@ -104,10 +104,18 @@ fn construction_shares_without_numeric_or_clone_bounds() {
         p.lhs.root.as_ref().unwrap(),
         p.rhs.root.as_ref().unwrap()
     ));
-    let _ = S::<Scalar>::from_linear_combination(LinearCombination::term(
+    let _ = S::<Scalar>::from_terms(LinearCombination::term(
         Complex::new(Scalar, Scalar),
         state.clone(),
     ));
+    let _ = S::<Scalar>::from_terms([Term {
+        coefficient: Complex::new(Scalar, Scalar),
+        operand: state.clone(),
+    }]);
+    let _ = O::<Scalar>::from_terms(core::iter::once(Term {
+        coefficient: Complex::new(Scalar, Scalar),
+        operand: op.clone(),
+    }));
     let _ = op.adjoint();
     let unrelated = S::<Scalar>::primitive(State(1, &counts));
     assert!(!Arc::ptr_eq(
@@ -183,11 +191,11 @@ fn constructor_cardinality_sharing_and_single_final_drop() {
     }
     type UnitOperator = LocalOperator<Unit, Complex<f64>>;
     assert!(matches!(
-        UnitOperator::product_all([]).node(),
+        UnitOperator::product([]).node(),
         OperatorNode::Primitive(Unit)
     ));
     let op = UnitOperator::identity();
-    let single = UnitOperator::product_all([op.clone()]);
+    let single = UnitOperator::product([op.clone()]);
     assert!(Arc::ptr_eq(
         op.root.as_ref().unwrap(),
         single.root.as_ref().unwrap()
@@ -216,7 +224,7 @@ fn action_order_no_product_and_immutable_reusable_results() {
     assert!(chain.has_action);
     assert!(!result.has_action);
     assert_eq!(
-        coefficients(&state.act(&a.product(&b)).evaluate()),
+        coefficients(&state.act(&(a.clone() * &b)).evaluate()),
         coefficients(&result)
     );
     let again = result.evaluate();
@@ -237,7 +245,7 @@ fn ordered_zero_and_duplicate_terms_survive_mapping_and_evaluation() {
     let terms = LinearCombination::term(Complex::new(0.0, 0.0), State(2, &counts))
         + LinearCombination::term(Complex::new(3.0, 4.0), State(1, &counts))
         + LinearCombination::term(Complex::new(1.0, 0.0), State(1, &counts));
-    let state = S::from_linear_combination(terms.map(S::primitive));
+    let state = S::from_terms(terms.map(S::primitive));
     let result = state.act(&O::primitive(Operator(0, &counts))).evaluate();
     assert_eq!(
         coefficients(&result),
@@ -292,7 +300,7 @@ fn deep_action_product_scale_sum_and_adjoint_chains_use_work_stacks() {
             let mut sum = leaf.clone();
             for _ in 0..20_000 {
                 chain = chain.act(&O::primitive(Operator(0, &counts)));
-                product = product.product(&O::primitive(Operator(0, &counts)));
+                product = product.clone() * &O::primitive(Operator(0, &counts));
                 adjoint = adjoint.adjoint();
                 scaled = scaled.scaled(Complex::new(1.0, 0.0));
                 sum = &sum + S::zero();
@@ -441,10 +449,7 @@ fn scalar_reductions_need_no_num_division_remainder_one_or_copy() {
     }
     let op = LocalOperator::<Primitive, MinimalComplex<Ring>>::identity()
         .scaled(MinimalComplex::new(Ring(3), Ring(4)));
-    let trace = op
-        .adjoint()
-        .product(&LocalOperator::primitive(Primitive))
-        .trace();
+    let trace = (op.adjoint().clone() * &LocalOperator::primitive(Primitive)).trace();
     assert_eq!((trace.re.0, trace.im.0), (3, -4));
     let state = LocalState::<Primitive, Primitive, MinimalComplex<Ring>>::primitive(Primitive);
     assert_eq!(state.norm_squared().0, 1);
@@ -502,8 +507,39 @@ fn local_identity_trait_and_constructor_store_the_primitive() {
     for op in [
         identity::<LocalOperator<Unit, Opaque>>(),
         LocalOperator::identity(),
-        LocalOperator::product_all([]),
+        LocalOperator::product([]),
     ] {
         assert!(matches!(op.node(), OperatorNode::Primitive(Unit)));
     }
+}
+
+#[test]
+fn term_iterators_preserve_zero_duplicates_and_delayed_actions() {
+    let counts = Counts::default();
+    let state = S::primitive(State(1, &counts));
+    let pending = state.act(&O::primitive(Operator(1, &counts)));
+    let terms = [(0.0, pending.clone()), (2.0, pending), (-1.0, state)];
+    let sum = S::from_terms(terms.into_iter().map(|(coefficient, operand)| Term {
+        coefficient: Complex::new(coefficient, 0.0),
+        operand,
+    }));
+    assert_eq!(counts.actions.get(), 0);
+    assert_eq!(
+        coefficients(&sum.evaluate()),
+        [
+            (2, Complex::new(0.0, 0.0)),
+            (2, Complex::new(2.0, 0.0)),
+            (1, Complex::new(-1.0, 0.0)),
+        ]
+    );
+    assert_eq!(counts.actions.get(), 2);
+    assert!(coefficients(&S::from_terms([]).evaluate()).is_empty());
+    let single = S::from_terms([Term {
+        coefficient: Complex::new(3.0, 0.0),
+        operand: S::primitive(State(4, &counts)),
+    }]);
+    assert_eq!(
+        coefficients(&single.evaluate()),
+        [(4, Complex::new(3.0, 0.0))]
+    );
 }

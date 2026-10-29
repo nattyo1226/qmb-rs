@@ -1,6 +1,6 @@
 # 埋め込み・複合空間の式と数学的能力
 
-更新日: 2026-10-27
+更新日: 2026-10-29
 
 ## 1. 対象と責任分担
 
@@ -141,6 +141,19 @@ Graded でも状態の内積は通常の正定値な Hilbert 空間の内積と�
 
 通常の tensor 表現へ変換する場合は、要件の 5.5 節に従って parity 演算子を挿入する。Intrinsic な graded 規則と parity string による経路は同じ作用を表し、変換済みの符号を再度適用しない。
 
+多因子の homogeneous な成分については、同じ規則を次の形で用いる。
+
+```math
+\begin{aligned}
+(\mathop{\otimes_g}_i A_i)(\mathop{\otimes_g}_i B_i)
+&=(-1)^{\sum_{i>j}p(A_i)p(B_j)}\mathop{\otimes_g}_i(A_iB_i),\\
+(\mathop{\otimes_g}_i A_i)(\mathop{\otimes_g}_i\psi_i)
+&=(-1)^{\sum_{i>j}p(A_i)p(\psi_j)}\mathop{\otimes_g}_i(A_i\psi_i),\\
+(\mathop{\otimes_g}_i A_i)^\dagger
+&=(-1)^{\sum_{i<j}p(A_i)p(A_j)}\mathop{\otimes_g}_i A_i^\dagger.
+\end{aligned}
+```
+
 ## 6. 入れ子・空・単因子との整合性
 
 子が複合空間の場合も、その子の数学的能力と parity を用いて同じ合成則を再帰的に適用する。同じ因子順序・同じ積の種類について、以下の括り方の対応で結果を変えない。
@@ -214,7 +227,7 @@ Graded な場合も埋め込み後の実際の作用を縮約する。二 mode �
 
 ## 9. 未決事項と実装範囲
 
-Step 3 の設計判断は以下を採用済みとする。Ordinary な配置・束縛・複合評価と Step 5 の基底処理は実装済みであり、後続の partial trace・graded な演算とは区別する。段階3の検証では、spin-half の三因子系と三次元代数の二因子系を両精度の独立した行列計算と照合し、空間・束縛・エラー・共有、および深い式の処理を確認した。
+Step 3 の設計判断は以下を採用済みとする。Ordinary / graded な配置・束縛・複合評価と基底処理は実装済みであり、後続の partial trace とは区別する。段階3の検証では、spin-half の三因子系と三次元代数の二因子系を両精度の独立した行列計算と照合し、空間・束縛・エラー・共有、および深い式の処理を確認した。
 
 | 対象 | 採用した方針 |
 | --- | --- |
@@ -231,38 +244,143 @@ Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積ま�
 
 Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。LocalStructure 廃止後の公開型は `State<I, S, O, C>`・`Operator<I, O, C>` とする。現在の API は第10節に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
 
-本書は数学的な契約を定める。[初期版の提供範囲](../architecture.md#9-初期版の提供範囲と完成条件)は同種局所構造の ordinary な演算とし、異種局所構造の合成と graded な演算の実装は[後続へ延期](../future-work.md#2-延期した機能と検討事項)する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
+本書は数学的な契約を定める。[初期版の提供範囲](../architecture.md#9-初期版の提供範囲と完成条件)は同種局所構造の ordinary な演算とし、異種局所構造の合成は[後続へ延期](../future-work.md#2-延期した機能と検討事項)する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
 
 ## 10. 現在の公開 API
 
 | 対象 | 主な API と契約 |
 | --- | --- |
 | 局所式の配置 | `LocalState::at(&factor)`・`LocalOperator::at(&factor)` は因子への配置を検証し、局所式を共有する。状態は所属空間を持ち、演算子は未束縛とする |
-| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`try_sum`・`add`・`tensor`・`try_tensor`・`tensor_product`・`scaled` と、`space`・`domain`・`codomain` を提供する |
+| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`try_sum`・`tensor_in(&space, states)`・`try_tensor_in(&space, states)`・`scaled` と、`space`・`domain`・`codomain` を提供する |
 | `State<I, S, O, C>` の演算・評価 | `act`・`act_in`・`evaluate`・`inner_product`・`norm_squared`・`expectation`・`expectation_in` を提供する。作用は遅延構築する |
-| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`try_sum`・`add`・`product_all`・`try_product_all`・`product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
-| `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hilbert_schmidt_inner_product`・`hilbert_schmidt_inner_product_in` を提供する。交換子は遅延構築する |
+| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`try_sum`・`product`・`try_product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
+| `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hs_inner_product`・`hs_inner_product_in` を提供する。交換子は遅延構築する |
 | エラー | 空間の重複には `SpaceError`、複合式の接続・評価には `ExpressionError`、次元取得には `DimensionOverflow` を使う |
 
-Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
+通常の和・積の名前付き構築は列を受け取る `sum` / `product` とし、二項には標準の `+` / `*` を使う。Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
 
-## 11. QuantumSystem の構築入口と fallible 集約（2026-10-28）
+## 11. ExpressionFactory の構築入口と fallible 集約（2026-10-28）
 
-QuantumSystem は状態・演算子 primitive と係数型を関連付け、以下の既定メソッドから既存の core 式を構築する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
+QuantumSystem は状態・演算子 primitive と係数型だけを関連付ける。構築は ExpressionFactory の以下の inherent method から既存の core 式を生成する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
+
+`ExpressionFactory<S,O,C>` は値を保持せず、インスタンス生成を必要としない構築入口であり、QuantumSystem を一括実装する。`SpinHalf<C>`・`SpinOne<C>`・`Fermion<C>` は具体的な primitive を選ぶ型エイリアスで、構築に trait の import は不要である。独自の primitive も ExpressionFactory の型エイリアスから利用できる。同じ primitive と係数型からは同じ式型を構築し、システム名を式の同一性へ追加しない。
+
+`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は型注釈として維持する。システム単位のジェネリック API では `Q: QuantumSystem` から型情報を取得し、構築には `LocalStateOf::<Q>::primitive(...)` などの式型の入口、または `ExpressionFactory<Q::State,Q::Operator,Q::Coeff>` を使う。QuantumSystem 自体に構築メソッドは置かない。モデル固有の構築は各 primitive crate の公開 `models` module に分離し、[幾何とモデルの設計](geometry.md)に従う。
 
 | 入口 | 入力・契約 |
 | --- | --- |
-| state_tensor_at | 葉と状態 primitive の組の列。入力順に tensor 合成し、重複 Index は拒否。空入力は単位状態 |
+| product_state | 明示空間と状態 primitive の列。空間の葉の順に一つずつ配置し、個数の完全一致を検証する |
 | operator_product_at | 葉と演算子 primitive の組の列。同一 Index の再登場を許可し、入力順に積を構築。右端が先に作用。空入力は未束縛 identity |
 | state_sum / try_state_sum | 明示空間と状態列。空入力はその空間の zero |
 | operator_sum / try_operator_sum | 演算子列。空入力は未束縛 zero |
-| state_tensor / try_state_tensor | 配置済み状態列の入力順 tensor。空入力は単位状態 |
+| tensor_in / try_tensor_in | 明示空間と配置済み状態列。葉の連結が指定空間を順序も含めて完全に覆い、部分系の種類も互換であることを検証する |
 | operator_product / try_operator_product | 配置済み演算子列の入力順の積。空入力は未束縛 identity |
 
-_at は配置も行う入口を意味し、裸の primitive の列ではなく (&factor, primitive) の IntoIterator を受け取る。配置先は葉のみで、Tensor の自動展開はしない。演算子は明示的に bind するまで未束縛であり、spectator を含む全作用空間を積の配置先から自動構築しない。入力スライスや配置先の変数の生存期間を越えて、共有した式・空間を保持できる。
+operator_product_at の _at は配置も行う入口を意味し、裸の primitive の列ではなく (&factor, primitive) の IntoIterator を受け取る。配置先は葉のみで、Tensor の自動展開はしない。演算子は明示的に bind するまで未束縛であり、spectator を含む全作用空間を積の配置先から自動構築しない。入力スライスや配置先の変数の生存期間を越えて、共有した式・空間を保持できる。
 
 try_ は Result 入力を表し、通常版も複合式では Result を返す。エラー型は ExpressionError に固定する。最初の入力 Err をそのまま返し、その後は Iterator の next を呼ばない。全入力が Ok の場合だけ合成を検証するため、入力エラーは先の項の空間不整合・重複より優先する。事前に配列・Vec を作った場合の生成処理や副作用は巻き戻さない。全入力成功後の合成検証が失敗する場合も、入力生成は最後まで行う。
 
-State::try_sum・try_tensor、Operator::try_sum・try_product_all を基礎 API として公開し、QuantumSystem はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
+State::try_sum・try_tensor_in、Operator::try_sum・try_product を基礎 API として公開し、ExpressionFactory はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
 
-各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の QuantumSystem 補助、局所式の集約用転送メソッドは後続候補として維持する。
+各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の ExpressionFactory 補助、局所式の集約用転送メソッドは後続候補として維持する。
+
+## 12. Ordinary / graded の共通評価と移行
+
+空間の `TensorKind` と有効な種類は[空間の API](hilbert-space.md#10-現在の公開-api)、primitive の parity / P は[局所能力](local-structure.md#8-grading-の局所能力と移行)に従う。`HilbertSpace<I>`・`State<I,S,O,C>`・`Operator<I,O,C>` の型引数は維持する。幾何・Index に grading の所有や符号処理を追加しない。
+
+### 12.1. 構築入口
+
+| 対象 | ordinary / graded 共通の入口 |
+| --- | --- |
+| State | `tensor_in(&space, states)` |
+| fallible な State | `try_tensor_in(&space, states)` |
+| ExpressionFactory | `tensor_in(&space, states)` |
+| fallible な ExpressionFactory | `try_tensor_in(&space, states)` |
+| primitive の配置・合成 | `product_state(&space, primitives)` |
+
+所属空間を先に構築し、状態構築ではその空間を共有する。状態の Tensor 節点は子の列だけを保持し、種類を重複して保存しない。状態側の種類指定版・`_g` 版・二項専用版は撤去した。HilbertSpace 側の種類指定 API は維持する。
+
+入力状態の葉の連結は指定空間の葉と順序も含めて完全一致し、複数因子の部分系の有効な種類も互換でなければならない。grouping は異なっていてよい。不足・過剰・重複・順序違い・種類不整合、primitive 数の不一致は `ExpressionError::IncompatibleSpaces` とする。第11節の入力エラー優先・消費停止を try_ 入口で維持する。
+
+空入力は零因子の単位空間だけで受理し、指定した空間のハンドルと grouping を保持する。単項も検証後に指定空間を保持する。`State::unit()` は正準的な単位空間を作る便宜として維持し、`State::zero(&space)` は指定空間上の零状態を作る。構築に Index・primitive の Clone や係数演算を追加要求しない。
+
+### 12.2. 共通 API と最小能力
+
+`evaluate`・`trace`・`expand`・`coordinates` と各明示空間版を ordinary / graded 共通の入口とし、種類別の評価 API や adapter を追加しない。Rust の trait bound は実行時の kind で切り替えられないため、ordinary 空間でも操作に必要な grading 能力を要求する。実際の符号処理は選択空間の `effective_kind()` で決め、ordinary では P の挿入や交差符号を加えない。
+
+| 操作 | 従来の能力に追加するもの |
+| --- | --- |
+| 複合状態の evaluate / 内積 / norm squared / 期待値 / 展開 / 座標と各明示空間版 | O の `HomogeneousParity + ParityOperator` |
+| 複合演算子の trace / Hilbert–Schmidt 内積と明示空間版 | O の `HomogeneousParity + ParityOperator` |
+| 複合演算子の展開 / 座標と明示空間版 | O の `HomogeneousParity`、C の `Neg<Output=C>`。Intrinsic な整列に P は不要 |
+| export / norm / 正規化 / 正規化期待値 | 呼び出す core の共通評価経路の能力を引き継ぐ |
+
+構築・配置・束縛・和・積・遅延した作用や随伴には評価能力を一律に要求せず、局所だけの API の bound も維持する。状態への作用は O の Product を要求しない。P を局所 Act で作用させて既存の Scale 節点を使うため、交差符号のためだけに C の One / Neg を追加要求せず、S の parity を直接問い合わせる必要もない。
+
+### 12.3. 遅延した Act の scope
+
+複合 Act は構築時に選択した HilbertSpace を保存する。未束縛の演算子構文は、明示空間、既存束縛、作用先状態の順で全空間を選ぶ。明示空間は旧束縛に優先する。束縛済み演算子同士の合成では、有効な種類の不一致も空間不整合となる。
+
+Odd な B と odd な状態 `s_a` に対し、次の二つを区別する。
+
+```text
+tensor_in(&H_ab, [s_a, s_b.act(B_b)])      // B の作用は H_b 内で構築済み
+tensor_in(&H_ab, [s_a, s_b]).act(B_b)      // B は H_a ⊗g H_b 上で作用
+```
+
+後者だけが `s_a` の parity による負号を持つ。評価タスクは Act ごとの scope に切り替わり、先に単因子上で構築した作用を外側の tensor に組み込んでも scope を拡大しない。先に評価してから tensor 合成する経路と遅延したまま合成する経路は一致し、展開・再構築でも意味を保存する。
+
+未評価の演算子構文は選択した全空間に対して解釈する。一方、作用評価済み・基底展開済みの結果を再束縛しても、元の未評価式が別空間で持つ作用を再現するとは限らない。自動的な再評価・source 保持は追加しない。
+
+### 12.4. Intrinsic な項と通常表現
+
+| 内部表現 | 内容・用途 |
+| --- | --- |
+| `IntrinsicOpTerms` | 演算子式を homogeneous な成分へ分け、選択空間の葉順に整列した項。graded 演算子基底の展開・座標に用いる |
+| `OrdinaryOpTerms` | 配置ごとに parity string を挿入した通常表現の局所因子列。full trace に用いる |
+
+Intrinsic な整列は異なる因子の odd 成分同士が交差するたびに負号を一度加え、同じ因子の局所積は元の順序を保つ。Index の値の大小では整列しない。積の随伴による順序反転後にも同じ整列を使い、tensor 随伴の符号を別に重ねない。
+
+Homogeneous な intrinsic 項の通常表現は次となる。
+
+```math
+\rho(A_0\otimes_g\cdots\otimes_g A_{n-1})
+=\bigotimes_{i=0}^{n-1}\left(A_i P_i^{q_i}\right),
+\qquad q_i=\sum_{j>i}p(A_j)\pmod 2.
+```
+
+P は A の右側に置く。例えば `A ⊗g B` は `A P^p(B) ⊗ B` となる。通常表現の因子列を再び intrinsic な graded 項として解釈せず、P や符号を二重に適用しない。これらは一時的な private 表現であり、公開の変換 API・全式共通の完全展開形・永続キャッシュではない。
+
+状態への作用は、選択した Act の scope 内で odd primitive の先行因子へ P を挿入する。混合 parity・もつれた状態にも P の実際の局所作用を使い、単一の定数符号に置き換えない。局所式の和・積・随伴も primitive ごとに処理する。状態全体の積和展開・全基底・密行列を共通の前処理にせず、作用しない枝を共有する。
+
+状態内積には追加符号がなく、full trace は通常表現で局所積・Trace を縮約する。P が入る可能性のある因子を下ろす前に identity spectator と判定しない。二 mode の `c_1 = P_0 ⊗ a_1` に対し、`c_1†c_1 = I_0 ⊗ n_1` の trace も検証する。通常の trace の巡回性に parity 符号を加えず、S・状態基底・usize で表せる総次元も要求しない。Hilbert–Schmidt 内積は同じ trace 経路を使う。Supertrace / partial trace は追加しない。
+
+空間検証は Zero・零係数・identity でも先に行い、不正な Index や空間を見逃さない。利用例は [tensor_products.rs](../../examples/src/bin/tensor_products.rs)。Fermion / spin-one の製品実装、異種 primitive、実質的な ordinary / graded 混在、permutation、regrouping、State / Operator の統合は対象外である。
+
+## 13. Ordinary / graded の受入確認（2026-10-29）
+
+Ordinary / graded の共通機構の実装時に行った受入確認を記録する。Fermion / spin-one の製品実装と v2 全体の完了は含まない。新しい本番依存は追加していない。
+
+| 対象 | 実装時の検証根拠 |
+| --- | --- |
+| kind・同一視・混在拒否・部分系・構築入口・fallible 優先順位 | [qmb-core/tests/tensor_products.rs](../../crates/qmb-core/tests/tensor_products.rs)、既存の spaces / fallible_construction / systems テスト |
+| 符号・CAR・作用・随伴・内積・trace・Hilbert–Schmidt 内積 | テスト専用二状態代数と独立 Kronecker 行列による二・三因子の照合（f32 / f64、ordinary / graded） |
+| Act scope・local embedding の準同型性・三つの odd 成分 | 同テストの scope / local expression / three odd factor ケース |
+| intrinsic 座標と通常行列・再展開・列挙・空の基底 | 同テストと [qmb-core/tests/basis_expansion.rs](../../crates/qmb-core/tests/basis_expansion.rs)。非正規直交な三状態基底も両種類で検証 |
+| 密疎 export と metadata | [qmb-export/tests/tensor_products.rs](../../crates/qmb-export/tests/tensor_products.rs) の Vec / ndarray / sprs、両精度の行列・遅延作用 vector |
+| 正規化・期待値 | [qmb-normalize/tests/tensor_products.rs](../../crates/qmb-normalize/tests/tensor_products.rs) の独立行列との照合（両精度） |
+| 最小能力・借用・共有・疎性 | 既存 capability / contract テストの移行、Product / 係数演算なしの graded 作用、80因子の分離状態と局所 trace、32因子の割り当て上限 |
+| 深い木 | 既存 ordinary 回帰と graded の2万段 wrapper の構築・比較・評価・破棄（128 KiB stack） |
+| spin-half・利用例 | 全 primitive が even、P=I、両種類での作用と trace の一致。[tensor_products.rs](../../examples/src/bin/tensor_products.rs) を実行 |
+
+非自明な grading の参照代数は[テスト専用二状態代数](../../crates/qmb-core/tests/support/graded.rs)であり、製品用 fermion API ではない。`|0>` even、`|1>` odd、`a=|0><1|`、`P=diag(1,-1)` とし、二 mode の基底順は `|00>,|01>,|10>,|11>` とする。独立した Kronecker 行列で `c_1|11>=-|10>`、`c_0 c_1|11>=-|00>`、`c_1 c_0|11>=|00>`、局所・異なる mode の CAR、`Tr(c_1†c_1)=2` を確認した。参照行列は評価器・export を使わずに構築し、intrinsic 座標と通常行列を別々に照合した。近似的な零成分の削除は行わない。
+
+Rust 1.98.0 の direnv devShell で次を実行し、成功した。
+
+- `cargo test --workspace --all-features`（doctest を含む）
+- `cargo check -p qmb-core -p qmb-geometry --no-default-features`
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`
+- `cargo fmt --all -- --check`
+- `cargo run -p examples --bin tensor_products`
+
+最終調整した構築入口と export の contract テストも再実行した。no_std の確認はホスト上のビルドであり、専用 target の検証ではない。MSRV 1.85 の実ビルド・専用 no_std target・性能ベンチマークは今回も未実施で、既存の [未実施事項](../future-work.md#3-未実施の検証と性能)として残す。

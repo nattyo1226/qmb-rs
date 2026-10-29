@@ -1,4 +1,4 @@
-//! Abstract algebra contracts, shared expressions and ordinary tensor spaces.
+//! Abstract algebra contracts, shared expressions and ordinary and graded tensor spaces.
 //!
 //! Expressions hold the whole coefficient `C`, including [`Complex<T>`](num_complex::Complex).
 //! Numeric bounds belong to individual operations; primitive types need not be
@@ -93,11 +93,14 @@ pub mod ops;
 pub mod space;
 pub mod system;
 
-pub use basis::{Basis, BasisError, Coordinates, operator_basis_len, state_basis_len};
+pub use basis::{Basis, BasisError, Coordinates, dim_op, dim_state};
 pub use coefficient::{Conjugate, Divide, ImaginaryUnit, RealPart};
 pub use error::DimensionOverflow;
 pub use expr::parts::{IntoTerms, LinearCombination, Term};
 pub use expr::{ExpressionError, LocalOperator, LocalState, Operator, State};
 pub use ops::{Act, Adjoint, Dimension, Identity, InnerProduct, Product, Trace};
-pub use space::{HilbertSpace, SpaceError};
-pub use system::{LocalOperatorOf, LocalStateOf, OperatorOf, QuantumSystem, StateOf};
+pub use ops::{HomogeneousParity, Parity, ParityOperator};
+pub use space::{HilbertSpace, SpaceError, TensorKind};
+pub use system::{
+    ExpressionFactory, LocalOperatorOf, LocalStateOf, OperatorOf, QuantumSystem, StateOf,
+};

@@ -83,7 +83,7 @@ spin-1/2 を標準例としてこの抽象化を検証する。spin-S、qudit、
 
 局所代数と局所自由度を組み合わせ、局所的だが複合的な代数を構築できるようにする。局所複合代数は通常の局所代数と同じ操作を提供し、構成する内部自由度とその順序を保持する。構築時に指定した内部自由度を、site への配置前後にも保持・利用できるようにする。大域空間の構成と配置側の対応は、3.3 節に定める。
 
-局所複合代数をさらに別の複合代数の構成要素にできるようにする。初期版の全基本因子は同じ局所構造とする。spinful fermion への graded な拡張、および独立した spin・orbital などの異種局所構造の合成は後続の機能候補である。
+局所複合代数をさらに別の複合代数の構成要素にできるようにする。全基本因子は同じ局所構造とし、spinful fermion は単一 mode の graded 合成で表す。実装と位相規約は [graded 合成・spinful への接続](design/local-structure.md#95-graded-合成spinful-への接続)に記録する。独立した spin・orbital などの異種局所構造の合成は後続の機能候補とする。
 
 局所複合代数の空間は、子に複合空間を含められる Hilbert 空間の再帰構造で表す。数学的能力は、子の局所規則と共通の合成・評価機構から処理する。Grouping は空間の木の括り方で表し、そのための独立した Group 型は追加しない。詳細は [Hilbert 空間の再帰構造](design/hilbert-space.md)に定める。
 
@@ -867,9 +867,9 @@ Periodic chain では、次の規約を採用する。
 
 Chain はサイト数と境界条件だけを保持し、Index の入力・発行・空間への変換は行わない。利用側が Site 順の局所空間列を構築し、借用して接続する。一要素は一 Site であり、葉・入れ子・複数葉・単項 Tensor・空 Site を受け入れる。
 
-`nn_site_pairs_with` は任意の入力要素への参照対、`nn_pairs_with` は最近接 Site 間の全葉の直積、`nn_pairs_by_pos_with` は短い方までの葉の位置対応を返す。いずれも Iterator を返す前に列長の完全一致を検証し、要素や Index の Clone・Eq を要求しない。`_on` の入口は全空間の保存されたトップレベル分割を Site と読み、対応する `_with` へ委譲する。葉は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site と読む。
+`nn_site_pairs_with` は任意の入力要素への参照対、`nn_pairs_with` は最近接 Site 間の全葉の直積、`nn_zip_with` は短い方までの葉の位置対応を返す。いずれも Iterator を返す前に列長の完全一致を検証し、要素や Index の Clone・Eq を要求しない。`_in` の入口は全空間の保存されたトップレベル分割を Site と読み、対応する `_with` へ委譲する。葉は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site と読む。
 
-標準モデルの入口は `SpinHalf<C>::xyz`・`heisenberg`・`neel` とし、Chain と局所空間列を受け取る。全空間の引数は不要である。各関数は列長と全局所空間にわたる Index 重複を辺の有無によらず検証し、I には Eq のみを要求する。局所空間ハンドルを共有して Site 順に tensor した空間へ Hamiltonian を束縛し、内部 grouping と相互作用に現れない Site も保持する。別途存在する全空間の root・上位 grouping・異なる因子順序を復元する契約は持たない。既存状態・行列の暗黙の並べ替えは行わない。
+標準モデルの入口は `models::SpinHalfModels<SpinHalf<C>>::xyz`・`heisenberg`・`neel` とし、Chain と局所空間列を受け取る。全空間の引数は不要である。各関数は列長と全局所空間にわたる Index 重複を辺の有無によらず検証し、I には Eq のみを要求する。局所空間ハンドルを共有して Site 順に tensor した空間へ Hamiltonian を束縛し、内部 grouping と相互作用に現れない Site も保持する。別途存在する全空間の root・上位 grouping・異なる因子順序を復元する契約は持たない。既存状態・行列の暗黙の並べ替えは行わない。
 
 空 Site は位置を保持し、葉ペアを生成せず、前後を直接接続し直さない。Index 発行は利用側で明示的に行い、共有による Index の Clone・再発行は不要である。契約とエラー型は[Chain の設計](design/geometry.md)に従う。
 
@@ -897,7 +897,7 @@ Hermiticity と解析的なエネルギー期待値の検証には、実数の�
 - 構築した Heisenberg Hamiltonian が Hermitian である。
 - 代数的な演算子作用および内積から得た期待値が解析解と一致する。
 
-配置について、非 Clone・非 Eq の入力要素への借用、列長の過不足、全葉の Index 重複拒否、入れ子・空・可変長の局所空間を検証する。両葉ペア列挙の順序、トップレベルと全葉の区別、`_on` と `_with` の一致も確認する。
+配置について、非 Clone・非 Eq の入力要素への借用、列長の過不足、全葉の Index 重複拒否、入れ子・空・可変長の局所空間を検証する。両葉ペア列挙の順序、トップレベルと全葉の区別、`_in` と `_with` の一致も確認する。
 
 モデル構築側は局所 grouping の共有、Site 順に生成する全空間の因子順序、複数葉の全組み合わせ結合、空 Site の偶奇と非再接続、0 Site・全空の場合、および一葉の場合の従来の数値結果との一致を検証する。
 
@@ -965,7 +965,7 @@ H = -J \sum_{\langle i,j\rangle}
 - 積和から和積への因数分解
 - 特定の簡約ルールのみを選択して適用する独立した式変形操作
 - source の自動保持、式の構造比較、および式表示 API
-- Graded tensor product・fermion の実装。対応する数学的契約は保持する
+- Fermion の製品実装。Ordinary / graded の共通機構は実装済みであり、[複合式の共通評価](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)に記録する
 - 保存・復元、評価結果のキャッシュ、並列評価・スレッド間共有
 - Spin-1/2 以外の builtin algebra、1D Chain 以外の Geometry、ML・tensor network などへの追加接続
 
@@ -1034,14 +1034,16 @@ Fermion などについて本文書で定める合成・評価・検証規約は
 
 ## 11. 型選択の構築 API
 
-`qmb_core::QuantumSystem` は `State`・`Operator`（primitive 型）・`Coeff` を関連型とし、`state(primitive)`・`operator(primitive)` の既定メソッドで既存の局所式を返す。構築時に Clone・数値演算・Act などを要求せず、評価の能力は各操作で要求する。空間・幾何・Index 発行は担わず、選択した系の識別子を式へ加えない。既存 constructor の直接利用も維持する。
+`qmb_core::QuantumSystem` は `State`・`Operator`（primitive 型）・`Coeff` だけを関連型として持つ。構築は `qmb_core::ExpressionFactory<S,O,C>` の inherent method `state(primitive)`・`operator(primitive)` から既存の局所式を返す。構築時に Clone・数値演算・Act などを要求せず、評価の能力は各操作で要求する。空間・幾何・Index 発行は担わず、選択した系の識別子を式へ加えない。既存 constructor の直接利用も維持する。
 
 `LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は関連型を既存の core 式型へ投影する別名である。`qmb_spin_half::SpinHalf<C>` は精度の既定値を持たず、C を一度選んで状態・演算子・モデルの戻り値へ引き継ぐ。異なる係数精度の暗黙変換や個別 primitive 用メソッドは追加しない。選択済みの Q は入口で指定し、投影を逆向きに推論できることは前提にしない。
 
 ### 11.1. 構築・集約の共通入口（2026-10-28）
 
-QuantumSystem は state_tensor_at・operator_product_at、state_sum・operator_sum・state_tensor・operator_product と各集約の try_ 版を既定メソッドとして提供する。構築は選択した Q から、構築後の操作・評価は式から行う。_at は葉と primitive の組を受け取って配置・合成する入口とし、裸の基本名は構築済みの式を集約する。既存の core constructor は維持する。
+ExpressionFactory は product_state・operator_product_at、state_sum・operator_sum・tensor_in・operator_product と各集約の try_ 版を inherent method として提供する。構築は選択した Q から、構築後の操作・評価は式から行う。_at は葉と primitive の組を受け取って配置・合成する入口とし、裸の基本名は構築済みの式を集約する。状態のテンソル構築には既存空間を明示し、状態側の旧 tensor constructor は撤去する。種類は HilbertSpace に集約し、状態の Tensor 節点には重複保持しない。product_state は葉の順序に対応する状態 primitive の列を受け取る。
 
 scaled は4式型と LinearCombination で `impl Into<C>` を受け取り、入口で一度だけ変換する。式の保持に数値能力・Clone を追加せず、LinearCombination の既存の乗算用制約は維持する。選択済みの精度を変更しない。型推論の完全互換は要求せず、構築入口の型注釈や不要な into() の除去で移行する。
 
-try_ の入力エラーは ExpressionError に固定し、最初の入力 Err で Iterator の消費を止める。全入力が成功した後に空間・束縛を検証する。既に行った入力生成の副作用は巻き戻さず、部分的な和・積は返さない。順序・重複・零係数を保存し、合成時に primitive を評価しない。空・単項、状態の重複拒否、演算子の重複受理、束縛の選択は既存 constructor の規約を維持する。詳細は[複合式の構築 API](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に定める。
+try_ の入力エラーは ExpressionError に固定し、最初の入力 Err で Iterator の消費を止める。全入力が成功した後に空間・束縛を検証する。既に行った入力生成の副作用は巻き戻さず、部分的な和・積は返さない。順序・重複・零係数を保存し、合成時に primitive を評価しない。空・単項、状態の重複拒否、演算子の重複受理、束縛の選択は既存 constructor の規約を維持する。詳細は[複合式の構築 API](design/composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)に定める。
+
+QuantumSystem trait は型情報に限定し、ExpressionFactory に一括実装する。SpinHalf・SpinOne・Fermion は ExpressionFactory の型エイリアス、モデル固有構築は各 models module の SpinHalfModels・SpinOneModels・FermionModels に分離する。基本構築にもモデル構築にも trait import を要求しない。通常の式の二項加算・乗算は標準の `+` / `*`、列集約は `sum` / `product` を使い、primitive の独自規則 `Product::product` は維持する。

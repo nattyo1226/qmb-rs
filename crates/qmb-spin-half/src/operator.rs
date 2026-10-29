@@ -104,3 +104,14 @@ impl Dimension for SpinHalfOperator {
         Ok(core::num::NonZeroUsize::new(4).unwrap())
     }
 }
+
+impl qmb_core::HomogeneousParity for SpinHalfOperator {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for SpinHalfOperator {
+    fn parity_operator() -> Self {
+        Self::I
+    }
+}

@@ -5,7 +5,7 @@ use std::num::NonZeroUsize;
 use num_complex::Complex;
 use qmb_core::{
     Act, Adjoint, Basis, Dimension, DimensionOverflow, Identity, InnerProduct, LinearCombination,
-    Product, Trace, operator_basis_len, state_basis_len,
+    Product, Trace, dim_op, dim_state,
 };
 
 #[path = "support/three_level.rs"]
@@ -95,7 +95,7 @@ fn check_rules<T: Real>() {
 
 fn check_state_basis<T: Real, B: Basis<Ket, Complex<T>>>(basis: &B) {
     let elements: Vec<_> = basis.elements().collect();
-    assert_eq!(elements.len(), state_basis_len::<Ket>().unwrap());
+    assert_eq!(elements.len(), dim_state::<Ket>().unwrap());
     for (i, p) in elements.iter().enumerate() {
         assert_eq!(basis.index(p), Some(i));
     }
@@ -131,7 +131,7 @@ fn check_bases<T: Real>() {
     require_operator_basis::<T, _>(&MatrixUnits);
     let elements: Vec<_> =
         <MatrixUnits as Basis<Operator, Complex<T>>>::elements(&MatrixUnits).collect();
-    assert_eq!(elements.len(), operator_basis_len::<Operator>().unwrap());
+    assert_eq!(elements.len(), dim_op::<Operator>().unwrap());
     for (i, p) in elements.iter().enumerate() {
         assert_eq!(
             <MatrixUnits as Basis<Operator, Complex<T>>>::index(&MatrixUnits, p),
@@ -184,26 +184,23 @@ impl<const D: usize> Dimension for SquaredDimension<D> {
 
 #[test]
 fn basis_dimensions_handle_unit_large_and_overflow_cases() {
-    assert_eq!(state_basis_len::<FixedDimension<1>>().unwrap(), 1);
-    assert_eq!(operator_basis_len::<SquaredDimension<1>>(), Ok(1));
-    assert_eq!(state_basis_len::<Ket>().unwrap(), 3);
-    assert_eq!(operator_basis_len::<Operator>(), Ok(9));
+    assert_eq!(dim_state::<FixedDimension<1>>().unwrap(), 1);
+    assert_eq!(dim_op::<SquaredDimension<1>>(), Ok(1));
+    assert_eq!(dim_state::<Ket>().unwrap(), 3);
+    assert_eq!(dim_op::<Operator>(), Ok(9));
     const FITS: usize = 1 << (usize::BITS / 2 - 1);
     const OVERFLOWS: usize = 1 << (usize::BITS / 2);
+    assert_eq!(dim_op::<SquaredDimension<FITS>>(), Ok(FITS * FITS));
     assert_eq!(
-        operator_basis_len::<SquaredDimension<FITS>>(),
-        Ok(FITS * FITS)
-    );
-    assert_eq!(
-        operator_basis_len::<SquaredDimension<OVERFLOWS>>(),
+        dim_op::<SquaredDimension<OVERFLOWS>>(),
         Err(DimensionOverflow)
     );
     assert_eq!(
-        state_basis_len::<FixedDimension<{ usize::MAX }>>().unwrap(),
+        dim_state::<FixedDimension<{ usize::MAX }>>().unwrap(),
         usize::MAX
     );
     assert_eq!(
-        operator_basis_len::<SquaredDimension<{ usize::MAX }>>(),
+        dim_op::<SquaredDimension<{ usize::MAX }>>(),
         Err(DimensionOverflow)
     );
     let error: &dyn core::error::Error = &DimensionOverflow;
@@ -251,7 +248,7 @@ fn check_three_level_expressions<T: Real>() {
             }
         }
         for b in &operators {
-            let product = a_expr.product(&O::primitive(*b));
+            let product = a_expr.clone() * &O::primitive(*b);
             let expected = matmul(a_matrix, matrix(*b));
             let expected_adjoint =
                 std::array::from_fn(|i| std::array::from_fn(|j| expected[j][i].conj()));
@@ -275,7 +272,7 @@ fn check_three_level_expressions<T: Real>() {
             let a_adjoint = std::array::from_fn(|i| std::array::from_fn(|j| a_matrix[j][i].conj()));
             let hs = matmul(a_adjoint, matrix(*b));
             assert_complex(
-                a_expr.hilbert_schmidt_inner_product(&O::primitive(*b)),
+                a_expr.hs_inner_product(&O::primitive(*b)),
                 (0..3).fold(c(0.0, 0.0), |sum, i| sum + hs[i][i]),
             );
         }
@@ -284,7 +281,7 @@ fn check_three_level_expressions<T: Real>() {
     // must preserve overlaps, rather than interpreting coefficients as coordinates.
     for primitive in KETS {
         let terms = <NonOrthogonal as Basis<Ket, Complex<T>>>::expand(&NonOrthogonal, &primitive);
-        let imported = S::from_linear_combination(terms.map(S::primitive));
+        let imported = S::from_terms(terms.map(S::primitive));
         assert_vector(expression_coordinates(&imported), primitive.coordinates());
         assert_complex(
             imported.inner_product(&imported),
@@ -297,7 +294,7 @@ fn check_three_level_expressions<T: Real>() {
         matrix(Operator::Identity),
     );
     assert_complex(O::<T>::identity().trace(), c(3.0, 0.0));
-    let basis_operator = O::from_linear_combination(
+    let basis_operator = O::from_terms(
         <MatrixUnits as Basis<Operator, Complex<T>>>::expand(&MatrixUnits, &Operator::Identity)
             .map(O::primitive),
     );
@@ -370,10 +367,13 @@ fn composite_coordinates<T: Real>(
         let right = LocalState::primitive(Ket::Unit(AXES[n % 3]))
             .at(&factors[1])
             .unwrap();
-        left.tensor_product(&right)
-            .unwrap()
-            .inner_product(&evaluated)
-            .unwrap()
+        qmb_core::State::tensor_in(
+            &CompositeSpace::tensor_all(factors.iter().cloned()).unwrap(),
+            [left, right],
+        )
+        .unwrap()
+        .inner_product(&evaluated)
+        .unwrap()
     })
 }
 
@@ -387,27 +387,34 @@ fn check_three_level_composites<T: Real>() {
     use qmb_core::{LocalOperator as O, LocalState as S};
     let factors = [CompositeSpace::factor(17), CompositeSpace::factor(3)];
     let [a, b] = &factors;
-    let h = a.tensor_product(b).unwrap();
+    let h = a.tensor(b).unwrap();
     let grouped = a
-        .tensor_product(&CompositeSpace::tensor([CompositeSpace::unit(), b.clone()]).unwrap())
+        .tensor(&CompositeSpace::tensor_all([CompositeSpace::unit(), b.clone()]).unwrap())
         .unwrap();
     assert!(h.is_compatible_with(&grouped));
 
     // Import a nonorthogonal expansion, then place the whole local expression.
     // The reference uses literal ket coordinates, not basis expansion or Act.
-    let local = S::<Ket, Operator, Complex<T>>::from_linear_combination(
+    let local = S::<Ket, Operator, Complex<T>>::from_terms(
         <NonOrthogonal as Basis<Ket, Complex<T>>>::expand(&NonOrthogonal, &Ket::Phase)
             .map(S::primitive),
     );
     let left = local.at(a).unwrap();
     let right = S::primitive(Ket::Sum).at(b).unwrap();
-    let first = left.tensor_product(&right).unwrap();
-    let second = S::primitive(Ket::Unit(Axis::C))
-        .at(a)
-        .unwrap()
-        .tensor_product(&S::primitive(Ket::Phase).at(b).unwrap())
-        .unwrap();
-    let state = first.add(&second.scaled(c(-0.2, 0.3))).unwrap();
+    let first = qmb_core::State::tensor_in(
+        &CompositeSpace::tensor_all(factors.iter().cloned()).unwrap(),
+        [left, right],
+    )
+    .unwrap();
+    let second = qmb_core::State::tensor_in(
+        &h,
+        [
+            S::primitive(Ket::Unit(Axis::C)).at(a).unwrap(),
+            S::primitive(Ket::Phase).at(b).unwrap(),
+        ],
+    )
+    .unwrap();
+    let state = (first.clone() + &second.scaled(c(-0.2, 0.3))).unwrap();
     let x = tensor_vector(Ket::Phase.coordinates::<T>(), Ket::Sum.coordinates());
     let y = tensor_vector(Ket::Unit(Axis::C).coordinates(), Ket::Phase.coordinates());
     let reference = std::array::from_fn(|i| x[i] + c::<T>(-0.2, 0.3) * y[i]);
@@ -424,11 +431,12 @@ fn check_three_level_composites<T: Real>() {
         .collect();
     let identity = matrix(Operator::Identity);
     for &oa in &primitives {
-        let alpha = O::<Operator, Complex<T>>::primitive(oa)
+        let alpha = (O::<Operator, Complex<T>>::primitive(oa)
             .at(a)
             .unwrap()
             .scaled(c(0.3, -0.4))
-            .add(&CompositeOperator::scalar(c(-0.1, 0.2)))
+            .clone()
+            + &CompositeOperator::scalar(c(-0.1, 0.2)))
             .unwrap();
         let am: PairMatrix<T> = std::array::from_fn(|i| {
             std::array::from_fn(|j| {
@@ -437,15 +445,11 @@ fn check_three_level_composites<T: Real>() {
             })
         });
         for &ob in &primitives {
-            let beta = O::primitive(ob)
-                .at(b)
-                .unwrap()
-                .add(
-                    &O::primitive(Operator::Unit(Axis::B, Axis::A))
-                        .at(a)
-                        .unwrap()
-                        .scaled(c(0.2, 0.1)),
-                )
+            let beta = (O::primitive(ob).at(b).unwrap().clone()
+                + &O::primitive(Operator::Unit(Axis::B, Axis::A))
+                    .at(a)
+                    .unwrap()
+                    .scaled(c(0.2, 0.1)))
                 .unwrap();
             let bm: PairMatrix<T> = std::array::from_fn(|i| {
                 std::array::from_fn(|j| {
@@ -454,7 +458,7 @@ fn check_three_level_composites<T: Real>() {
                             * kronecker(matrix(Operator::Unit(Axis::B, Axis::A)), identity)[i][j]
                 })
             });
-            let product = alpha.product(&beta).unwrap();
+            let product = (alpha.clone() * &beta).unwrap();
             let pm = pair_multiply(am, bm);
             let applied = state.act(&product).unwrap();
             assert_pair_vector(
@@ -477,7 +481,7 @@ fn check_three_level_composites<T: Real>() {
                 pair_dot(reference, pair_apply(pm, reference)),
             );
             assert_complex(
-                alpha.hilbert_schmidt_inner_product_in(&beta, &h).unwrap(),
+                alpha.hs_inner_product_in(&beta, &h).unwrap(),
                 pair_trace(pair_multiply(pair_adjoint(am), bm)),
             );
         }
@@ -513,7 +517,7 @@ fn check_inner_products_and_squared_norms<T: Real>() {
         Complex::new(overlapping.norm_squared(), T::zero()),
         c(6.0, 0.0),
     );
-    let imported = S::<Ket, Operator, Complex<T>>::from_linear_combination(
+    let imported = S::<Ket, Operator, Complex<T>>::from_terms(
         <NonOrthogonal as Basis<Ket, Complex<T>>>::expand(&NonOrthogonal, &Ket::Unit(Axis::B))
             .map(S::primitive),
     );
@@ -545,23 +549,15 @@ fn check_inner_products_and_squared_norms<T: Real>() {
     }
     let a = CompositeSpace::factor(11);
     let b = CompositeSpace::factor(7);
-    let h = a.tensor_product(&b).unwrap();
-    let first = x
-        .at(&a)
-        .unwrap()
-        .tensor_product(&y.at(&b).unwrap())
-        .unwrap();
-    let second = y
-        .at(&a)
-        .unwrap()
-        .tensor_product(&z.at(&b).unwrap())
-        .unwrap();
+    let h = a.tensor(&b).unwrap();
+    let first = qmb_core::State::tensor_in(&h, [x.at(&a).unwrap(), y.at(&b).unwrap()]).unwrap();
+    let second = qmb_core::State::tensor_in(&h, [y.at(&a).unwrap(), z.at(&b).unwrap()]).unwrap();
     assert_complex(
         Complex::new(first.norm_squared().unwrap(), T::zero()),
         c(4.0, 0.0),
     );
 
-    let sum = first.scaled(alpha).add(&second.scaled(beta)).unwrap();
+    let sum = (first.scaled(alpha).clone() + &second.scaled(beta)).unwrap();
     assert_complex(
         sum.inner_product(&first).unwrap(),
         conjugate(alpha) * first.inner_product(&first).unwrap()
