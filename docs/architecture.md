@@ -56,7 +56,7 @@ qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs �
 
 `qmb-fermion` は `no_std + alloc` で、二状態の単一 mode、I・a・a†・n・su(2) 規格化した MajoranaX/Y/Z・Parity の八つの primitive を提供する。状態基底は OccupationBasis、演算子基底は LadderBasis と MajoranaBasis とする。`Fermion<C>` は既存 QuantumSystem の構築入口を使い、局所規則に Float・係数の Clone / Copy を要求しない。
 
-複数 mode の交換符号は primitive の parity と core の graded 評価に委ねる。モデル構築は `Fermion::hubbard`・`symmetric_hubbard` に、Chain と各 Site が `(up,down)` の2 mode を持つ graded 空間列を渡す。両モデルの係数 bound は `Clone + From<R> + Neg` だけであり、構築に局所 Product・Act を要求しない。規約・受入条件・検証記録は [Fermion の実装計画](plans/v2/fermion-primitives.md)、利用例は [hubbard.rs](../examples/src/bin/hubbard.rs) に記録する。
+複数 mode の交換符号は primitive の parity と core の graded 評価に委ねる。モデル構築は `Fermion::hubbard`・`symmetric_hubbard` に、Chain と各 Site が `(up,down)` の2 mode を持つ graded 空間列を渡す。両モデルの係数 bound は `Clone + From<R> + Neg` だけであり、構築に局所 Product・Act を要求しない。規約・基底・検証記録は [Fermion の局所代数](design/local-structure.md#9-fermion-の局所代数)、モデル API は [Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)、利用例は [hubbard.rs](../examples/src/bin/hubbard.rs) に記録する。
 
 ## 3. Index・自由度・局所構造・空間
 
@@ -158,7 +158,7 @@ Index は引き続き Eq だけで照合し、共有に Clone・再発行を要�
 
 2026-10-27に、partial trace と写像の表現行列・表現係数を future work とし、Step 5 の担当範囲と初期版の必須機能・検証項目から外した。基底処理と数値接続の実装は、これらの機能を前提条件にしない。
 
-標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、fermion の製品実装、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
+初期版の標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。初期版から延期した fermion は第2.4節のとおり実装済みである。異種局所構造の混在・合成、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は引き続き後続とする。
 
 完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として実装済みである。後続へ延期した機能は[今後の課題](future-work.md)にまとめる。
 
@@ -201,4 +201,4 @@ LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を
 
 2026-10-29 に共通機構を実装した。`HilbertSpace<I>` が `TensorKind` と順序を保持し、primitive が `HomogeneousParity` / `ParityOperator` を提供する。共通の作用評価では Act ごとの選択済み空間に従って P を挿入する。演算子の intrinsic な基底展開と通常表現による trace は private な走査型を分ける。export / normalize は core の共通 API に接続する。
 
-空・単因子の同一視後にも残る異種 tensor kind の混在は拒否する。幾何・Index に grading の責任は追加しない。構築 API・最小能力と breaking change は [複合式の共通評価と移行](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。Fermion / spin-one の製品実装や Operator / State 統合の完了を意味しない。
+空・単因子の同一視後にも残る異種 tensor kind の混在は拒否する。幾何・Index に grading の責任は追加しない。構築 API・最小能力と breaking change は [複合式の共通評価と移行](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。Fermion の製品実装は第2.4節に記録する。Spin-one の製品実装と Operator / State 統合は後続に残す。

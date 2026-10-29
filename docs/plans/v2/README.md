@@ -12,14 +12,13 @@
 | 機能 | 内容 |
 | --- | --- |
 | Graded tensor product | 共通機構を実装済み。[共通評価と移行](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照 |
-| Fermion | `qmb-fermion` に局所代数、Majorana 系・parity、graded 接続、標準 Hubbard・symmetric Hubbard を実装。詳細・検証は下記文書を参照 |
+| Fermion | `qmb-fermion` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#9-fermion-の局所代数)と[標準／symmetric Hubbard](../../design/geometry.md#6-fermion-の-hubbard-モデル)を参照 |
 | Spin-one | Spin-1 の局所代数の提供 |
 
-Fermion の仕様・実装と検証記録、spin-one の詳細な実装案は以下に記録する。Graded tensor product の実装済み契約は設計文書に記録する。
+Graded tensor product と Fermion の実装済み仕様・検証記録は設計文書に集約する。このディレクトリには未実装の Spin-one の計画を保持する。
 
 ## 詳細検討
 
-- [Fermion の局所 primitive 実装案](fermion-primitives.md)：単一 mode の局所規則・parity・基底・係数要件、spinful への接続と標準 Hubbard・symmetric Hubbard のモデル構築。
 - [Spin-one の局所 primitive 実装案](spin-one-primitives.md)：三状態・全九次元演算子空間の表現、局所規則・完全基底・√2 の係数能力。
 
 ## 関連文書
