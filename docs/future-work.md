@@ -1,6 +1,6 @@
 # 今後の課題
 
-更新日: 2026-10-28
+更新日: 2026-10-30
 
 初期版の機能実装と受入確認を完了した時点で、後続へ延期した機能、設計上の課題、および未実施の検証をまとめる。具体的な実施日と優先順位は未定である。必須の設計見直しと、実装するかどうかも含めて検討する機能候補は区別する。
 
@@ -11,20 +11,23 @@
 State・Operator・Structure・Space の管理方法は、所有・共有・関連付け、および Geometry と空間の依存関係を含めて再検討し、より適切な設計へリファクタリングする。具体的な設計と実施時期は未定である。[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)に経緯を記録する。
 
 - **Operator と State の整理**：操作的量子論の枠組みで両者を一般の演算子の特別な形として整理できるかを検討し、数学的対象と API の対応、共通化する範囲と別に維持する範囲を理由とともに記録する。公開型や評価器を統合するかどうかも検討対象とする。論点と完了条件は[アーキテクチャ第10.1節](architecture.md#101-operator-と-state-の整理)に定める。
-- **Grading の情報保持と API**：fermion 系の実装時に、空間・primitive・合成則が担う情報と空間構築・幾何接続への渡し方を具体化する。Operator と State の整理とは独立に検討する。詳細は[アーキテクチャ第10.2節](architecture.md#102-grading-の情報保持と-api)に定める。
+
+Grading の情報保持と共通評価 API は実装済み。空間が kind、primitive が parity / P、core が符号を担う。API と移行は[複合式の共通評価](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)、局所契約は[grading 能力](design/local-structure.md#8-grading-の局所能力と移行)に記録する。
 
 係数型・数値能力の整理、LocalStructure の廃止、ordinary な HilbertSpace の責任分離、および純粋な Chain と外部局所空間列への移行、QuantumSystem と SpinHalf<C> の構築 API は実装済みである。
 
 ## 2. 延期した機能と検討事項
 
+構築入口の補助、エラー診断、利用開始の導線など、API の使いやすさに関する候補は[専用の検討文書](plans/api-usability/README.md)にまとめる。
+
 - **Partial trace**：公開 API、遅延節点、残存空間の構築、評価器への接続、および検証を延期する。残存因子の Index・局所構造・順序を保持する数学的契約は[要件第5.4節](requirements.md#54-full-trace-と-partial-trace)と[複合式の設計](design/composite-expression.md#7-full-tracepartial-trace-と埋め込み)に保持する。実施時期は未定である。
 - **写像の表現行列・表現係数**：共通 API、複数入力、入力ごとの共役指定、係数データの保持・再利用と対応する検証を延期する。表現係数の生成は将来の `qmb-core` の担当とし、数学的契約は[写像の表現行列の設計](design/representation-matrix.md)に保持する。状態・演算子の座標取得と密・疎 export はこの機能に依存しない。実施時期は未定である。
 - **局所代数と基底の拡張**：一つの系で異種局所構造を混在・合成する機能と、そのための型消去・保持方式を延期する。実行時の局所構造パラメータや異なる実装型間の定義照合も後続の検討事項である。初期版の複合基底は一つの局所基底を全因子へ適用するため、因子ごとに異なる基底の指定は扱わない。
-- **Graded tensor product・fermion**：実装は延期する。合成・作用・随伴・通常の trace に関する数学的契約は[複合式の設計](design/composite-expression.md#5-ordinary--graded-の合成則)に保持する。
+- **Fermion の追加機能**：単一 mode の局所代数・Majorana 系・graded 接続と標準／symmetric Hubbard は `qmb-fermion` に実装した。汎用 spinful 構築 utility、粒子数 sector、任意格子・可変結合などは後続とする。[局所代数と検証の記録](design/local-structure.md#9-fermion-の局所代数)・[Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)を参照する。
 - **式と空間の操作**：bra 型・構築 API、内部ラベル、部分空間・射影・制約付き部分空間、積和から和積への因数分解、因子の permutation、個別の簡約ルールを選択して適用する操作、および任意の式型を分解結果から組み立て直す汎用機構を延期する。braket は内積で計算し、grouping は既存の HilbertSpace を用いる。通常の評価・基底展開に必要な分配・局所積・係数処理や、共通式の構築は引き続き提供する。延期した機構の詳細は[要件第9.2節](requirements.md#92-未決延期した機構と操作)に記録する。
 - **式の管理**：source の自動保持、式の構造比較・表示 API、保存・復元を延期する。入力の不変性と不変実体の共有は維持する。
 - **キャッシュと並列化**：評価結果のキャッシュ、並列評価・スレッド間共有は未決である。キャッシュの導入可否・対象・保持先・再利用条件・破棄・資源管理と、スレッド間共有の条件・並列実行方式を検討する。初期版は要求時の計算と単一スレッドの評価でよい。
-- **追加の代数・幾何と外部接続**：spin-1/2 以外の builtin algebra、1D Chain 以外の Geometry、ML・自動微分 module、tensor network・MPS・MPO、GPU・分散計算などへの接続を延期する。追加候補の詳細は[要件第9.3節](requirements.md#93-追加の機能候補)に記録する。
+- **追加の代数・幾何と外部接続**：spin-1/2・spin-1・fermion 以外の builtin algebra、1D Chain 以外の Geometry、ML・自動微分 module、tensor network・MPS・MPO、GPU・分散計算などへの接続を延期する。spin-1 の XYZ・Heisenberg・BLBQ は[モデル構築](design/geometry.md#7-spinone-のモデル構築)として実装済みである。追加基底・一般 spin-S は[Spin-one の後続範囲](design/local-structure.md#107-後続の範囲)を参照する。追加候補の詳細は[要件第9.3節](requirements.md#93-追加の機能候補)に記録する。
 
 後続機能のための crate は先に作らず、必要な責任と依存関係が具体化した段階で検討する。
 
@@ -33,7 +36,7 @@ State・Operator・Structure・Space の管理方法は、所有・共有・関�
 初期版の受入確認時点では、次の検証は実施していない。
 
 - MSRV（Rust 1.85）での実ビルド・テスト。受入確認時は利用者の依頼により省略した。
-- 専用 no_std target での実ビルド。`qmb-core`・`qmb-geometry` の `no_std + alloc` は、ソース、依存 feature、およびホスト上の単独ビルドによる確認にとどまる。
+- 専用 no_std target での実ビルド。`qmb-core`・`qmb-geometry`・`qmb-fermion` の `no_std + alloc` は、ソース、依存 feature、およびホスト上の単独ビルドによる確認にとどまる。
 - 性能ベンチマーク、速度比較、および追加の割り当て最適化の検証。
 
 演算子式の積に含まれる和は既存の走査で分配されるため、結果が疎でも項数が増大する場合がある。式の構造を利用し、先に局所的な和をまとめる最適化は後続の検討対象とする。

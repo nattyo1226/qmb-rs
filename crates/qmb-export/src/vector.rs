@@ -1,58 +1,12 @@
-use crate::{Export, ExportError, Exported, VectorMetadata, error::reserve};
+use crate::{
+    Export, ExportError, Exported, VectorMetadata, backend::VectorStorage,
+    coordinates::into_flat_entries,
+};
 use num_traits::{One, Zero};
 use qmb_core::{
-    Act, Adjoint, Basis, Conjugate, Coordinates, DimensionOverflow, HilbertSpace, LocalState,
-    SpanDimension, State,
+    Act, Adjoint, Basis, Conjugate, Coordinates, Dimension, HilbertSpace, LocalState, State,
 };
 use std::{marker::PhantomData, ops::Mul};
-
-// Storage adapters share coordinate extraction, metadata and precision handling.
-pub(crate) trait VectorStorage<C>: Sized {
-    fn build(
-        dimension: usize,
-        entries: impl ExactSizeIterator<Item = Result<(usize, C), ExportError>>,
-    ) -> Result<Self, ExportError>;
-}
-
-impl<C: Zero> VectorStorage<C> for Vec<C> {
-    fn build(
-        dimension: usize,
-        entries: impl ExactSizeIterator<Item = Result<(usize, C), ExportError>>,
-    ) -> Result<Self, ExportError> {
-        let mut values = Vec::new();
-        reserve(&mut values, dimension)?;
-        values.resize_with(dimension, C::zero);
-        for entry in entries {
-            let (index, value) = entry?;
-            *values.get_mut(index).ok_or(ExportError::InvalidShape)? = value;
-        }
-        Ok(values)
-    }
-}
-
-pub(crate) fn flat_index(digits: &[usize], local: Option<usize>) -> Result<usize, ExportError> {
-    let mut index = 0usize;
-    for &digit in digits {
-        let radix = local.ok_or(ExportError::InvalidShape)?;
-        if digit >= radix {
-            return Err(ExportError::InvalidShape);
-        }
-        index = index
-            .checked_mul(radix)
-            .and_then(|n| n.checked_add(digit))
-            .ok_or(DimensionOverflow)?;
-    }
-    Ok(index)
-}
-
-pub(crate) fn owned_entries<B, C, H>(
-    coordinates: Coordinates<'_, B, C, H>,
-) -> impl ExactSizeIterator<Item = Result<(usize, C), ExportError>> {
-    let local = coordinates.local_dimension();
-    coordinates
-        .into_entries()
-        .map(move |(digits, c)| Ok((flat_index(&digits, local)?, c)))
-}
 
 impl<'b, B, C, H: Clone, D: VectorStorage<C>> Export<Exported<D, VectorMetadata<'b, B, H>>>
     for Coordinates<'b, B, C, H>
@@ -62,12 +16,12 @@ impl<'b, B, C, H: Clone, D: VectorStorage<C>> Export<Exported<D, VectorMetadata<
         let metadata = VectorMetadata {
             basis: self.basis(),
             space: self.space().clone(),
-            dimension: self.dimension()?,
+            dimension: self.dim()?,
             factor_count: self.factor_count(),
-            local_dimension: self.local_dimension(),
+            dim_local: self.dim_local(),
             primitive: PhantomData,
         };
-        let data = D::build(metadata.dimension, owned_entries(self))?;
+        let data = D::build(metadata.dimension, into_flat_entries(self))?;
         Ok(Exported { data, metadata })
     }
 }
@@ -80,9 +34,9 @@ impl<'b, B, C: Clone, H: Clone, D: VectorStorage<C>> Export<Exported<D, VectorMe
         let metadata = VectorMetadata {
             basis: self.basis(),
             space: self.space().clone(),
-            dimension: self.dimension()?,
+            dimension: self.dim()?,
             factor_count: self.factor_count(),
-            local_dimension: self.local_dimension(),
+            dim_local: self.dim_local(),
             primitive: PhantomData,
         };
         let data = D::build(
@@ -100,7 +54,7 @@ impl<'b, S, O, C, B, D> Export<Exported<D, VectorMetadata<'b, B, (), S>>, &'b B>
     for &LocalState<S, O, C>
 where
     C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
-    S: SpanDimension + Act<C, Operator = O, Term = S>,
+    S: Dimension + Act<C, Operator = O, Term = S>,
     O: Adjoint<C, Term = O>,
     B: Basis<S, C>,
     D: VectorStorage<C>,
@@ -110,7 +64,7 @@ where
         self,
         basis: &'b B,
     ) -> Result<Exported<D, VectorMetadata<'b, B, (), S>>, ExportError> {
-        let result: Exported<D, _> = self.coordinates_in(basis)?.export(())?;
+        let result: Exported<D, _> = self.coordinates(basis)?.export(())?;
         Ok(Exported {
             data: result.data,
             metadata: result.metadata.with_primitive(),
@@ -122,8 +76,8 @@ impl<'b, I: Eq, S, O, C, B, D> Export<Exported<D, VectorMetadata<'b, B, HilbertS
     for &State<I, S, O, C>
 where
     C: Clone + Zero + One + Conjugate<Output = C>,
-    S: SpanDimension + Act<C, Operator = O, Term = S>,
-    O: Adjoint<C, Term = O>,
+    S: Dimension + Act<C, Operator = O, Term = S>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
     B: Basis<S, C>,
     D: VectorStorage<C>,
 {
@@ -132,7 +86,7 @@ where
         self,
         basis: &'b B,
     ) -> Result<Exported<D, VectorMetadata<'b, B, HilbertSpace<I>, S>>, ExportError> {
-        let result: Exported<D, _> = self.coordinates_in(basis)?.export(())?;
+        let result: Exported<D, _> = self.coordinates(basis)?.export(())?;
         Ok(Exported {
             data: result.data,
             metadata: result.metadata.with_primitive(),

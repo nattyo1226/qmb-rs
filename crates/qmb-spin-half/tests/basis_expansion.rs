@@ -54,7 +54,7 @@ fn check_local<T: Real>() {
         for b in [I, Sx, Sy, Sz, SPlus, SMinus] {
             let x = Lo::<T>::primitive(a);
             let y = Lo::<T>::primitive(b);
-            let op = (x.product(&y) + x.scaled(c(0.3, -0.7)) + y.scaled(c(-0.2, 0.6)))
+            let op = ((x.clone() * &y) + x.scaled(c(0.3, -0.7)) + y.scaled(c(-0.2, 0.6)))
                 .adjoint()
                 .scaled(c(0.4, 0.2));
             let am = matrix::<T>(a);
@@ -74,15 +74,11 @@ fn check_local<T: Real>() {
                 c::<T>(0.0, 1.0) * (m[0][1] - m[1][0]),
                 m[0][0] - m[1][1],
             ];
-            let expanded = op.expand_in(&basis).unwrap();
-            let via_ladder = op
-                .expand_in(&LadderBasis)
-                .unwrap()
-                .expand_in(&basis)
-                .unwrap();
+            let expanded = op.expand(&basis).unwrap();
+            let via_ladder = op.expand(&LadderBasis).unwrap().expand(&basis).unwrap();
             for expr in [&op, &expanded, &via_ladder] {
-                let coords = expr.coordinates_in(&basis).unwrap();
-                assert_eq!(coords.dimension().unwrap(), 4);
+                let coords = expr.coordinates(&basis).unwrap();
+                assert_eq!(coords.dim().unwrap(), 4);
                 let mut actual = [c(0.0, 0.0); 4];
                 for (i, value) in coords.flat_entries().map(Result::unwrap) {
                     actual[i] = *value;
@@ -93,8 +89,8 @@ fn check_local<T: Real>() {
             }
             let psi = Ls::<T>::primitive(Ket::Up).scaled(c(0.2, 0.7))
                 + Ls::primitive(Ket::Down).scaled(c(-0.3, 0.4));
-            let acted = psi.act(&op).expand_in(&SzBasis).unwrap();
-            let coords = acted.coordinates_in(&SzBasis).unwrap();
+            let acted = psi.act(&op).expand(&SzBasis).unwrap();
+            let coords = acted.coordinates(&SzBasis).unwrap();
             let mut actual = [c(0.0, 0.0); 2];
             for (i, value) in coords.flat_entries().map(Result::unwrap) {
                 actual[i] = *value;
@@ -107,18 +103,18 @@ fn check_local<T: Real>() {
     }
     let zero =
         Lo::<T>::primitive(SPlus) + Lo::primitive(SMinus) - Lo::primitive(Sx).scaled(c(2.0, 0.0));
-    assert!(zero.coordinates_in(&basis).unwrap().is_empty());
+    assert!(zero.coordinates(&basis).unwrap().is_empty());
     assert!(
-        zero.expand_in(&basis)
+        zero.expand(&basis)
             .unwrap()
-            .coordinates_in(&LadderBasis)
+            .coordinates(&LadderBasis)
             .unwrap()
             .is_empty()
     );
     let tiny = Lo::<T>::primitive(Sx).scaled(c(1e-35, 0.0));
-    assert_eq!(tiny.coordinates_in(&basis).unwrap().len(), 1);
+    assert_eq!(tiny.coordinates(&basis).unwrap().len(), 1);
     let nan = Lo::<T>::primitive(Sx).scaled(c(f64::NAN, 0.0));
-    assert_eq!(nan.coordinates_in(&basis).unwrap().len(), 1);
+    assert_eq!(nan.coordinates(&basis).unwrap().len(), 1);
 }
 
 #[test]
@@ -130,7 +126,8 @@ fn spin_rules_reexpansion_and_actions_match_matrices_at_both_precisions() {
 fn check_composite<T: Real>() {
     let a = HilbertSpace::factor(0u8);
     let b = HilbertSpace::factor(1u8);
-    let h = HilbertSpace::tensor([a.clone(), HilbertSpace::tensor([b.clone()]).unwrap()]).unwrap();
+    let h = HilbertSpace::tensor_all([a.clone(), HilbertSpace::tensor_all([b.clone()]).unwrap()])
+        .unwrap();
     let x = Lo::<T>::primitive(Op::Sx).at(&a).unwrap();
     let y = Lo::<T>::primitive(Op::Sy)
         .at(&b)
@@ -141,10 +138,7 @@ fn check_composite<T: Real>() {
         .at(&b)
         .unwrap()
         .scaled(c(-0.2, 0.6));
-    let op = x
-        .add(&y)
-        .unwrap()
-        .product(&z.add(&l).unwrap())
+    let op = ((x.clone() + &y).unwrap().clone() * &(z.clone() + &l).unwrap())
         .unwrap()
         .adjoint();
     let am: [[Complex<T>; 4]; 4] = std::array::from_fn(|i| {
@@ -170,15 +164,15 @@ fn check_composite<T: Real>() {
                 .conj()
         })
     });
-    let expanded = op.expand_in_space(&CartesianBasis, &h).unwrap();
+    let expanded = op.expand_in(&CartesianBasis, &h).unwrap();
     for expr in [
         expanded.clone(),
-        op.expand_in_space(&LadderBasis, &h)
+        op.expand_in(&LadderBasis, &h)
             .unwrap()
-            .expand_in(&CartesianBasis)
+            .expand(&CartesianBasis)
             .unwrap(),
     ] {
-        let coords = expr.coordinates_in(&CartesianBasis).unwrap();
+        let coords = expr.coordinates(&CartesianBasis).unwrap();
         let mut actual = [[c(0.0, 0.0); 4]; 4];
         for (digits, coefficient) in coords.entries() {
             let ops = [Op::I, Op::Sx, Op::Sy, Op::Sz];
@@ -203,22 +197,25 @@ fn check_composite<T: Real>() {
             (0..4).fold(c(0.0, 0.0), |sum, i| sum + expected[i][i]),
         );
     }
-    let ud = Ls::<T>::primitive(Ket::Up)
-        .at(&a)
-        .unwrap()
-        .tensor_product(&Ls::primitive(Ket::Down).at(&b).unwrap())
-        .unwrap();
-    let du = Ls::<T>::primitive(Ket::Down)
-        .at(&a)
-        .unwrap()
-        .tensor_product(&Ls::primitive(Ket::Up).at(&b).unwrap())
-        .unwrap();
-    let psi = ud
-        .scaled(c(0.3, 0.7))
-        .add(&du.scaled(c(-0.2, 0.6)))
-        .unwrap();
-    let acted = psi.act(&expanded).unwrap().expand_in(&SzBasis).unwrap();
-    let coords = acted.coordinates_in(&SzBasis).unwrap();
+    let ud = State::tensor_in(
+        &h,
+        [
+            Ls::<T>::primitive(Ket::Up).at(&a).unwrap(),
+            Ls::primitive(Ket::Down).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
+    let du = State::tensor_in(
+        &h,
+        [
+            Ls::<T>::primitive(Ket::Down).at(&a).unwrap(),
+            Ls::primitive(Ket::Up).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
+    let psi = (ud.scaled(c(0.3, 0.7)).clone() + &du.scaled(c(-0.2, 0.6))).unwrap();
+    let acted = psi.act(&expanded).unwrap().expand(&SzBasis).unwrap();
+    let coords = acted.coordinates(&SzBasis).unwrap();
     let mut actual = [c(0.0, 0.0); 4];
     for (i, c) in coords.flat_entries().map(Result::unwrap) {
         actual[i] = *c;
@@ -235,7 +232,7 @@ fn check_composite<T: Real>() {
         .enumerate()
     {
         let expr = expr.unwrap();
-        let coords = expr.coordinates_in(&CartesianBasis).unwrap();
+        let coords = expr.coordinates(&CartesianBasis).unwrap();
         assert_eq!(coords.len(), 1);
         let (actual, value) = coords.flat_entries().next().unwrap().unwrap();
         assert_eq!(actual, index);
@@ -253,22 +250,22 @@ fn composite_products_adjoints_spectators_and_actions_match_four_by_four_matrice
 fn spaces_binding_spectators_zero_and_unit_are_preserved() {
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let h = a.tensor_product(&b).unwrap();
+    let h = a.tensor(&b).unwrap();
     let identity = Operator::<_, Op, Complex<f64>>::identity();
     assert!(matches!(
-        identity.expand_in(&CartesianBasis),
+        identity.expand(&CartesianBasis),
         Err(BasisError::Expression(ExpressionError::UnboundOperator))
     ));
     assert!(matches!(
-        identity.coordinates_in(&CartesianBasis),
+        identity.coordinates(&CartesianBasis),
         Err(BasisError::Expression(ExpressionError::UnboundOperator))
     ));
     let bound = identity.bind(&a).unwrap();
-    let expanded = bound.expand_in_space(&CartesianBasis, &h).unwrap();
+    let expanded = bound.expand_in(&CartesianBasis, &h).unwrap();
     assert!(expanded.space().unwrap().shares_node_with(&h));
     assert!(bound.space().unwrap().shares_node_with(&a));
-    let coords = bound.coordinates_in_space(&CartesianBasis, &h).unwrap();
-    assert_eq!(coords.dimension().unwrap(), 16);
+    let coords = bound.coordinates_in(&CartesianBasis, &h).unwrap();
+    assert_eq!(coords.dim().unwrap(), 16);
     assert_eq!(coords.len(), 1);
     assert_eq!(
         coords.entries().next().unwrap(),
@@ -276,29 +273,29 @@ fn spaces_binding_spectators_zero_and_unit_are_preserved() {
     );
     assert!(coords.space().shares_node_with(&h));
     let zero = Operator::<_, Op, Complex<f64>>::zero()
-        .expand_in_space(&CartesianBasis, &h)
+        .expand_in(&CartesianBasis, &h)
         .unwrap();
     assert!(zero.space().unwrap().shares_node_with(&h));
-    assert!(zero.coordinates_in(&CartesianBasis).unwrap().is_empty());
+    assert!(zero.coordinates(&CartesianBasis).unwrap().is_empty());
     let state = State::<_, Ket, Op, Complex<f64>>::zero(&h)
-        .expand_in(&SzBasis)
+        .expand(&SzBasis)
         .unwrap();
     assert!(state.space().shares_node_with(&h));
-    assert!(state.coordinates_in(&SzBasis).unwrap().is_empty());
+    assert!(state.coordinates(&SzBasis).unwrap().is_empty());
     let invalid = Lo::<f64>::primitive(Op::Sx)
         .at(&b)
         .unwrap()
         .scaled(c(0.0, 0.0));
     assert!(matches!(
-        invalid.coordinates_in_space(&CartesianBasis, &a),
+        invalid.coordinates_in(&CartesianBasis, &a),
         Err(BasisError::Expression(ExpressionError::MissingIndex))
     ));
 
     let unit = State::<u8, Ket, Op, Complex<f64>>::unit().scaled(c(0.3, 0.7));
-    let unit = unit.expand_in(&SzBasis).unwrap();
-    let coords = unit.coordinates_in(&SzBasis).unwrap();
-    assert_eq!(coords.local_dimension(), None);
-    assert_eq!(coords.dimension().unwrap(), 1);
+    let unit = unit.expand(&SzBasis).unwrap();
+    let coords = unit.coordinates(&SzBasis).unwrap();
+    assert_eq!(coords.dim_local(), None);
+    assert_eq!(coords.dim().unwrap(), 1);
     assert_eq!(coords.entries().next().unwrap(), (&[][..], &c(0.3, 0.7)));
     assert_eq!(
         coords.flat_entries().next().unwrap().unwrap(),
@@ -306,7 +303,7 @@ fn spaces_binding_spectators_zero_and_unit_are_preserved() {
     );
     let unit_space = HilbertSpace::<u8>::unit();
     let op = Operator::<_, Op, Complex<f64>>::scalar(c(0.4, -0.2))
-        .expand_in_space(&CartesianBasis, &unit_space)
+        .expand_in(&CartesianBasis, &unit_space)
         .unwrap();
     assert_eq!(op.trace().unwrap(), c(0.4, -0.2));
     assert_eq!(
@@ -326,9 +323,7 @@ fn spaces_binding_spectators_zero_and_unit_are_preserved() {
 
     // Coordinates borrow only their basis; they survive destruction of the input.
     let basis = CartesianBasis;
-    let coords = Lo::<f64>::primitive(Op::SPlus)
-        .coordinates_in(&basis)
-        .unwrap();
+    let coords = Lo::<f64>::primitive(Op::SPlus).coordinates(&basis).unwrap();
     assert_eq!(
         coords.into_entries().collect::<Vec<_>>(),
         vec![(vec![1], c(1.0, 0.0)), (vec![2], c(0.0, 1.0))]
@@ -340,16 +335,18 @@ fn sparse_expansion_survives_global_dimension_and_flat_index_overflow() {
     let factors: Vec<_> = (0..usize::BITS as usize + 1)
         .map(HilbertSpace::factor)
         .collect();
-    let state = State::tensor(
+    let space = HilbertSpace::tensor_all(factors.iter().cloned()).unwrap();
+    let state = State::tensor_in(
+        &space,
         factors
             .iter()
             .map(|f| Ls::<f64>::primitive(Ket::Down).at(f).unwrap()),
     )
     .unwrap();
-    let expanded = state.expand_in(&SzBasis).unwrap();
-    let coords = expanded.coordinates_in(&SzBasis).unwrap();
+    let expanded = state.expand(&SzBasis).unwrap();
+    let coords = expanded.coordinates(&SzBasis).unwrap();
     assert_eq!(coords.len(), 1);
-    assert_eq!(coords.dimension(), Err(DimensionOverflow));
+    assert_eq!(coords.dim(), Err(DimensionOverflow));
     assert_eq!(
         coords.flat_entries().next().unwrap(),
         Err(DimensionOverflow)
@@ -357,10 +354,10 @@ fn sparse_expansion_survives_global_dimension_and_flat_index_overflow() {
     assert!(coords.entries().next().unwrap().0.iter().all(|i| *i == 1));
     let identity = Operator::<_, Op, Complex<f64>>::identity();
     let coords = identity
-        .coordinates_in_space(&CartesianBasis, state.space())
+        .coordinates_in(&CartesianBasis, state.space())
         .unwrap();
     assert_eq!(coords.len(), 1);
-    assert_eq!(coords.dimension(), Err(DimensionOverflow));
+    assert_eq!(coords.dim(), Err(DimensionOverflow));
     assert_eq!(
         coords.flat_entries().next().unwrap().unwrap(),
         (0, &c(1.0, 0.0))
@@ -387,21 +384,21 @@ fn deep_expansion_and_destruction_fit_a_small_stack() {
             for _ in 0..20_000 {
                 state = state.scaled(c(1.0, 0.0));
                 op = op.adjoint();
-                space = HilbertSpace::tensor([space]).unwrap();
+                space = HilbertSpace::tensor_all([space]).unwrap();
             }
             assert_eq!(
                 state
-                    .expand_in(&SzBasis)
+                    .expand(&SzBasis)
                     .unwrap()
-                    .coordinates_in(&SzBasis)
+                    .coordinates(&SzBasis)
                     .unwrap()
                     .len(),
                 1
             );
             assert_eq!(
-                op.expand_in(&CartesianBasis)
+                op.expand(&CartesianBasis)
                     .unwrap()
-                    .coordinates_in(&CartesianBasis)
+                    .coordinates(&CartesianBasis)
                     .unwrap()
                     .len(),
                 2
@@ -415,17 +412,17 @@ fn deep_expansion_and_destruction_fit_a_small_stack() {
             let placed = state.at(leaf).unwrap();
             let mut placed = placed;
             for _ in 0..20_000 {
-                placed = State::tensor([placed]).unwrap();
+                placed = State::tensor_in(&space, [State::unit(), placed]).unwrap();
             }
-            let expanded = placed.expand_in(&SzBasis).unwrap();
-            assert_eq!(expanded.coordinates_in(&SzBasis).unwrap().len(), 1);
+            let expanded = placed.expand(&SzBasis).unwrap();
+            assert_eq!(expanded.coordinates(&SzBasis).unwrap().len(), 1);
             assert!(expanded.space().shares_node_with(placed.space()));
             let op = op
                 .at(leaf)
                 .unwrap()
-                .expand_in_space(&CartesianBasis, &space)
+                .expand_in(&CartesianBasis, &space)
                 .unwrap();
-            assert_eq!(op.coordinates_in(&CartesianBasis).unwrap().len(), 2);
+            assert_eq!(op.coordinates(&CartesianBasis).unwrap().len(), 2);
         })
         .unwrap()
         .join()

@@ -56,7 +56,7 @@ fn check_derived_state_operations<T: Real>() {
         Complex::new(overlapping.norm_squared(), T::zero()),
         c(6.0, 0.0),
     );
-    let imported = S::<Ket, Operator, Complex<T>>::from_linear_combination(
+    let imported = S::<Ket, Operator, Complex<T>>::from_terms(
         <NonOrthogonal as Basis<Ket, Complex<T>>>::expand(&NonOrthogonal, &Ket::Unit(Axis::B))
             .map(S::primitive),
     );
@@ -92,17 +92,9 @@ fn check_derived_state_operations<T: Real>() {
     }
     let a = CompositeSpace::factor(11);
     let b = CompositeSpace::factor(7);
-    let h = a.tensor_product(&b).unwrap();
-    let first = x
-        .at(&a)
-        .unwrap()
-        .tensor_product(&y.at(&b).unwrap())
-        .unwrap();
-    let second = y
-        .at(&a)
-        .unwrap()
-        .tensor_product(&z.at(&b).unwrap())
-        .unwrap();
+    let h = a.tensor(&b).unwrap();
+    let first = qmb_core::State::tensor_in(&h, [x.at(&a).unwrap(), y.at(&b).unwrap()]).unwrap();
+    let second = qmb_core::State::tensor_in(&h, [y.at(&a).unwrap(), z.at(&b).unwrap()]).unwrap();
     let ci = CompositeOperator::identity().bind(&h).unwrap();
     assert_complex(
         Complex::new(first.norm_squared().unwrap(), T::zero()),
@@ -112,7 +104,7 @@ fn check_derived_state_operations<T: Real>() {
         first.scaled(alpha).normalized_expectation(&ci).unwrap(),
         c(1.0, 0.0),
     );
-    let sum = first.scaled(alpha).add(&second.scaled(beta)).unwrap();
+    let sum = (first.scaled(alpha).clone() + &second.scaled(beta)).unwrap();
     assert_complex(
         sum.inner_product(&first).unwrap(),
         conjugate(alpha) * first.inner_product(&first).unwrap()

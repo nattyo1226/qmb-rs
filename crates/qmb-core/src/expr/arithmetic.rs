@@ -198,14 +198,14 @@ scalar!([I, O, C], Operator<I, O, C>, C, []);
 impl<O, C: One + Neg<Output = C>> LocalOperator<O, C> {
     /// Constructs the commutator `self * rhs - rhs * self`.
     pub fn commutator(&self, rhs: &Self) -> Self {
-        self.product(rhs) - rhs.product(self)
+        (self * rhs) - (rhs * self)
     }
 }
 
 impl<I: Eq, O, C: One + Neg<Output = C>> Operator<I, O, C> {
     /// Constructs the commutator `self * rhs - rhs * self` without evaluation.
     pub fn commutator(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        self.product(rhs)?.into_add(-rhs.product(self)?)
+        (self * rhs)?.into_add(-(rhs * self)?)
     }
 }
 

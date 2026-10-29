@@ -21,21 +21,46 @@ impl Drop for Primitive<'_> {
         self.1.drops.set(self.1.drops.get() + 1);
     }
 }
-struct Op;
+enum Op {
+    Flip,
+    Parity,
+}
+#[allow(non_upper_case_globals)]
+const Op: Op = Op::Flip;
+impl qmb_core::HomogeneousParity for Op {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Op {
+    fn parity_operator() -> Self {
+        Self::Parity
+    }
+}
 
 // No Product or Identity capability. Metadata, indices and primitives are not Clone.
 impl<'a> Act<Complex<f64>> for Primitive<'a> {
     type Operator = Op;
     type Term = Self;
-    fn act(&self, _: &Op) -> Lc<Self, Complex<f64>> {
+    fn act(&self, op: &Op) -> Lc<Self, Complex<f64>> {
         self.1.acts.set(self.1.acts.get() + 1);
-        Lc::primitive(Primitive(1 - self.0, self.1))
+        Lc::primitive(Primitive(
+            if matches!(op, Op::Parity) {
+                self.0
+            } else {
+                1 - self.0
+            },
+            self.1,
+        ))
     }
 }
 impl Adjoint<Complex<f64>> for Op {
     type Term = Self;
     fn adjoint(&self) -> Lc<Self, Complex<f64>> {
-        Lc::primitive(Op)
+        Lc::primitive(match self {
+            Self::Flip => Self::Flip,
+            Self::Parity => Self::Parity,
+        })
     }
 }
 impl InnerProduct<Complex<f64>> for Primitive<'_> {
@@ -68,7 +93,7 @@ fn evaluated_contraction_only_requires_primitive_inner_products() {
         Complex::new(1.0, 0.0)
     );
     assert_eq!(
-        super::inner_product::contract(&state.expression, &state.expression),
+        crate::evaluate::inner_product::contract(&state.expression, &state.expression),
         Complex::new(1.0, 0.0)
     );
 }
@@ -78,22 +103,29 @@ fn inner_product_contracts_independent_sums_without_global_expansion() {
     let counts = Counts::default();
     for n in [8, 32] {
         let factors: Vec<_> = (0..n).map(|i| H::factor(Index(255 - i))).collect();
-        let before = S::tensor(factors.iter().map(|factor| {
-            (LocalState::primitive(Primitive(0, &counts))
-                + LocalState::primitive(Primitive(1, &counts)))
-            .at(factor)
-            .unwrap()
-        }))
+        let space = H::tensor_all(factors.iter().cloned()).unwrap();
+        let before = S::tensor_in(
+            &space,
+            factors.iter().map(|factor| {
+                (LocalState::primitive(Primitive(0, &counts))
+                    + LocalState::primitive(Primitive(1, &counts)))
+                .at(factor)
+                .unwrap()
+            }),
+        )
         .unwrap();
-        let after = S::tensor(factors.iter().map(|factor| {
-            let up = LocalState::primitive(Primitive(0, &counts))
-                .at(factor)
-                .unwrap();
-            let down = LocalState::primitive(Primitive(1, &counts))
-                .at(factor)
-                .unwrap();
-            up.add(&down).unwrap()
-        }))
+        let after = S::tensor_in(
+            &space,
+            factors.iter().map(|factor| {
+                let up = LocalState::primitive(Primitive(0, &counts))
+                    .at(factor)
+                    .unwrap();
+                let down = LocalState::primitive(Primitive(1, &counts))
+                    .at(factor)
+                    .unwrap();
+                (up.clone() + &down).unwrap()
+            }),
+        )
         .unwrap();
         let expected = Complex::new(2_f64.powi(i32::from(n)), 0.0);
         for (lhs, rhs) in [
@@ -122,44 +154,64 @@ fn inner_product_aligns_overlapping_subsystems_and_scalar_factors() {
             .at(&factors[site])
             .unwrap()
     };
-    let ab = ket(0, 0)
-        .tensor_product(&ket(1, 0))
-        .unwrap()
-        .add(
-            &ket(0, 1)
-                .tensor_product(&ket(1, 1))
-                .unwrap()
-                .scaled(Complex::new(0.0, 1.0)),
+    let ab = (S::tensor_in(
+        &H::tensor_all([factors[0].clone(), factors[1].clone()]).unwrap(),
+        [ket(0, 0), ket(1, 0)],
+    )
+    .unwrap()
+    .clone()
+        + &S::tensor_in(
+            &H::tensor_all([factors[0].clone(), factors[1].clone()]).unwrap(),
+            [ket(0, 1), ket(1, 1)],
         )
-        .unwrap();
-    let cd = ket(2, 0)
-        .tensor_product(&ket(3, 0))
         .unwrap()
-        .add(
-            &ket(2, 1)
-                .tensor_product(&ket(3, 1))
-                .unwrap()
-                .scaled(Complex::new(1.0, 1.0)),
+        .scaled(Complex::new(0.0, 1.0)))
+        .unwrap();
+    let cd = (S::tensor_in(
+        &H::tensor_all([factors[2].clone(), factors[3].clone()]).unwrap(),
+        [ket(2, 0), ket(3, 0)],
+    )
+    .unwrap()
+    .clone()
+        + &S::tensor_in(
+            &H::tensor_all([factors[2].clone(), factors[3].clone()]).unwrap(),
+            [ket(2, 1), ket(3, 1)],
         )
-        .unwrap();
-    let lhs = ab.tensor_product(&cd).unwrap();
-    let a = ket(0, 0)
-        .add(&ket(0, 1).scaled(Complex::new(2.0, 1.0)))
-        .unwrap();
-    let bc = ket(1, 0)
-        .tensor_product(&ket(2, 0))
         .unwrap()
-        .add(
-            &ket(1, 1)
-                .tensor_product(&ket(2, 1))
-                .unwrap()
-                .scaled(Complex::new(2.0, -1.0)),
+        .scaled(Complex::new(1.0, 1.0)))
+        .unwrap();
+    let lhs = S::tensor_in(
+        &H::tensor_all(factors.iter().cloned()).unwrap(),
+        [ab.clone(), cd.clone()],
+    )
+    .unwrap();
+    let a = (ket(0, 0).clone() + &ket(0, 1).scaled(Complex::new(2.0, 1.0))).unwrap();
+    let bc = (S::tensor_in(
+        &H::tensor_all([factors[1].clone(), factors[2].clone()]).unwrap(),
+        [ket(1, 0), ket(2, 0)],
+    )
+    .unwrap()
+    .clone()
+        + &S::tensor_in(
+            &H::tensor_all([factors[1].clone(), factors[2].clone()]).unwrap(),
+            [ket(1, 1), ket(2, 1)],
         )
+        .unwrap()
+        .scaled(Complex::new(2.0, -1.0)))
         .unwrap();
-    let d = ket(3, 0)
-        .add(&ket(3, 1).scaled(Complex::new(0.0, 1.0)))
-        .unwrap();
-    let rhs = a.tensor_product(&bc.tensor_product(&d).unwrap()).unwrap();
+    let d = (ket(3, 0).clone() + &ket(3, 1).scaled(Complex::new(0.0, 1.0))).unwrap();
+    let rhs = S::tensor_in(
+        &H::tensor_all(factors.iter().cloned()).unwrap(),
+        [
+            a,
+            S::tensor_in(
+                &H::tensor_all(factors[1..].iter().cloned()).unwrap(),
+                [bc, d],
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
     // Independent amplitudes: the only shared nonzero coordinates are 0000
     // and 1111, with amplitudes (1, -1+i) and (1, 5i), respectively.
     assert_eq!(lhs.inner_product(&rhs).unwrap(), Complex::new(6.0, -5.0));
@@ -168,17 +220,19 @@ fn inner_product_aligns_overlapping_subsystems_and_scalar_factors() {
     assert_eq!(rhs.inner_product(&rhs).unwrap(), Complex::new(72.0, 0.0));
 
     let unit = S::unit();
-    let scalar = unit
-        .scaled(Complex::new(2.0, 1.0))
-        .add(&unit.scaled(Complex::new(-1.0, 2.0)))
+    let scalar = (unit.scaled(Complex::new(2.0, 1.0)).clone()
+        + &unit.scaled(Complex::new(-1.0, 2.0)))
         .unwrap();
-    let with_scalar = S::tensor([
-        unit.clone(),
-        ab.clone(),
-        scalar.clone(),
-        cd.clone(),
-        unit.clone(),
-    ])
+    let with_scalar = S::tensor_in(
+        lhs.space(),
+        [
+            unit.clone(),
+            ab.clone(),
+            scalar.clone(),
+            cd.clone(),
+            unit.clone(),
+        ],
+    )
     .unwrap();
     assert_eq!(
         with_scalar.inner_product(&rhs).unwrap(),
@@ -193,12 +247,12 @@ fn inner_product_aligns_overlapping_subsystems_and_scalar_factors() {
         Complex::new(10.0, 0.0)
     );
     let zero = S::zero(lhs.space());
-    let with_zero = zero.add(&with_scalar).unwrap();
+    let with_zero = (zero.clone() + &with_scalar).unwrap();
     assert_eq!(
         with_zero.inner_product(&rhs).unwrap(),
         Complex::new(-9.0, -23.0)
     );
-    let zero_tensor = S::tensor([S::zero(unit.space()), lhs.clone()]).unwrap();
+    let zero_tensor = S::tensor_in(lhs.space(), [S::zero(unit.space()), lhs.clone()]).unwrap();
     assert_eq!(
         zero_tensor.inner_product(&rhs).unwrap(),
         Complex::new(0.0, 0.0)
@@ -217,16 +271,15 @@ fn construction_uses_opaque_scalars_and_shared_nonclone_borrowed_leaves() {
     let local = LocalState::<Primitive<'_>, Op, Complex<Scalar>>::primitive(Primitive(0, &counts));
     let state = local.at(&h).unwrap();
     let op = LocalOperator::primitive(Op).at(&h).unwrap();
-    let a = state
-        .add(&state)
+    let a = (state.clone() + &state)
         .unwrap()
         .scaled(Complex::new(Scalar, Scalar));
     let action = a.act(&op).unwrap();
     let clone = action.clone();
     assert!(clone.space().shares_node_with(&h));
-    let _ = S::<Scalar>::tensor([]).unwrap();
+    let _ = S::<Scalar>::tensor_in(&H::unit(), []).unwrap();
     let _ = S::<Scalar>::zero(&h);
-    let _ = op.product(&op).unwrap().adjoint();
+    let _ = (op.clone() * &op).unwrap().adjoint();
     assert_eq!(counts.acts.get(), 0);
     drop(local);
     drop(state);
@@ -244,7 +297,7 @@ fn action_uses_no_product_shares_spectators_and_preserves_original_inputs() {
     let b = H::factor(Index(2));
     let left = LocalState::primitive(Primitive(0, &counts)).at(&a).unwrap();
     let right = LocalState::primitive(Primitive(1, &counts)).at(&b).unwrap();
-    let state = left.tensor_product(&right).unwrap();
+    let state = S::tensor_in(&a.tensor(&b).unwrap(), [left.clone(), right]).unwrap();
     let op = LocalOperator::primitive(Op).at(&a).unwrap();
     let action = state.act(&op).unwrap();
     assert_eq!(counts.acts.get(), 0);
@@ -256,7 +309,7 @@ fn action_uses_no_product_shares_spectators_and_preserves_original_inputs() {
     let StateNode::Tensor(after) = result.expression.node() else {
         panic!("tensor");
     };
-    assert!(before.as_slice()[1].same_node(&after.as_slice()[1]));
+    assert!(before.as_slice()[1].shares_node_with(&after.as_slice()[1]));
     assert!(!state.expression.pending_action && action.expression.pending_action);
     assert!(!result.expression.pending_action);
     assert!(
@@ -264,7 +317,7 @@ fn action_uses_no_product_shares_spectators_and_preserves_original_inputs() {
             .evaluate()
             .unwrap()
             .expression
-            .same_node(&result.expression)
+            .shares_node_with(&result.expression)
     );
     let identity = O::identity();
     assert!(
@@ -274,9 +327,9 @@ fn action_uses_no_product_shares_spectators_and_preserves_original_inputs() {
             .evaluate()
             .unwrap()
             .expression
-            .same_node(&state.expression)
+            .shares_node_with(&state.expression)
     );
-    let x2 = op.product(&op).unwrap();
+    let x2 = (op.clone() * &op).unwrap();
     let p = state.act(&x2).unwrap().evaluate().unwrap();
     let q = state
         .act(&op)
@@ -294,19 +347,19 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
     let counts = Counts::default();
     let a = H::factor(Index(1));
     let b = H::factor(Index(2));
-    let ab = a.tensor_product(&b).unwrap();
+    let ab = a.tensor(&b).unwrap();
     let op = LocalOperator::<Op, Complex<f64>>::primitive(Op)
         .at(&a)
         .unwrap();
     let small = op.bind(&a).unwrap();
     let large = op.bind(&ab).unwrap();
-    assert!(matches!(small.add(&large), Err(E::IncompatibleSpaces)));
-    assert!(matches!(small.product(&large), Err(E::IncompatibleSpaces)));
+    assert!(matches!(small.clone() + &large, Err(E::IncompatibleSpaces)));
+    assert!(matches!(small.clone() * &large, Err(E::IncompatibleSpaces)));
     // The third, unbound operand suppresses comparisons of the first two.
     let mixed = O::sum([small.clone(), large.clone(), O::identity()]).unwrap();
     assert!(mixed.space().is_none());
     assert!(
-        O::product_all([small.clone(), large.clone(), O::identity()])
+        O::product([small.clone(), large.clone(), O::identity()])
             .unwrap()
             .space()
             .is_none()
@@ -317,7 +370,7 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
     assert!(small.space().unwrap().is_compatible_with(&a));
     let left = LocalState::primitive(Primitive(0, &counts)).at(&a).unwrap();
     let right = LocalState::primitive(Primitive(0, &counts)).at(&b).unwrap();
-    let state = left.tensor_product(&right).unwrap();
+    let state = S::tensor_in(&a.tensor(&b).unwrap(), [left.clone(), right]).unwrap();
     assert!(matches!(state.act(&small), Err(E::IncompatibleSpaces)));
     assert!(state.act_in(&small, &ab).is_ok());
     assert!(state.act(&op).is_ok());
@@ -336,7 +389,7 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
         Err(E::MissingIndex)
     ));
     assert!(matches!(
-        LocalOperator::<Op, Complex<f64>>::identity()
+        LocalOperator::<Op, Complex<f64>>::primitive(Op)
             .at(&a)
             .unwrap()
             .bind(&b),
@@ -347,7 +400,7 @@ fn binding_merges_and_explicit_contexts_follow_the_selected_space() {
         Err(E::NotAFactor)
     ));
     assert!(matches!(
-        S::<f64>::zero(&a).add(&S::zero(&b)),
+        S::<f64>::zero(&a).clone() + &S::zero(&b),
         Err(E::IncompatibleSpaces)
     ));
     assert_eq!(counts.acts.get(), 0);
@@ -377,7 +430,13 @@ fn evaluate_does_not_require_coefficient_arithmetic() {
     impl Adjoint<Scalar> for Op {
         type Term = Self;
         fn adjoint(&self) -> Lc<Self, Scalar> {
-            Lc::term(Scalar, Op)
+            Lc::term(
+                Scalar,
+                match self {
+                    Self::Flip => Self::Flip,
+                    Self::Parity => Self::Parity,
+                },
+            )
         }
     }
     let counts = Counts::default();
@@ -412,7 +471,7 @@ fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
             panic!("scale")
         };
         assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (2, 3));
-        assert!(s.operand.same_node(&state.expression));
+        assert!(s.operand.shares_node_with(&state.expression));
         assert!(scaled.space().shares_node_with(&factor));
     }
     for scaled in [
@@ -450,7 +509,7 @@ fn scalar_syntax_needs_no_index_equality_or_numeric_capabilities() {
             panic!("scale")
         };
         assert_eq!((s.coefficient.re.0, s.coefficient.im.0), (4, 5));
-        assert!(s.operand.same_node(&state.expression));
+        assert!(s.operand.shares_node_with(&state.expression));
     }
     for scaled in [
         operator.clone() * &coefficient,
@@ -492,7 +551,7 @@ fn all_binary_ownership_forms_preserve_results_and_shared_operands() {
         let StateNode::Sum(parts) = sum.expression.node() else {
             panic!("sum")
         };
-        assert!(parts.iter().all(|p| p.same_node(&original)));
+        assert!(parts.iter().all(|p| p.shares_node_with(&original)));
         assert_eq!(state.inner_product(&sum).unwrap(), Complex::new(2.0, 0.0));
     }
     for difference in forms!(state, -, state) {
@@ -615,7 +674,7 @@ fn all_binary_ownership_forms_preserve_results_and_shared_operands() {
     {
         assert!(matches!(result, Err(E::IncompatibleSpaces)));
     }
-    assert!(state.expression.same_node(&original));
+    assert!(state.expression.shares_node_with(&original));
 }
 
 #[test]
@@ -626,9 +685,11 @@ fn unit_zero_singleton_and_placement_preserve_spaces_and_lazy_local_expressions(
     let leaf = LocalState::primitive(Primitive(0, &counts))
         .at(&factor)
         .unwrap();
-    let nested = unit
-        .tensor_product(&S::tensor([leaf.clone()]).unwrap())
-        .unwrap();
+    let nested = S::tensor_in(
+        &H::tensor_all([unit.space().clone(), factor.clone()]).unwrap(),
+        [unit.clone(), S::tensor_in(&factor, [leaf.clone()]).unwrap()],
+    )
+    .unwrap();
     assert!(nested.space().is_compatible_with(&factor));
     assert_eq!(nested.inner_product(&leaf).unwrap(), Complex::new(1.0, 0.0));
     assert!(leaf.domain().is_compatible_with(unit.space()));
@@ -641,14 +702,14 @@ fn unit_zero_singleton_and_placement_preserve_spaces_and_lazy_local_expressions(
         S::sum(&factor, [leaf.clone()])
             .unwrap()
             .expression
-            .same_node(&leaf.expression)
+            .shares_node_with(&leaf.expression)
     );
     assert!(matches!(
-        leaf.tensor_product(&leaf),
-        Err(E::Space(crate::SpaceError::DuplicateIndex))
+        S::tensor_in(&factor, [leaf.clone(), leaf.clone()]),
+        Err(E::IncompatibleSpaces)
     ));
     assert!(matches!(
-        O::<f64>::place(&LocalOperator::identity(), unit.space()),
+        O::<f64>::place(&LocalOperator::primitive(Op), unit.space()),
         Err(E::NotAFactor)
     ));
     assert!(matches!(
@@ -719,6 +780,16 @@ fn composite_scalar_reductions_require_neither_num_float_copy_nor_division() {
         }
     }
     struct Primitive;
+    impl qmb_core::HomogeneousParity for Primitive {
+        fn parity(&self) -> qmb_core::Parity {
+            qmb_core::Parity::Even
+        }
+    }
+    impl qmb_core::ParityOperator for Primitive {
+        fn parity_operator() -> Self {
+            Self
+        }
+    }
 
     impl Identity for Primitive {
         fn identity() -> Self {
@@ -756,12 +827,17 @@ fn composite_scalar_reductions_require_neither_num_float_copy_nor_division() {
     }
     let a = HilbertSpace::<_>::factor(0u8);
     let b = HilbertSpace::factor(1);
-    let state = LocalState::<Primitive, Primitive, MinimalComplex<Ring>>::primitive(Primitive)
-        .at(&a)
-        .unwrap()
-        .tensor_product(&LocalState::primitive(Primitive).at(&b).unwrap())
-        .unwrap()
-        .scaled(MinimalComplex::new(Ring(3), Ring(4)));
+    let state = qmb_core::State::tensor_in(
+        &a.tensor(&b).unwrap(),
+        [
+            LocalState::<Primitive, Primitive, MinimalComplex<Ring>>::primitive(Primitive)
+                .at(&a)
+                .unwrap(),
+            LocalState::primitive(Primitive).at(&b).unwrap(),
+        ],
+    )
+    .unwrap()
+    .scaled(MinimalComplex::new(Ring(3), Ring(4)));
     let operator = LocalOperator::primitive(Primitive)
         .at(&a)
         .unwrap()
@@ -778,7 +854,7 @@ fn composite_scalar_reductions_require_neither_num_float_copy_nor_division() {
     );
     assert_eq!(
         operator
-            .hilbert_schmidt_inner_product_in(&operator, state.space())
+            .hs_inner_product_in(&operator, state.space())
             .unwrap(),
         MinimalComplex::new(Ring(13), Ring(0))
     );
@@ -796,17 +872,17 @@ fn deep_composite_actions_and_operators_evaluate_and_drop_iteratively() {
             let mut op = O::identity();
             for _ in 0..20_000 {
                 state = state.act(&O::identity()).unwrap();
-                op = op.product(&O::identity()).unwrap().adjoint();
+                op = (op.clone() * &O::identity()).unwrap().adjoint();
             }
             let result = state.evaluate().unwrap();
-            assert!(result.expression.same_node(&leaf.expression));
+            assert!(result.expression.shares_node_with(&leaf.expression));
             assert!(
                 leaf.act(&op)
                     .unwrap()
                     .evaluate()
                     .unwrap()
                     .expression
-                    .same_node(&leaf.expression)
+                    .shares_node_with(&leaf.expression)
             );
             drop(state);
             drop(op);
@@ -819,9 +895,9 @@ fn deep_composite_actions_and_operators_evaluate_and_drop_iteratively() {
             let mut scaled = leaf.clone();
             let mut sum = leaf.clone();
             for _ in 0..20_000 {
-                nested = S::tensor([nested]).unwrap();
+                nested = S::tensor_in(&h, [S::unit(), nested]).unwrap();
                 scaled = scaled.scaled(Complex::new(1.0, 0.0));
-                sum = sum.add(&S::zero(&h)).unwrap();
+                sum = (sum.clone() + &S::zero(&h)).unwrap();
             }
             for state in [nested, scaled, sum] {
                 let result = state.act(&local).unwrap().evaluate().unwrap();

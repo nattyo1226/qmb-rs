@@ -1,9 +1,9 @@
-//! Placed states and operators on ordinary tensor spaces.
+//! Placed states and operators on ordinary and graded tensor spaces.
 
 use alloc::{sync::Arc, vec::Vec};
 
-use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
-use crate::{HilbertSpace, LocalOperator, LocalState, SpaceError};
+use super::parts::{AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
+use crate::{HilbertSpace, Identity, LocalOperator, LocalState, SpaceError};
 
 /// Errors connecting, placing or evaluating composite expressions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -36,7 +36,8 @@ pub enum ExpressionError {
 /// let b = HilbertSpace::factor(1u8);
 /// let left = LocalState::<u8, (), ()>::primitive(0).at(&a).unwrap();
 /// let right = LocalState::<u16, (), ()>::primitive(0).at(&b).unwrap();
-/// let _ = left.tensor_product(&right);
+/// let h = a.tensor(&b).unwrap();
+/// let _ = qmb_core::State::tensor_in(&h, [left, right]);
 /// ```
 ///
 /// Composite action also requires matching operator primitives:
@@ -68,8 +69,8 @@ pub enum ExpressionError {
 /// needs_send::<State<Rc<()>, (), (), ()>>();
 /// ```
 pub struct State<I, S, O, C> {
-    pub(super) expression: StateExpr<I, S, O, C>,
-    pub(super) space: HilbertSpace<I>,
+    pub(crate) expression: StateExpr<I, S, O, C>,
+    pub(crate) space: HilbertSpace<I>,
 }
 
 /// A placed operator with an optional ambient-space binding.
@@ -82,21 +83,25 @@ pub struct State<I, S, O, C> {
 /// of an unbound operator requires an explicit space, except that action can
 /// use the state's space. See [`State::act`] and [`Operator::trace_in`].
 pub struct Operator<I, O, C> {
-    pub(super) expression: OpExpr<I, O, C>,
-    pub(super) ambient: Option<HilbertSpace<I>>,
+    pub(crate) expression: OpExpr<I, O, C>,
+    pub(crate) ambient: Option<HilbertSpace<I>>,
 }
 
-pub(super) struct StateExpr<I, S, O, C> {
+pub(crate) struct StateExpr<I, S, O, C> {
     root: Option<Arc<StateNode<I, S, O, C>>>,
-    pub(super) pending_action: bool,
+    pub(crate) pending_action: bool,
 }
-pub(super) struct OpExpr<I, O, C> {
+pub(crate) struct OpExpr<I, O, C> {
     root: Option<Arc<OpNode<I, O, C>>>,
 }
 
-type StateAction<I, S, O, C> = ActExpr<StateExpr<I, S, O, C>, OpExpr<I, O, C>>;
+pub(crate) struct StateAction<I, S, O, C> {
+    pub(crate) state: StateExpr<I, S, O, C>,
+    pub(crate) operator: OpExpr<I, O, C>,
+    pub(crate) space: HilbertSpace<I>,
+}
 
-pub(super) enum StateNode<I, S, O, C> {
+pub(crate) enum StateNode<I, S, O, C> {
     Local(HilbertSpace<I>, LocalState<S, O, C>),
     Unit,
     Scale(ScaleExpr<StateExpr<I, S, O, C>, C>),
@@ -104,7 +109,7 @@ pub(super) enum StateNode<I, S, O, C> {
     Tensor(SumExpr<StateExpr<I, S, O, C>>),
     Act(StateAction<I, S, O, C>),
 }
-pub(super) enum OpNode<I, O, C> {
+pub(crate) enum OpNode<I, O, C> {
     Local(HilbertSpace<I>, LocalOperator<O, C>),
     Identity,
     Scale(ScaleExpr<OpExpr<I, O, C>, C>),
@@ -146,7 +151,7 @@ impl<I, O, C> Clone for Operator<I, O, C> {
 }
 
 impl<I, S, O, C> StateExpr<I, S, O, C> {
-    pub(super) fn new(node: StateNode<I, S, O, C>) -> Self {
+    pub(crate) fn new(node: StateNode<I, S, O, C>) -> Self {
         let pending_action = match &node {
             StateNode::Local(_, local) => local.has_pending_action(),
             StateNode::Unit => false,
@@ -159,22 +164,22 @@ impl<I, S, O, C> StateExpr<I, S, O, C> {
             pending_action,
         }
     }
-    pub(super) fn node(&self) -> &StateNode<I, S, O, C> {
+    pub(crate) fn node(&self) -> &StateNode<I, S, O, C> {
         self.root.as_deref().expect("live state syntax")
     }
-    pub(super) fn scaled(self, coefficient: C) -> Self {
+    pub(crate) fn scaled(self, coefficient: C) -> Self {
         Self::new(StateNode::Scale(ScaleExpr {
             operand: self,
             coefficient,
         }))
     }
-    pub(super) fn sum(children: SumExpr<Self>) -> Self {
+    pub(crate) fn sum(children: SumExpr<Self>) -> Self {
         match children {
             SumExpr::One(child) => child,
             children => Self::new(StateNode::Sum(children)),
         }
     }
-    pub(super) fn same_node(&self, rhs: &Self) -> bool {
+    pub(crate) fn shares_node_with(&self, rhs: &Self) -> bool {
         Arc::ptr_eq(
             self.root.as_ref().expect("live state"),
             rhs.root.as_ref().expect("live state"),
@@ -183,12 +188,12 @@ impl<I, S, O, C> StateExpr<I, S, O, C> {
 }
 
 impl<I, O, C> OpExpr<I, O, C> {
-    pub(super) fn new(node: OpNode<I, O, C>) -> Self {
+    pub(crate) fn new(node: OpNode<I, O, C>) -> Self {
         Self {
             root: Some(Arc::new(node)),
         }
     }
-    pub(super) fn node(&self) -> &OpNode<I, O, C> {
+    pub(crate) fn node(&self) -> &OpNode<I, O, C> {
         self.root.as_deref().expect("live operator syntax")
     }
     fn scaled(self, coefficient: C) -> Self {
@@ -244,7 +249,7 @@ impl<I, S, O, C> State<I, S, O, C> {
     pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
         self.clone().into_scaled(coefficient.into())
     }
-    pub(super) fn into_scaled(self, coefficient: C) -> Self {
+    pub(crate) fn into_scaled(self, coefficient: C) -> Self {
         Self {
             space: self.space,
             expression: self.expression.scaled(coefficient),
@@ -284,11 +289,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
         let states: SumExpr<Self> = states.into_iter().collect::<Result<_, _>>()?;
         Self::sum(space, states)
     }
-    /// Adds states on compatible ordered spaces, without evaluating local rules.
-    pub fn add(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        self.clone().into_add(rhs.clone())
-    }
-    pub(super) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
+    pub(crate) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
         if !self.space.is_compatible_with(&rhs.space) {
             return Err(ExpressionError::IncompatibleSpaces);
         }
@@ -297,30 +298,53 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
             expression: StateExpr::sum([self.expression, rhs.expression].into_iter().collect()),
         })
     }
-    /// Forms a tensor product in input order. Empty input is the unit state.
-    pub fn tensor(states: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
-        Self::tensor_collected(states.into_iter().collect())
-    }
-    /// Collects fallible states before forming their ordered tensor product.
-    /// The first input error takes precedence over duplicate-index errors.
-    /// Empty input is the unit state; no operands after an input error are pulled.
-    pub fn try_tensor(
-        states: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    /// Tensors placed states on an explicit space, preserving its shared handle.
+    ///
+    /// Ordered input indices must cover the space exactly. Multi-factor inputs
+    /// must have a compatible tensor kind; grouping may differ. Empty input is
+    /// accepted only on a unit space. No primitive evaluation is performed.
+    pub fn tensor_in(
+        space: &HilbertSpace<I>,
+        states: impl IntoIterator<Item = Self>,
     ) -> Result<Self, ExpressionError> {
-        Self::tensor_collected(states.into_iter().collect::<Result<_, _>>()?)
+        Self::tensor_collected(space, states.into_iter().collect())
     }
-    fn tensor_collected(states: SumExpr<Self>) -> Result<Self, ExpressionError> {
-        let space = HilbertSpace::tensor(states.iter().map(|s| s.space.clone()))?;
+
+    fn tensor_collected(
+        space: &HilbertSpace<I>,
+        states: SumExpr<Self>,
+    ) -> Result<Self, ExpressionError> {
+        if states.iter().any(|s| {
+            s.space
+                .effective_kind()
+                .is_some_and(|kind| Some(kind) != space.effective_kind())
+        }) || !states
+            .iter()
+            .flat_map(|s| s.space.indices())
+            .eq(space.indices())
+        {
+            return Err(ExpressionError::IncompatibleSpaces);
+        }
         let parts: SumExpr<_> = states.into_iter().map(|s| s.expression).collect();
         let expression = match parts {
             SumExpr::Empty => StateExpr::new(StateNode::Unit),
+            SumExpr::One(node) => node,
             parts => StateExpr::new(StateNode::Tensor(parts)),
         };
-        Ok(Self { space, expression })
+        Ok(Self {
+            space: space.clone(),
+            expression,
+        })
     }
-    /// Tensors this state with `rhs`, rejecting repeated factors.
-    pub fn tensor_product(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::tensor([self.clone(), rhs.clone()])
+
+    /// Collects fallible inputs before validating coverage of the explicit space.
+    /// The first input error stops consumption and precedes all space errors.
+    pub fn try_tensor_in(
+        space: &HilbertSpace<I>,
+        states: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        let states: SumExpr<Self> = states.into_iter().collect::<Result<_, _>>()?;
+        Self::tensor_collected(space, states)
     }
     /// Constructs a delayed action using a binding or this state's space.
     pub fn act(&self, operator: &Operator<I, O, C>) -> Result<Self, ExpressionError> {
@@ -345,20 +369,22 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
         }
         Ok(Self {
             space: space.clone(),
-            expression: StateExpr::new(StateNode::Act(ActExpr {
+            expression: StateExpr::new(StateNode::Act(StateAction {
+                space: space.clone(),
                 state: self.expression.clone(),
                 operator: operator.expression.clone(),
             })),
         })
     }
-    pub(super) fn into_act(self, operator: Operator<I, O, C>) -> Result<Self, ExpressionError> {
+    pub(crate) fn into_act(self, operator: Operator<I, O, C>) -> Result<Self, ExpressionError> {
         let space = operator.select_space(None, Some(&self.space))?;
         if !space.is_compatible_with(&self.space) {
             return Err(ExpressionError::IncompatibleSpaces);
         }
         Ok(Self {
             space: space.clone(),
-            expression: StateExpr::new(StateNode::Act(ActExpr {
+            expression: StateExpr::new(StateNode::Act(StateAction {
+                space: space.clone(),
                 state: self.expression,
                 operator: operator.expression,
             })),
@@ -415,7 +441,7 @@ impl<I, O, C> Operator<I, O, C> {
     pub fn scaled(&self, coefficient: impl Into<C>) -> Self {
         self.clone().into_scaled(coefficient.into())
     }
-    pub(super) fn into_scaled(self, coefficient: C) -> Self {
+    pub(crate) fn into_scaled(self, coefficient: C) -> Self {
         Self {
             ambient: self.ambient,
             expression: self.expression.scaled(coefficient),
@@ -473,15 +499,11 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             ambient,
         })
     }
-    /// Adds operators, validating compatible bindings when both are bound.
-    pub fn add(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::sum([self.clone(), rhs.clone()])
-    }
-    pub(super) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
+    pub(crate) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
         Self::sum([self, rhs])
     }
     /// Constructs a product in input order; the empty product is unbound identity.
-    pub fn product_all(operators: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
+    pub fn product(operators: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
         Self::product_collected(operators.into_iter().collect())
     }
     /// Collects fallible operators before validating the whole product's binding.
@@ -489,7 +511,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     /// The first input error stops iteration and takes precedence over binding
     /// errors. Order is preserved, with the right operand acting first.
     /// Empty input is unbound identity. No primitive rules are evaluated.
-    pub fn try_product_all(
+    pub fn try_product(
         operators: impl IntoIterator<Item = Result<Self, ExpressionError>>,
     ) -> Result<Self, ExpressionError> {
         Self::product_collected(operators.into_iter().collect::<Result<_, _>>()?)
@@ -508,16 +530,12 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             ambient,
         })
     }
-    /// Constructs `self * rhs`, with the right operand acting first.
-    pub fn product(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::product_all([self.clone(), rhs.clone()])
-    }
-    pub(super) fn into_product(self, rhs: Self) -> Result<Self, ExpressionError> {
-        Self::product_all([self, rhs])
+    pub(crate) fn into_product(self, rhs: Self) -> Result<Self, ExpressionError> {
+        Self::product([self, rhs])
     }
     /// Constructs the anticommutator without evaluating local rules.
     pub fn anticommutator(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::sum([self.product(rhs)?, rhs.product(self)?])
+        Self::sum([(self * rhs)?, (rhs * self)?])
     }
     /// Binds or rebinds this syntax to an explicit space, leaving the input intact.
     pub fn bind(&self, ambient: &HilbertSpace<I>) -> Result<Self, ExpressionError> {
@@ -527,7 +545,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             ambient: Some(ambient.clone()),
         })
     }
-    pub(super) fn select_space<'a>(
+    pub(crate) fn select_space<'a>(
         &'a self,
         explicit: Option<&'a HilbertSpace<I>>,
         state: Option<&'a HilbertSpace<I>>,
@@ -627,5 +645,11 @@ impl<I, O, C> Drop for OpExpr<I, O, C> {
                 }
             }
         }
+    }
+}
+
+impl<I, O, C> Identity for Operator<I, O, C> {
+    fn identity() -> Self {
+        Self::identity()
     }
 }

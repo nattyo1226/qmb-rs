@@ -2,8 +2,8 @@
 
 use num_traits::{One, Zero};
 use qmb_core::{
-    Act, Adjoint, Basis, BasisError, Conjugate, DimensionOverflow, HilbertSpace, LinearCombination,
-    LocalState, SpanDimension, State,
+    Act, Adjoint, Basis, BasisError, Conjugate, Dimension, DimensionOverflow, HilbertSpace,
+    LinearCombination, LocalState, State,
 };
 use std::{
     cell::Cell,
@@ -15,8 +15,18 @@ use std::{
 // operator implements Adjoint but deliberately has no Product or Identity.
 struct Ket(bool);
 struct Action;
-impl SpanDimension for Ket {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl qmb_core::HomogeneousParity for Action {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Action {
+    fn parity_operator() -> Self {
+        Self
+    }
+}
+impl Dimension for Ket {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(2).unwrap())
     }
 }
@@ -102,8 +112,8 @@ fn local_expansion_needs_no_primitive_clone_product_float_or_coefficient_one() {
     let state = S::primitive(Ket(true));
     let delayed = (state.clone() + state.scaled(Coefficient(2)))
         .act(&qmb_core::LocalOperator::primitive(Action));
-    let expanded = delayed.expand_in(&basis).unwrap();
-    let coords = expanded.coordinates_in(&basis).unwrap();
+    let expanded = delayed.expand(&basis).unwrap();
+    let coords = expanded.coordinates(&basis).unwrap();
     assert_eq!(coords.len(), 1);
     assert_eq!(
         coords.entries().next().unwrap(),
@@ -111,7 +121,7 @@ fn local_expansion_needs_no_primitive_clone_product_float_or_coefficient_one() {
     );
     assert_eq!(
         state
-            .coordinates_in(&basis)
+            .coordinates(&basis)
             .unwrap()
             .entries()
             .next()
@@ -182,30 +192,34 @@ fn cancellations_stay_sparse_through_tensor_expansion() {
     const FACTORS: usize = 12;
     type S = LocalState<Ket, Action, Counted>;
     let basis = CountingBasis::new();
-    let state = State::tensor((0..FACTORS).map(|index| {
-        let factor = HilbertSpace::factor(index);
-        let zero = S::primitive(Ket(false)).at(&factor).unwrap();
-        let one = S::primitive(Ket(true)).at(&factor).unwrap();
-        State::sum(&factor, [zero.clone(), zero.scaled(Counted(-1.0)), one]).unwrap()
-    }))
+    let space = HilbertSpace::tensor_all((0..FACTORS).map(HilbertSpace::factor)).unwrap();
+    let state = State::tensor_in(
+        &space,
+        (0..FACTORS).map(|index| {
+            let factor = HilbertSpace::factor(index);
+            let zero = S::primitive(Ket(false)).at(&factor).unwrap();
+            let one = S::primitive(Ket(true)).at(&factor).unwrap();
+            State::sum(&factor, [zero.clone(), zero.scaled(Counted(-1.0)), one]).unwrap()
+        }),
+    )
     .unwrap();
 
     // A generous bound catches exponential work without relying on wall time
     // or a particular linear-time implementation.
     reset_multiplications();
-    let expanded = state.expand_in(&basis).unwrap();
+    let expanded = state.expand(&basis).unwrap();
     assert!(multiplication_count() < 1_000);
     assert!(expanded.space().shares_node_with(state.space()));
 
     reset_multiplications();
-    let coordinates = state.coordinates_in(&basis).unwrap();
+    let coordinates = state.coordinates(&basis).unwrap();
     assert!(multiplication_count() < 1_000);
     assert_eq!(coordinates.len(), 1);
     let (digits, coefficient) = coordinates.entries().next().unwrap();
     assert_eq!(digits.len(), FACTORS);
     assert!(digits.iter().all(|digit| *digit == 1));
     assert_eq!(*coefficient, Counted(1.0));
-    let expanded_coordinates = expanded.coordinates_in(&basis).unwrap();
+    let expanded_coordinates = expanded.coordinates(&basis).unwrap();
     assert_eq!(
         expanded_coordinates.entries().collect::<Vec<_>>(),
         coordinates.entries().collect::<Vec<_>>()
@@ -221,7 +235,7 @@ fn cancellations_stay_sparse_through_tensor_expansion() {
         scaled = scaled.scaled(Counted(1.0));
     }
     reset_multiplications();
-    let coordinates = scaled.coordinates_in(&basis).unwrap();
+    let coordinates = scaled.coordinates(&basis).unwrap();
     assert!(multiplication_count() < 100);
     assert!(coordinates.is_empty());
     assert!(coordinates.space().shares_node_with(scaled.space()));
@@ -232,15 +246,19 @@ fn underflowed_tensor_coefficients_do_not_keep_expanding() {
     const FACTORS: usize = 12;
     type S = LocalState<Ket, Action, Counted>;
     let basis = CountingBasis::new();
-    let state = State::tensor((0..FACTORS).map(|index| {
-        let factor = HilbertSpace::factor(index);
-        let small = S::primitive(Ket(false)).at(&factor).unwrap();
-        let one = S::primitive(Ket(true)).at(&factor).unwrap();
-        State::sum(&factor, [small.scaled(Counted(1e-200)), one]).unwrap()
-    }))
+    let space = HilbertSpace::tensor_all((0..FACTORS).map(HilbertSpace::factor)).unwrap();
+    let state = State::tensor_in(
+        &space,
+        (0..FACTORS).map(|index| {
+            let factor = HilbertSpace::factor(index);
+            let small = S::primitive(Ket(false)).at(&factor).unwrap();
+            let one = S::primitive(Ket(true)).at(&factor).unwrap();
+            State::sum(&factor, [small.scaled(Counted(1e-200)), one]).unwrap()
+        }),
+    )
     .unwrap();
     reset_multiplications();
-    let coordinates = state.coordinates_in(&basis).unwrap();
+    let coordinates = state.coordinates(&basis).unwrap();
     assert!(multiplication_count() < 1_000);
     assert_eq!(coordinates.len(), FACTORS + 1);
     for (digits, coefficient) in coordinates.entries() {
@@ -268,9 +286,9 @@ fn composite_expansion_retains_tiny_and_nan_coefficients() {
     )
     .unwrap();
     let basis = CountingBasis::new();
-    let expanded = state.expand_in(&basis).unwrap();
+    let expanded = state.expand(&basis).unwrap();
     for state in [&state, &expanded] {
-        let coordinates = state.coordinates_in(&basis).unwrap();
+        let coordinates = state.coordinates(&basis).unwrap();
         let entries: Vec<_> = coordinates.entries().collect();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0], (&[0][..], &1e-300));
@@ -332,15 +350,18 @@ fn placed_expansion_shares_nonclone_indices_and_does_not_enumerate_all_basis_ele
     let basis = CountingBasis::new();
     let a = HilbertSpace::factor(Index(11));
     let b = HilbertSpace::factor(Index(7));
-    let state = S::primitive(Ket(true))
-        .at(&a)
-        .unwrap()
-        .tensor_product(&S::primitive(Ket(false)).at(&b).unwrap())
-        .unwrap();
+    let state = State::tensor_in(
+        &a.tensor(&b).unwrap(),
+        [
+            S::primitive(Ket(true)).at(&a).unwrap(),
+            S::primitive(Ket(false)).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
     let op = qmb_core::LocalOperator::primitive(Action).at(&b).unwrap();
-    let expanded = state.act(&op).unwrap().expand_in(&basis).unwrap();
+    let expanded = state.act(&op).unwrap().expand(&basis).unwrap();
     assert!(expanded.space().shares_node_with(state.space()));
-    let coords = expanded.coordinates_in(&basis).unwrap();
+    let coords = expanded.coordinates(&basis).unwrap();
     assert!(coords.space().shares_node_with(state.space()));
     assert_eq!(coords.flat_entries().next().unwrap().unwrap(), (2, &1.0));
     assert_eq!(basis.enumerations.get(), 0);
@@ -356,8 +377,8 @@ fn placed_expansion_shares_nonclone_indices_and_does_not_enumerate_all_basis_ele
 }
 
 struct Large;
-impl SpanDimension for Large {
-    fn span_dimension() -> Result<NonZeroUsize, DimensionOverflow> {
+impl Dimension for Large {
+    fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Err(DimensionOverflow)
     }
 }
@@ -384,9 +405,9 @@ impl Basis<Large, f64> for LargeBasis {
 #[test]
 fn unit_space_does_not_request_an_unused_local_dimension() {
     let state = State::<u8, Large, Action, f64>::unit();
-    let expanded = state.expand_in(&LargeBasis).unwrap();
-    let coords = expanded.coordinates_in(&LargeBasis).unwrap();
-    assert_eq!(coords.dimension().unwrap(), 1);
+    let expanded = state.expand(&LargeBasis).unwrap();
+    let coords = expanded.coordinates(&LargeBasis).unwrap();
+    assert_eq!(coords.dim().unwrap(), 1);
     assert_eq!(coords.flat_entries().next().unwrap().unwrap(), (0, &1.0));
     assert_eq!(
         state
@@ -401,7 +422,7 @@ fn unit_space_does_not_request_an_unused_local_dimension() {
         LocalState::<Large, Action, f64>::primitive(Large)
             .at(&factor)
             .unwrap()
-            .expand_in(&LargeBasis),
+            .expand(&LargeBasis),
         Err(BasisError::Dimension(DimensionOverflow))
     ));
 }

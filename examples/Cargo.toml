@@ -16,6 +16,8 @@ qmb-basic.workspace = true
 qmb-core.workspace = true
 qmb-geometry.workspace = true
 qmb-spin-half.workspace = true
+qmb-spin-one.workspace = true
+qmb-fermion.workspace = true
 qmb-normalize = { workspace = true, optional = true }
 qmb-export = { workspace = true, optional = true, features = ["ndarray", "sprs"] }
 num-complex.workspace = true

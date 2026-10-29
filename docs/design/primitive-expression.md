@@ -31,7 +31,7 @@
 
 Product は演算子 primitive 側、Act は状態 primitive 側の能力とする。Act の規則は、作用先の状態 primitive 型と演算子 primitive 型の組に対応し、`state.act(&operator)` は数学的には `operator * state` を計算する。対応する型と表現パラメータの整合性は局所構造の契約に従う。
 
-Rust API は状態式を S・O・C、演算子式を O・C で指定する。恒等元は O が Identity として生成し、次元は S・O が SpanDimension で提供する。演算能力と入出力の対応は必要な評価メソッドで要求し、保持型に全演算能力を要求しない。LocalStructure と追加の定義ラベルは導入しない。
+Rust API は状態式を S・O・C、演算子式を O・C で指定する。恒等元は O が Identity として生成し、次元は S・O が Dimension で提供する。演算能力と入出力の対応は必要な評価メソッドで要求し、保持型に全演算能力を要求しない。LocalStructure と追加の定義ラベルは導入しない。
 
 Product・Act・随伴の結果は、同じ局所構造の primitive の有限線型結合を表す薄い `LinearCombination` とする。単一 primitive への閉性は要求しない。演算 trait は係数全体 C を型引数、返却要素を関連型 `Term` で指定し、局所式や局所構造には依存しない。局所規則では `Term` を対応する primitive 型とする。式木側は `map` で要素を変換し、和・スカラー倍として取り込む。恒等元は `O: Identity` の値として生成し、選択基底への展開は Basis が担う。未評価の作用・積・随伴を返して局所計算を先送りしない。加算、scalar multiplication、および zero は共通処理で提供する。演算 trait の関連型への移行と式木への接続は Step 2 で行う。
 
@@ -105,7 +105,7 @@ A(aB+bC)=a(AB)+b(AC),
 | 演算子式・状態式 | 期待値 | 作用と内積から `⟨ψ,Aψ⟩` を計算する |
 | 演算子式・状態式 | 正規化期待値 | 期待値を `⟨ψ,ψ⟩` で割る。zero-norm state では拒否する |
 
-bra 型・構築 API は後続へ延期し、初期版の braket は内積で計算する。Norm・正規化・正規化期待値は共通機構から提供し、局所代数ごとの実装を必須としない。恒等演算子は遅延構築では `Identity` 節点で保持し、trace で必要になった時に `O::identity()` を取得する。
+bra 型・構築 API は後続へ延期し、初期版の braket は内積で計算する。Norm・正規化・正規化期待値は共通機構から提供し、局所代数ごとの実装を必須としない。局所恒等演算子は `Primitive(O::identity())` で保持し、他の primitive と同じ評価・展開経路を使う。複合式の `OpNode::Identity` は維持する。
 
 ### 4.1. Norm・正規化の API と feature
 
@@ -149,7 +149,7 @@ Primitive が線型独立でないため、同じ数学的対象に複数の式�
 
 ## 7. 式構築の入口と係数変換（2026-10-28）
 
-構築・集約の基本の入口は qmb_core::QuantumSystem とし、構築済みの式の操作・計算はインスタンスメソッドで行う。LocalStateOf・LocalOperatorOf・StateOf・OperatorOf は主に型注釈で使う。既存の core constructor は維持し、QuantumSystem の既定メソッドと同じ基礎処理へ委譲する。具体的な配置・合成の契約は[複合式の設計](composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
+構築・集約の基本の入口は qmb_core::ExpressionFactory とし、構築済みの式の操作・計算はインスタンスメソッドで行う。LocalStateOf・LocalOperatorOf・StateOf・OperatorOf は主に型注釈で使う。状態のテンソル構築は既存空間を明示する tensor_in・try_tensor_in に移行し、ExpressionFactory の同名 inherent method も基礎 API へ委譲する。primitive の葉順の配置には product_state を使う。具体的な配置・合成の契約は[複合式の設計](composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)に記録する。
 
 局所・複合の4式型と LinearCombination の scaled は `impl Into<C>` を受け取り、入口で一度だけ C に変換する。式型は係数を保持するだけで数値能力・Clone を要求せず、LinearCombination は従来の `C: Clone + Mul<Output=C>` を維持する。変換元の Clone は不要で、空の LinearCombination でも変換は一度行う。C の精度は維持し、新たなキャストや精度変換は導入しない。Mul・scalar・term の引数は広げない。
 
@@ -157,10 +157,12 @@ Primitive が線型独立でないため、同じ数学的対象に複数の式�
 
 | 旧引数型に依存していた箇所 | 現在の書き方 |
 | --- | --- |
-| scaled の引数から式の C を推論 | QuantumSystem で先に C を選ぶか、`LocalOperator::<Op, Complex<f64>>` などで明示する |
+| scaled の引数から式の C を推論 | ExpressionFactory で先に C を選ぶか、`LocalOperator::<Op, Complex<f64>>` などで明示する |
 | `.scaled(value.into())` の内側の変換先 | `.scaled(value)` と入力を直接渡す |
 | `.scaled(Default::default())` の生成型 | `.scaled(Complex::<f64>::default())` など入力型を明示する |
 
 係数型を選択済みなら `.scaled(0.5)` と同じ精度の実数を渡せる。標準の `Complex<f32>` へ明示的な f64 を渡すなど、既存の Into が提供しない変換は受け入れない。利用例は[基底展開](../../examples/src/bin/basis_expansion.rs)と[2スピンの計算](../../examples/src/bin/two_spins.rs)を参照する。
 
-LocalState::try_sum・LocalOperator::try_sum は `Result<式,ExpressionError>` の列を集約し、最初の入力 Err 以降を取り出さずに、そのまま返す。全成功時は既存 sum と同じ項順・重複・零係数・空／単項の扱いを保ち、primitive を評価しない。QuantumSystem の局所式用転送メソッドは後続候補であり、今回追加していない。
+LocalState::try_sum・LocalOperator::try_sum は `Result<式,ExpressionError>` の列を集約し、最初の入力 Err 以降を取り出さずに、そのまま返す。全成功時は既存 sum と同じ項順・重複・零係数・空／単項の扱いを保ち、primitive を評価しない。ExpressionFactory の局所式用転送メソッドは後続候補であり、今回追加していない。
+
+名前付きの和・積の構築は式型の列版 `sum` / `product` に絞り、二項は標準の `+` / `*` を使う。primitive の `Product::product` は局所規則として維持する。局所式の係数付き構築は `from_terms(impl IntoIterator<Item=Term<Self,C>>)` とし、配列・iterator・既存の LinearCombination を受け取る。数値演算・Clone・評価を要求せず、入力順・重複・ゼロ係数を保つ。

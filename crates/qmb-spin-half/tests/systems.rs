@@ -1,5 +1,5 @@
 use num_complex::Complex;
-use qmb_core::{ExpressionError, HilbertSpace as H, QuantumSystem, SpaceError, State, StateOf};
+use qmb_core::{ExpressionError, HilbertSpace as H, SpaceError, State, StateOf};
 use qmb_geometry::{Boundary, Chain, ChainError};
 use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket, UtilityError};
 
@@ -11,13 +11,13 @@ fn local_and_composite_expressions_connect_to_existing_types() {
     let b = H::factor("b");
     let up: qmb_core::LocalStateOf<Spin> = Spin::state(Ket::Up);
     let sz: qmb_core::LocalOperatorOf<Spin> = Spin::operator(Op::Sz);
-    let psi: StateOf<Spin, _> = up
-        .at(&a)
-        .unwrap()
-        .tensor_product(&Spin::state(Ket::Down).at(&b).unwrap())
-        .unwrap();
+    let psi: StateOf<Spin, _> = State::tensor_in(
+        &a.tensor(&b).unwrap(),
+        [up.at(&a).unwrap(), Spin::state(Ket::Down).at(&b).unwrap()],
+    )
+    .unwrap();
     let zz: qmb_core::OperatorOf<Spin, _> =
-        sz.at(&a).unwrap().product(&sz.at(&b).unwrap()).unwrap();
+        (sz.at(&a).unwrap().clone() * &sz.at(&b).unwrap()).unwrap();
     assert_eq!(psi.expectation(&zz).unwrap(), Complex::new(-0.25, 0.));
     // Construction fixes f32 even without downstream evaluation or annotation.
     let single = SpinHalf::<Complex<f32>>::state(Ket::Up);
@@ -30,8 +30,16 @@ fn local_and_composite_expressions_connect_to_existing_types() {
     );
     let chain = Chain::new(2, Boundary::Open);
     let sites = [a, b];
-    let h = SpinHalf::<Complex<f32>>::heisenberg(&chain, &sites, 1.0).unwrap();
-    let psi = SpinHalf::<Complex<f32>>::neel(&chain, &sites, Ket::Up).unwrap();
+    let h = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<f32>>>::heisenberg(
+        &chain, &sites, 1.0,
+    )
+    .unwrap();
+    let psi = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Complex<f32>>>::neel(
+        &chain,
+        &sites,
+        Ket::Up,
+    )
+    .unwrap();
     assert_eq!(psi.expectation(&h).unwrap(), Complex::new(0.25_f32, 0.));
 }
 
@@ -40,17 +48,22 @@ fn models_accept_multiple_leaves_and_alternate_by_site() {
     let a = H::factor(0);
     let b = H::factor(1);
     let c = H::factor(2);
-    let nested = H::tensor([H::unit(), H::tensor([a.clone(), b.clone()]).unwrap()]).unwrap();
+    let nested =
+        H::tensor_all([H::unit(), H::tensor_all([a.clone(), b.clone()]).unwrap()]).unwrap();
     let sites = [nested, c.clone()];
     let chain = Chain::new(2, Boundary::Open);
-    let h = Spin::heisenberg(&chain, &sites, 1.0).unwrap();
-    let xyz = Spin::xyz(&chain, &sites, 1.0, 1.0, 1.0).unwrap();
-    let psi = Spin::neel(&chain, &sites, Ket::Up).unwrap();
-    let expected = State::tensor([
-        Spin::state(Ket::Up).at(&a).unwrap(),
-        Spin::state(Ket::Up).at(&b).unwrap(),
-        Spin::state(Ket::Down).at(&c).unwrap(),
-    ])
+    let h = qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(&chain, &sites, 1.0).unwrap();
+    let xyz =
+        qmb_spin_half::models::SpinHalfModels::<Spin>::xyz(&chain, &sites, 1.0, 1.0, 1.0).unwrap();
+    let psi = qmb_spin_half::models::SpinHalfModels::<Spin>::neel(&chain, &sites, Ket::Up).unwrap();
+    let expected = State::tensor_in(
+        psi.space(),
+        [
+            Spin::state(Ket::Up).at(&a).unwrap(),
+            Spin::state(Ket::Up).at(&b).unwrap(),
+            Spin::state(Ket::Down).at(&c).unwrap(),
+        ],
+    )
     .unwrap();
     assert_eq!(psi.inner_product(&expected).unwrap(), Complex::new(1., 0.));
     assert_eq!(psi.expectation(&h).unwrap(), Complex::new(0.5, 0.));
@@ -60,10 +73,7 @@ fn models_accept_multiple_leaves_and_alternate_by_site() {
         for axis in [Op::Sx, Op::Sy, Op::Sz] {
             let local = Spin::operator(axis);
             terms.push(
-                local
-                    .at(left)
-                    .unwrap()
-                    .product(&local.at(&c).unwrap())
+                (local.at(left).unwrap().clone() * &local.at(&c).unwrap())
                     .unwrap()
                     .scaled(Complex::new(-1., 0.)),
             );
@@ -72,15 +82,18 @@ fn models_accept_multiple_leaves_and_alternate_by_site() {
     let reference = qmb_core::OperatorOf::<Spin, _>::sum(terms).unwrap();
     let basis: Vec<_> = (0..8)
         .map(|bits| {
-            State::tensor([&a, &b, &c].into_iter().enumerate().map(|(i, leaf)| {
-                Spin::state(if bits >> (2 - i) & 1 == 0 {
-                    Ket::Up
-                } else {
-                    Ket::Down
-                })
-                .at(leaf)
-                .unwrap()
-            }))
+            State::tensor_in(
+                psi.space(),
+                [&a, &b, &c].into_iter().enumerate().map(|(i, leaf)| {
+                    Spin::state(if bits >> (2 - i) & 1 == 0 {
+                        Ket::Up
+                    } else {
+                        Ket::Down
+                    })
+                    .at(leaf)
+                    .unwrap()
+                }),
+            )
             .unwrap()
         })
         .collect();
@@ -107,22 +120,33 @@ fn models_accept_multiple_leaves_and_alternate_by_site() {
 fn empty_sites_keep_edges_and_parity_and_all_empty_inputs_give_units() {
     let sites = [H::factor(0), H::unit(), H::factor(1)];
     let chain = Chain::new(3, Boundary::Open);
-    let psi = Spin::neel(&chain, &sites, Ket::Up).unwrap();
-    let expected = Spin::state(Ket::Up)
-        .at(&sites[0])
-        .unwrap()
-        .tensor_product(&Spin::state(Ket::Up).at(&sites[2]).unwrap())
-        .unwrap();
+    let psi = qmb_spin_half::models::SpinHalfModels::<Spin>::neel(&chain, &sites, Ket::Up).unwrap();
+    let expected = State::tensor_in(
+        psi.space(),
+        [
+            Spin::state(Ket::Up).at(&sites[0]).unwrap(),
+            Spin::state(Ket::Up).at(&sites[2]).unwrap(),
+        ],
+    )
+    .unwrap();
     assert_eq!(psi.inner_product(&expected).unwrap(), Complex::new(1., 0.));
     assert_eq!(
-        psi.expectation(&Spin::heisenberg(&chain, &sites, 1.0).unwrap())
-            .unwrap(),
+        psi.expectation(
+            &qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(&chain, &sites, 1.0)
+                .unwrap()
+        )
+        .unwrap(),
         Complex::new(0., 0.)
     );
     // The periodic closing edge still couples site 0 to site 2.
     assert_eq!(
         psi.expectation(
-            &Spin::heisenberg(&Chain::new(3, Boundary::Periodic), &sites, 1.0).unwrap()
+            &qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(
+                &Chain::new(3, Boundary::Periodic),
+                &sites,
+                1.0
+            )
+            .unwrap()
         )
         .unwrap(),
         Complex::new(-0.25, 0.)
@@ -130,8 +154,10 @@ fn empty_sites_keep_edges_and_parity_and_all_empty_inputs_give_units() {
     for count in 0..=3 {
         let sites: Vec<_> = (0..count).map(|_| H::<u8>::unit()).collect();
         let chain = Chain::new(count, Boundary::Periodic);
-        let psi = Spin::neel(&chain, &sites, Ket::Down).unwrap();
-        let h = Spin::heisenberg(&chain, &sites, 1.0).unwrap();
+        let psi =
+            qmb_spin_half::models::SpinHalfModels::<Spin>::neel(&chain, &sites, Ket::Down).unwrap();
+        let h =
+            qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(&chain, &sites, 1.0).unwrap();
         assert_eq!(
             psi.inner_product(&State::unit()).unwrap(),
             Complex::new(1., 0.)
@@ -140,7 +166,12 @@ fn empty_sites_keep_edges_and_parity_and_all_empty_inputs_give_units() {
         assert_eq!(h.space().unwrap().children().count(), count);
     }
     // A single nonempty site is retained in a Hamiltonian with no terms.
-    let h = Spin::heisenberg(&Chain::new(1, Boundary::Open), &sites[..1], 1.0).unwrap();
+    let h = qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(
+        &Chain::new(1, Boundary::Open),
+        &sites[..1],
+        1.0,
+    )
+    .unwrap();
     assert_eq!(h.space().unwrap().indices().count(), 1);
 }
 
@@ -152,19 +183,43 @@ fn every_model_validates_length_and_duplicate_indices_without_edges() {
             let chain = Chain::new(n, Boundary::Open);
             let expected =
                 (n != count).then_some(UtilityError::Chain(ChainError::SiteCountMismatch));
-            assert_eq!(Spin::neel(&chain, &sites, Ket::Up).err(), expected);
-            assert_eq!(Spin::heisenberg(&chain, &sites, 1.0).err(), expected);
-            assert_eq!(Spin::xyz(&chain, &sites, 1.0, 2.0, 3.0).err(), expected);
+            assert_eq!(
+                qmb_spin_half::models::SpinHalfModels::<Spin>::neel(&chain, &sites, Ket::Up).err(),
+                expected
+            );
+            assert_eq!(
+                qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(&chain, &sites, 1.0)
+                    .err(),
+                expected
+            );
+            assert_eq!(
+                qmb_spin_half::models::SpinHalfModels::<Spin>::xyz(&chain, &sites, 1.0, 2.0, 3.0)
+                    .err(),
+                expected
+            );
         }
     }
     for boundary in [Boundary::Open, Boundary::Periodic] {
         // A middle empty site prevents all edges; duplicates must still fail.
-        let sites = [H::factor(0), H::unit(), H::tensor([H::factor(0)]).unwrap()];
+        let sites = [
+            H::factor(0),
+            H::unit(),
+            H::tensor_all([H::factor(0)]).unwrap(),
+        ];
         let chain = Chain::new(3, boundary);
         let expected = Some(UtilityError::Space(SpaceError::DuplicateIndex));
-        assert_eq!(Spin::neel(&chain, &sites, Ket::Up).err(), expected);
-        assert_eq!(Spin::heisenberg(&chain, &sites, 1.0).err(), expected);
-        assert_eq!(Spin::xyz(&chain, &sites, 1.0, 2.0, 3.0).err(), expected);
+        assert_eq!(
+            qmb_spin_half::models::SpinHalfModels::<Spin>::neel(&chain, &sites, Ket::Up).err(),
+            expected
+        );
+        assert_eq!(
+            qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(&chain, &sites, 1.0).err(),
+            expected
+        );
+        assert_eq!(
+            qmb_spin_half::models::SpinHalfModels::<Spin>::xyz(&chain, &sites, 1.0, 2.0, 3.0).err(),
+            expected
+        );
     }
 }
 
@@ -187,7 +242,12 @@ fn model_construction_needs_only_operation_specific_coefficient_capabilities() {
     // No numeric traits, Clone or Act are required for the Neel coefficient.
     let sites = [H::factor(0), H::factor(1)];
     let chain = Chain::new(2, Boundary::Open);
-    let _ = SpinHalf::<NoCapabilities>::neel(&chain, &sites, Ket::Up).unwrap();
+    let _ = qmb_spin_half::models::SpinHalfModels::<SpinHalf<NoCapabilities>>::neel(
+        &chain,
+        &sites,
+        Ket::Up,
+    )
+    .unwrap();
     // Hamiltonian construction needs no addition, multiplication, Zero or One.
     // XYZ's real coupling source need not implement Clone either.
     struct Real(i32);
@@ -196,8 +256,17 @@ fn model_construction_needs_only_operation_specific_coefficient_capabilities() {
             Self(value.0)
         }
     }
-    let _ = SpinHalf::<Coupling>::xyz(&chain, &sites, Real(1), Real(2), Real(3)).unwrap();
-    let _ = SpinHalf::<Coupling>::heisenberg(&chain, &sites, 1).unwrap();
+    let _ = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Coupling>>::xyz(
+        &chain,
+        &sites,
+        Real(1),
+        Real(2),
+        Real(3),
+    )
+    .unwrap();
+    let _ =
+        qmb_spin_half::models::SpinHalfModels::<SpinHalf<Coupling>>::heisenberg(&chain, &sites, 1)
+            .unwrap();
 }
 
 #[test]
@@ -209,12 +278,15 @@ fn non_clone_indices_and_deep_site_grouping_are_supported_iteratively() {
         .spawn(|| {
             let mut first = H::factor(Index(1));
             for _ in 0..20_000 {
-                first = H::tensor([first]).unwrap();
+                first = H::tensor_all([first]).unwrap();
             }
             let sites = [first, H::factor(Index(0))];
             let chain = Chain::new(2, Boundary::Periodic);
-            let state = Spin::neel(&chain, &sites, Ket::Up).unwrap();
-            let h = Spin::heisenberg(&chain, &sites, 1.0).unwrap();
+            let state =
+                qmb_spin_half::models::SpinHalfModels::<Spin>::neel(&chain, &sites, Ket::Up)
+                    .unwrap();
+            let h = qmb_spin_half::models::SpinHalfModels::<Spin>::heisenberg(&chain, &sites, 1.0)
+                .unwrap();
             assert!(
                 h.space()
                     .unwrap()
@@ -265,16 +337,25 @@ macro_rules! construction_precision {
             type Q = SpinHalf<Complex<$real>>;
             let a = H::factor(0u8);
             let b = H::factor(1);
-            let space = a.tensor_product(&b).unwrap();
-            let state = Q::state_tensor_at([(&a, Ket::Up), (&b, Ket::Down)]).unwrap();
-            let explicit = Q::state_tensor([
-                Q::state(Ket::Up).at(&a).unwrap(),
-                Q::state(Ket::Down).at(&b).unwrap(),
-            ])
+            let space = a.tensor(&b).unwrap();
+            let state = Q::product_state(
+                &qmb_core::HilbertSpace::tensor_all([(a).clone(), (b).clone()]).unwrap(),
+                [Ket::Up, Ket::Down],
+            )
             .unwrap();
-            let fallible =
-                Q::try_state_tensor([Q::state(Ket::Up).at(&a), Q::state(Ket::Down).at(&b)])
-                    .unwrap();
+            let explicit = Q::tensor_in(
+                &space,
+                [
+                    Q::state(Ket::Up).at(&a).unwrap(),
+                    Q::state(Ket::Down).at(&b).unwrap(),
+                ],
+            )
+            .unwrap();
+            let fallible = Q::try_tensor_in(
+                &space,
+                [Q::state(Ket::Up).at(&a), Q::state(Ket::Down).at(&b)],
+            )
+            .unwrap();
             assert_eq!(
                 state.inner_product(&explicit).unwrap(),
                 Complex::new(1., 0.)
@@ -335,9 +416,9 @@ macro_rules! construction_precision {
                 up.expectation(&xy).unwrap()
             );
             for unit in [
-                Q::state_tensor::<u8>([]),
-                Q::try_state_tensor::<u8>([]),
-                Q::state_tensor_at::<u8>([]),
+                Q::tensor_in(&H::<u8>::unit(), []),
+                Q::try_tensor_in(&H::<u8>::unit(), []),
+                Q::product_state(&H::<u8>::unit(), []),
             ] {
                 let unit = unit.unwrap();
                 assert_eq!(unit.inner_product(&unit).unwrap(), Complex::new(1., 0.));
