@@ -1,0 +1,15 @@
+[package]
+name = "qmb-spin-one"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Spin-1 primitives, quadrupoles, local rules, and bases for qmb-rs"
+
+[dependencies]
+qmb-core.workspace = true
+num-traits = { workspace = true, features = ["std"] }
+num-complex.workspace = true
+
+[dev-dependencies]
+qmb-normalize.workspace = true
+qmb-export = { workspace = true, features = ["ndarray", "sprs"] }

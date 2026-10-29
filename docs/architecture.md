@@ -1,6 +1,6 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 ## 1. 文書の位置づけ
 
@@ -30,7 +30,7 @@ Chain はサイト数と境界条件だけを保持する。`qmb-geometry` は�
 
 代数系の共通処理は `qmb-core` に集約する。抽象契約・有限線型結合に加え、局所・複合式木、Index・自由度・Hilbert 空間、局所式の配置・束縛、評価、基底展開・座標取得を同じ crate が所有する。写像の表現係数は将来の同 crate の担当とする。本文書と詳細設計でいう「代数 core」は `qmb-core` を指す。
 
-具体的代数は専用 crate とし、`qmb-spin-half`・`qmb-fermion` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係と外部列への借用接続は `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、標準 Hubbard・symmetric Hubbard の構築は `qmb-fermion`、norm・状態の正規化・正規化期待値は `qmb-normalize` が担当する。workspace は7つのライブラリ crate と [examples パッケージ](../examples/README.md)で構成する。basic・geometry・spin-half・fermion・export・normalize は core に依存し、spin-half と fermion のモデル構築は geometry の公開契約を利用する。normalize は std を利用できる。core と geometry は `no_std + alloc` を維持し、core は basic・UUID・乱数源・具体的代数・geometry・normalize・数値 backend に依存しない。
+具体的代数は専用 crate とし、`qmb-spin-half`・`qmb-spin-one`・`qmb-fermion` は primitive・局所規則・具体的基底を実装し、core の共通型を直接利用できる。UUID による具体的 Index と発行は `qmb-basic`、Site・近接関係と外部列への借用接続は `qmb-geometry`、外部数値コンテナへの変換は `qmb-export`、Heisenberg・Neel の構築 utility は `qmb-spin-half`、標準 Hubbard・symmetric Hubbard の構築は `qmb-fermion`、norm・状態の正規化・正規化期待値は `qmb-normalize` が担当する。workspace は8つのライブラリ crate と [examples パッケージ](../examples/README.md)で構成する。basic・geometry・spin-half・spin-one・fermion・export・normalize は core に依存し、spin-half と fermion のモデル構築は geometry の公開契約を利用する。normalize と spin-one は std を利用できる。core と geometry は `no_std + alloc` を維持し、core は basic・UUID・乱数源・具体的代数・geometry・normalize・数値 backend に依存しない。
 
 core 内では局所契約、式、空間、評価、基底処理を module で分離する。共通表現と基本操作・名前付きメソッドを同じ crate で設計し、具体的代数ごとに別の式木や evaluator を作らない。式の内容を保持する `ScaleExpr`・`SumExpr`・`ProductExpr`・`ActExpr`・`AdjointExpr` を共通パーツとし、局所式・複合式で再利用する。`LinearCombination<P, C>` は薄い有限線型結合型として維持し、共通パーツで保持する。局所規則・局所基底展開は線型結合を返し、式木側が `map` で要素を変換して共通 constructor で取り込む。Step 2 で core・spin-half・テストの演算 trait を関連型に揃え、式木との接続を実装した。将来の追加 crate は、独立した機能・依存関係・実行基盤の境界が必要になった段階で検討する。
 
@@ -57,6 +57,10 @@ qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs �
 `qmb-fermion` は `no_std + alloc` で、二状態の単一 mode、I・a・a†・n・su(2) 規格化した MajoranaX/Y/Z・Parity の八つの primitive を提供する。状態基底は OccupationBasis、演算子基底は LadderBasis と MajoranaBasis とする。`Fermion<C>` は既存 QuantumSystem の構築入口を使い、局所規則に Float・係数の Clone / Copy を要求しない。
 
 複数 mode の交換符号は primitive の parity と core の graded 評価に委ねる。モデル構築は `Fermion::hubbard`・`symmetric_hubbard` に、Chain と各 Site が `(up,down)` の2 mode を持つ graded 空間列を渡す。両モデルの係数 bound は `Clone + From<R> + Neg` だけであり、構築に局所 Product・Act を要求しない。規約・基底・検証記録は [Fermion の局所代数](design/local-structure.md#9-fermion-の局所代数)、モデル API は [Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)、利用例は [hubbard.rs](../examples/src/bin/hubbard.rs) に記録する。
+
+### 2.5. Spin-one（実装済み）
+
+`qmb-spin-one` は三状態と I・スピン5値・四重極9値の計15演算子 primitive を提供し、状態空間3次元・演算子空間9次元を表す。状態基底は SzBasis、演算子基底は CartesianBasis / LadderBasis。同じ基底の primitive 同士の積はその基底内に閉じる。std を許可し、作用は `Complex<R>`・`R: Float`、他の局所規則は操作ごとの小さい bound とする。規則は直接の match で実装し、全要素 even・P=I で共通の ordinary / graded 評価へ接続する。[Spin-one の局所代数](design/local-structure.md#10-spin-one-の局所代数)と[実装仕様・検証](plans/v2/spin-one-primitives.md)を参照。
 
 ## 3. Index・自由度・局所構造・空間
 
@@ -201,4 +205,4 @@ LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を
 
 2026-10-29 に共通機構を実装した。`HilbertSpace<I>` が `TensorKind` と順序を保持し、primitive が `HomogeneousParity` / `ParityOperator` を提供する。共通の作用評価では Act ごとの選択済み空間に従って P を挿入する。演算子の intrinsic な基底展開と通常表現による trace は private な走査型を分ける。export / normalize は core の共通 API に接続する。
 
-空・単因子の同一視後にも残る異種 tensor kind の混在は拒否する。幾何・Index に grading の責任は追加しない。構築 API・最小能力と breaking change は [複合式の共通評価と移行](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。Fermion の製品実装は第2.4節に記録する。Spin-one の製品実装と Operator / State 統合は後続に残す。
+空・単因子の同一視後にも残る異種 tensor kind の混在は拒否する。幾何・Index に grading の責任は追加しない。構築 API・最小能力と breaking change は [複合式の共通評価と移行](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。Fermion と Spin-one の製品実装は第2.4〜2.5節に記録する。Operator / State 統合は後続に残す。

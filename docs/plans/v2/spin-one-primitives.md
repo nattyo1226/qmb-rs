@@ -1,12 +1,12 @@
-# Spin-one の局所 primitive 実装案
+# Spin-one の局所 primitive 実装仕様
 
 作成日: 2026-10-29
-更新日: 2026-10-29
-状態: primitive・基底・列挙順、局所積の返却表現、std / Float、係数の除算と match による局所規則の実装方針を決定。記載する crate・型・追加 API は未実装。
+更新日: 2026-10-30
+状態: `qmb-spin-one` に実装済み。局所規則・基底・共通 API 接続の検証は第10節に記録する。
 
 ## 1. 対象と参照した実装
 
-spin-1 の三状態、全九次元演算子空間、局所規則と完全な基底を提供する案を記録する。局所規則は core の既存契約で実装できる。Tensor 合成には[実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を使う。
+spin-1 の三状態、全九次元演算子空間、局所規則と完全な基底の実装仕様を記録する。局所規則は core の既存契約で実装した。Tensor 合成には[実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を使う。公開入口は [qmb-spin-one の rustdoc](../../../crates/qmb-spin-one/src/lib.rs)、概要は[局所代数の設計](../../design/local-structure.md#10-spin-one-の局所代数)を参照する。
 
 | 参照 | 本案に適用する内容 |
 | --- | --- |
@@ -45,7 +45,7 @@ spin-half の6 variant `I,Sx,Sy,Sz,SPlus,SMinus` だけを移植しても、そ�
 
 ## 3. 採用する primitive と基底の方針
 
-`qmb-spin-one` を `std` の利用を許可し、`unsafe` 禁止の具体的代数 crate として追加する。no_std 対応は初期要件に含めない。core の既存契約・数値型の汎用性は維持する。
+`qmb-spin-one` を `std` の利用を許可し、`unsafe` 禁止の具体的代数 crate として追加した。no_std 対応は初期要件に含めない。core の既存契約・数値型の汎用性は維持する。
 
 ```rust
 enum SpinOneState { Plus, Zero, Minus }
@@ -201,7 +201,7 @@ Trace は `Tr(I)=3`、他の全14値は0を直接返す。正規化や supertrac
 
 現行 [coefficient.rs](../../../crates/qmb-core/src/coefficient.rs) には ImaginaryUnit 等はあるが、√2 を生成する能力はない。spin-half の1/2だけの係数 helper では、この正規直交基底上の spin-1 を表せない。基底の重みを変えて√2を消すと内積規約も変わるため、本案では行わない。
 
-状態への作用は `Act<Complex<R>> where R: num_traits::Float` として実装する方針に決定する。Float は複素係数 C 全体ではなく、その実数成分 R に付ける。標準の利用対象は `Complex<f32>` / `Complex<f64>` とし、√2 は R の精度で次のように生成する。
+状態への作用は `Act<Complex<R>> where R: num_traits::Float` として実装した。Float は複素係数 C 全体ではなく、その実数成分 R に付ける。標準の利用対象は `Complex<f32>` / `Complex<f64>` とし、√2 は R の精度で次のように生成する。
 
 ```rust
 fn sqrt_two<R: num_traits::Float>() -> R {
@@ -213,7 +213,7 @@ fn sqrt_two<R: num_traits::Float>() -> R {
 
 num-traits 0.2.19 の Float は Num・Copy・NumCast・PartialOrd・Neg を含むため、R の Copy / Clone も許容する。Float を満たさない厳密数・非 Copy の実数型や、Complex<R> 以外の独自係数型への作用は、初期の標準実装の対象外とする。一方、Product・基底変換・primitive の内積・随伴・trace は引き続き汎用の C と操作ごとの小さい bound を維持する。構築・保持には Float を要求しない。
 
-| 能力 | 想定する C の能力 |
+| 能力 | C に要求する能力 |
 | --- | --- |
 | Identity・Dimension・QuantumSystem、primitive 保持 | なし |
 | InnerProduct・Trace | `Zero + One`。3は `one + one + one` |
@@ -273,27 +273,27 @@ I・Sz・Q0 は両基底で共有する。どちらの基底でも全15 primitiv
 
 既存の状態・演算子型に配置し、ordinary / graded 共通の複合評価 API に接続する。Core の `HomogeneousParity`・`ParityOperator` として、全状態・演算子を even、P=I という trivial grading を明示実装し、磁気量子数 m の整数としての偶奇を fermion parity と解釈しない。spin-half・fermion と混在する型消去や一般 spin-S は本書の対象にしない。
 
-## 7. Crate 構成と実装順序
+## 7. Crate 構成と共通 API への接続
 
-想定ファイルは `src/{lib,state,operator,basis,coefficient}.rs`、検証は `tests/{contracts,minimal_scalar,local_expressions}.rs` とする。本番依存候補は既存 workspace の `qmb-core`・`num-traits`・`num-complex` である。num-complex は Act の係数型を表すため、本番依存とする。num-traits はこの crate 側で std feature を有効にし、qmb-normalize と同様に Float を利用する。workspace 全体の既定 feature や core の公開契約は変更しない。geometry・数値 backend は必要としない。
+実装は `src/{lib,state,operator,basis,coefficient}.rs`、検証は `tests/{contracts,minimal_scalar,local_expressions,tensor_products}.rs` と `tests/support/mod.rs` に置く。本番依存は既存 workspace の `qmb-core`・`num-traits`・`num-complex` である。num-complex は Act の係数型を表すため、本番依存とする。num-traits はこの crate 側で std feature を有効にし、qmb-normalize と同様に Float を利用する。workspace 全体の既定 feature や core の公開契約は変更していない。geometry・数値 backend は本番依存に含めない。
 
-想定する依存宣言は以下とする。
+依存宣言は以下のとおりである。
 
 ```toml
 num-traits = { workspace = true, features = ["std"] }
 num-complex.workspace = true
 ```
 
-1. 規約・公開型、Dimension・Identity・QuantumSystem を追加する。
-2. C の算術による定数係数 helper と Float による private な √2 helper を実装する。
-3. Product・Act の規則を match で直接記述し、InnerProduct・Adjoint・Trace、SzBasis・CartesianBasis・LadderBasis を実装する。
-4. 局所式・ordinary な複合式・既存 export / normalize の接続を検証し、利用例と公開 API 文書を追加する。
+1. [lib.rs](../../../crates/qmb-spin-one/src/lib.rs) に `SpinOne<C>` と QuantumSystem 接続、両 primitive に Dimension・trivial grading、演算子に Identity を実装した。
+2. [coefficient.rs](../../../crates/qmb-spin-one/src/coefficient.rs) に C の算術による定数係数と Float による private な √2 helper を置いた。
+3. [operator.rs](../../../crates/qmb-spin-one/src/operator.rs)・[state.rs](../../../crates/qmb-spin-one/src/state.rs) に直接の match 規則、[basis.rs](../../../crates/qmb-spin-one/src/basis.rs) に3基底を実装した。
+4. 共通 LocalState / LocalOperator・State / Operator、export / normalize へ接続した。[spin_one.rs](../../../examples/src/bin/spin_one.rs) は単イオン異方性・横磁場、基底変換、二因子の作用を使う例であり、normalize / export feature も確認できる。
 
 標準の spin-half の型・数値 bound を変更しない。Grading trait は core の実装済み契約へ接続し、共通機構を再実装しない。専用 Heisenberg / bilinear-biquadratic モデル utility は primitive の動作確認例とは分けて設計する。
 
-## 8. 受入条件と検証計画
+## 8. 受入条件
 
-以下は実装時に満たす条件であり、現時点の Rust 実装のテスト結果ではない。
+以下を受入条件とする。実装を照合する Rust テストと確認結果は第10節に対応付ける。
 
 - 全15²=225組の積、15×3=45組の作用、15種の随伴・trace、9組の状態内積を、2節のスピン行列と3.1節の定義から独立に構成した四重極行列・状態ベクトルに照合する。参照行列を製品の match 規則や係数 helper から生成しない。Product の出力が4.2節で指定した基底・共通部分に閉じ、I との積が相手を保持することも確認する。
 - 全15³=3,375組の三重積の結合則、675組の `(AB)ψ=A(Bψ)`、単位元、二回の随伴、随伴の反準同型性と内積整合性、trace の巡回性を確認する。
@@ -305,28 +305,38 @@ num-complex.workspace = true
 - Float・Clone / Copy のない独自係数で Product・両基底の変換・primitive の内積 / 随伴 / trace を呼べること、Identity / Dimension / 構築に数値 bound を要求しないことを capability テストにする。Act は `Complex<f32>` / `Complex<f64>` で全45組を照合し、各 R の精度で √2 を生成することを確認する。Act に非 Float・非 Copy の係数を要求する旧案のテストは初期の受入条件に含めない。
 - 数学的に zero の積・作用が空の線型結合を返し、match 規則で必要な項だけを生成することを確認する。係数生成は C の算術を使い、近似零判定で項を削除しない。数値比較は既存要件の精度別の許容誤差を使う。
 
-実装時の検証入口は `cargo test -p qmb-spin-one`、workspace 登録後の `cargo test --workspace --all-features`、`cargo check -p qmb-spin-one`、`cargo fmt --all -- --check` とする。no_std target への対応は初期要件に含めない。MSRV の実ビルド・性能計測は実施有無を別に記録する。
+検証入口は `cargo test -p qmb-spin-one`、`cargo test --workspace --all-features`、`cargo check -p qmb-spin-one`、`cargo fmt --all -- --check` とする。no_std target への対応は初期要件に含めない。MSRV の実ビルド・性能計測は実施有無を別に記録する。
 
-## 9. 確定方針と実装への移行
+## 9. 確定方針と後続の範囲
 
 確定した方針は、正規直交な `Plus,Zero,Minus`、I・スピン5値・四重極9値の計15演算子 primitive、SzBasis と各9要素の CartesianBasis / LadderBasis、演算子基底を正規直交化しない規約、同じ基底の要素同士の積をその基底内で返す規則である。両演算子基底の和集合を primitive とし、公開の行列単位は初期提供しない。局所積の共通要素・混在時の扱いは4.2節のとおりとする。
 
 std の利用を許可し、Act は `Complex<R>`・`R: Float` 向けに実装する。Product・基底変換等は操作ごとの小さい bound を維持し、構築・保持には数値 bound を付けない。√2 は R の sqrt で生成し、SqrtTwo の公開 trait は追加しない。
 
-variant 名と基底の列挙順も3節の内容で確定する。係数は非零による除算に閉じることを要求し、定数係数は C の算術で生成する。局所規則は既存実装と同様に match で直接記述する。独自の有理数型・記号係数や実行時の行列単位分解を導入する旧案は採用しない。private helper の分け方や共通する match 分岐のまとめ方は、公開 API・数学的規則・基底内閉性を保ったうえで実装時に決める。
+variant 名と基底の列挙順も3節の内容で確定し、そのまま実装した。係数は非零による除算に閉じることを要求し、定数係数は C の算術で生成する。局所規則は既存実装と同様に match で直接記述した。独自の有理数型・記号係数や実行時の行列単位分解を導入する旧案は採用していない。
 
-まず全225積と45作用を覆う規則・両完全基底・係数能力の検証を実装し、その後に追加基底・モデル・一般 spin-S を検討する。tensor 積の計画とは独立に完成を判定できる。
+追加基底・専用モデル utility・一般 spin-S・異種代数の混在は後続の範囲とする。今回の局所 primitive の完成には含めない。
 
-## 10. 本ドキュメント作成時の確認
+## 10. 実装と受入検証
 
-初稿では現行の設計文書・core 契約・spin-half・三準位テスト代数を照合した。初稿の補助的な Python 標準ライブラリの複素行列計算は旧案（名前付き6値と行列単位9値）を対象としたものであり、今回採用した四重極を含む15値の検証結果としては扱わない。
+設計段階の Python による補助計算に加え、Rust の実装を以下の独立した参照行列と照合する。参照計算は製品の match や係数 helper を使わず、直接記述したスピン行列と四重極の定義から作る。数値比較は複素数の絶対値で `|a−b| <= atol + rtol * max(|a|,|b|)`、f32 は atol=rtol=2e-5、f64 は atol=rtol=1e-12とする。
 
-今回、対話で合意した primitive と2種類の演算子基底の方針を3節へ記録し、局所規則・係数・検証計画もそれに合わせて更新した。変更は計画文書のみであり、Rust の spin-one 実装・crate 追加・ビルド・テストは行っていない。8節の受入条件は実装後に検証する。
+| 検証 | 内容 |
+| --- | --- |
+| [contracts.rs](../../../crates/qmb-spin-one/tests/contracts.rs) | 両精度で全225積・45作用・15随伴 / trace・9内積、基底内閉性・返却順・零項、3,375三重積・675作用整合性、随伴と内積・反準同型・trace 巡回性、交換則・Casimir・ladder 二乗 / 三乗、両基底の列挙 / index / 展開 / 往復 / 座標 / Gram 行列、公開型と次元・trivial grading |
+| [minimal_scalar.rs](../../../crates/qmb-spin-one/tests/minimal_scalar.rs) | 非 Clone / Copy / Zero / Float / Num / NumCast / Conjugate の厳密な複素有理係数で全225積と全15値の両基底展開。加算・除算のない係数で CartesianBasis、One だけで随伴・SzBasis、整数で primitive 内積・trace、数値能力なしで恒等元・遅延構築・配置 |
+| [local_expressions.rs](../../../crates/qmb-spin-one/tests/local_expressions.rs) | 両精度で複素線型結合の作用・内積・期待値・trace・随伴・積、norm / 正規化 / 正規化期待値・zero-norm 拒否、全15値の3×3行列と Vec / ndarray / sprs、状態と演算子の座標の区別 |
+| [tensor_products.rs](../../../crates/qmb-spin-one/tests/tensor_products.rs) | 両精度で ordinary 二因子の9状態・両81演算子基底、mixed-radix 順序、全列の作用と trace・座標、spectator の I、複素係数の積・随伴・作用・期待値・再展開・正規化、trivial grading による ordinary / graded の一致、全 backend |
+| [spin_one.rs](../../../examples/src/bin/spin_one.rs)・crate rustdoc | 公開入口の使い方、昇降型基底への閉性、二因子の期待値、feature 付き正規化 / 行列出力、異なる係数精度の混在拒否 |
 
-今回の補助的な Python 標準ライブラリの複素3×3行列計算では、両基底の Gram 行列、各基底への全15値の展開、基底間変換、Sz²・ladder の積の例、対角 E の逆変換、q の選択則、全225積が Cartesian 基底の span に入ることを許容誤差1e-12で確認した。相対ファイルリンク・コードフェンス・差分の空白も確認した。この計算は Rust の局所規則や係数能力、f32 精度の検証を代替しない。
+2026-10-30、Rust 1.99.1 の direnv devShell で確認した。spin-one の統合テスト16件と doctest 3件（異精度を混ぜる compile-fail を含む）が成功した。以下も成功している。
 
-局所積の基底内閉性の方針決定時には、有理数・i・√2 の厳密な係数を使った Python 標準ライブラリの補助計算を行った。両基底の Gram 行列と全15値の展開に加え、全225組を共通要素9組・Cartesian の残り72組・ladder の残り72組・混在72組に分け、指定した基底への再構成と積の係数から √2 が消えることを確認した。これは Product に平方根能力が不要であるという実装案の根拠であり、Rust の capability テストは未実施である。
+- `cargo test -p qmb-spin-one`
+- `cargo test --workspace --all-features`（既存 crate と doctest を含む）
+- `cargo check -p qmb-spin-one`
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`
+- `cargo fmt --all -- --check`
 
-std / Float の方針決定では、利用中の num-traits 0.2.19 の Float の定義と std feature、num-complex 0.4.6 の Complex の実装、qmb-normalize の依存宣言を確認した。上の数理的な確認結果は維持するが、Float を使う Act の Rust 実装・ビルド・精度別テストは今後実施する。
+利用例は `cargo run -p examples --bin spin_one --no-default-features` と `--all-features` で実行した。未正規化期待値1.2、正規化期待値0.4、SPlus² の Q2Plus 座標、二因子の期待値−1、3×3の密疎行列の一致を確認した。
 
-係数の除算と match の方針決定に合わせ、記号係数・実行時の行列単位分解を前提とした実装案を、C の算術で係数を生成する直接の局所規則へ更新した。4.1節の行列単位分解は、規則の導出・検証用の参照として残す。
+MSRV 1.85 の実ビルド・性能計測は未実施であり、今回のホスト上の検証で代替したとは扱わない。no_std 対応は第3節のとおり初期要件に含めない。

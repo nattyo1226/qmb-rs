@@ -1,6 +1,6 @@
 # 局所 primitive の設計
 
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 ## 1. 対象と検討状況
 
@@ -287,3 +287,23 @@ spinful の内部順序は `(up,down)`、二重占有の位相は `|up down>=f_u
 利用例 [hubbard.rs](../../examples/src/bin/hubbard.rs) は `--all-features`、`--no-default-features`、`--no-default-features --features export` で実行し、2 Site の期待値0・−2と16×16の密疎行列の一致を確認した。
 
 no-default-features の確認はホスト上のビルドである。専用 no_std target・MSRV 1.85 の実ビルド・性能ベンチマークは [未実施事項](../future-work.md#3-未実施の検証と性能)に残す。
+
+## 10. Spin-one の局所代数
+
+`qmb-spin-one` は三状態の spin-1 を実装する。`std` を許可し、unsafe を禁止する。公開入口は [lib.rs](../../crates/qmb-spin-one/src/lib.rs)、局所規則は [operator.rs](../../crates/qmb-spin-one/src/operator.rs)・[state.rs](../../crates/qmb-spin-one/src/state.rs)、基底は [basis.rs](../../crates/qmb-spin-one/src/basis.rs) に置く。[実装仕様と受入検証](../plans/v2/spin-one-primitives.md)に全規約・係数能力・検証項目を記録する。
+
+`hbar=1`、状態は `Plus,Zero,Minus` の順で、Sz 固有値は `+1,0,−1` とする。Zero は正規化状態であり、zero vector は共通の空の線型結合で表す。演算子 primitive は `I,Sx,Sy,Sz,SPlus,SMinus,Dxy,Q0,Qxy,Qyz,Qzx,Q1Plus,Q1Minus,Q2Plus,Q2Minus` の15値であり、状態の Dimension は3、演算子は9となる。
+
+四重極は `Dxy=Sx²−Sy²`、`Q0=3Sz²−2I`、`Qxy={Sx,Sy}` とその巡回置換、`Q1±={Sz,S±}`、`Q2±=S±²` とする。Cartesian の5成分と昇降型4成分は同じ5次元空間を張る。随伴は SPlus / SMinus、Q1Plus / Q1Minus、Q2Plus / Q2Minus を交換し、残りの Hermite な値は保存する。Tr(I)=3、他の14値は trace 0とする。
+
+| 基底 | 列挙順 |
+| --- | --- |
+| `SzBasis` | `[Plus,Zero,Minus]` |
+| `CartesianBasis` | `[I,Sx,Sy,Sz,Dxy,Q0,Qxy,Qyz,Qzx]` |
+| `LadderBasis` | `[I,SPlus,SMinus,Sz,Q0,Q1Plus,Q1Minus,Q2Plus,Q2Minus]` |
+
+演算子基底は完全・直交であり、正規直交化はしない。同じ基底に含まれる primitive 同士の積は、その基底内の線型結合として返す。共通要素 I・Sz・Q0 同士では共通部分に閉じ、混在時は Cartesian を使う。I との積は相手を一項で保持する。係数は非零による数学的な除算に閉じることを要求し、定数は C の算術で生成する。規則は既存代数と同様に直接の match で記述し、独自の有理数型・記号係数・実行時の行列単位分解は導入しない。
+
+`SpinOne<C>` は QuantumSystem に状態・演算子・係数を関連付ける。保持・構築は数値 bound を要求しない。作用だけは `Complex<R>`・`R: Float` を標準とし、R の精度で √2 を生成する。Product・基底変換等は Float・係数の Clone / Copy を要求しない。全状態・演算子は even、P=I として共通の ordinary / graded 評価に接続し、m の整数としての偶奇を parity にしない。export / normalize も既存 API を利用する。
+
+[contracts.rs](../../crates/qmb-spin-one/tests/contracts.rs) は両精度で全225積・45作用・3,375三重積と基底の完全性・変換を確認する。[minimal_scalar.rs](../../crates/qmb-spin-one/tests/minimal_scalar.rs) は非 Clone / Copy / Zero / Float の厳密係数で Product と基底を確認する。[local_expressions.rs](../../crates/qmb-spin-one/tests/local_expressions.rs)・[tensor_products.rs](../../crates/qmb-spin-one/tests/tensor_products.rs) は作用・期待値・正規化、ordinary 二因子の9状態 / 81演算子基底、graded の一致と全 export backend を独立な行列に照合する。利用例は [spin_one.rs](../../examples/src/bin/spin_one.rs) に置く。

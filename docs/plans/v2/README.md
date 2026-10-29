@@ -1,7 +1,7 @@
 # v2（0.2.0）の範囲
 
 作成日: 2026-10-29
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 0.2.0 に向けた機能追加の範囲を記録する。今後の合意に応じて、このディレクトリへ詳細を追記する。
 
@@ -13,13 +13,13 @@
 | --- | --- |
 | Graded tensor product | 共通機構を実装済み。[共通評価と移行](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照 |
 | Fermion | `qmb-fermion` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#9-fermion-の局所代数)と[標準／symmetric Hubbard](../../design/geometry.md#6-fermion-の-hubbard-モデル)を参照 |
-| Spin-one | Spin-1 の局所代数の提供 |
+| Spin-one | `qmb-spin-one` に実装済み。[局所代数の概要](../../design/local-structure.md#10-spin-one-の局所代数)と[実装仕様・検証記録](spin-one-primitives.md)を参照 |
 
-Graded tensor product と Fermion の実装済み仕様・検証記録は設計文書に集約する。このディレクトリには未実装の Spin-one の計画を保持する。
+3機能とも実装済みである。Graded tensor product と Fermion の仕様・検証記録は設計文書に集約し、Spin-one は設計文書の概要と、このディレクトリの実装仕様・検証記録を対応付ける。
 
-## 詳細検討
+## 実装仕様と検証
 
-- [Spin-one の局所 primitive 実装案](spin-one-primitives.md)：三状態、15演算子 primitive、Cartesian / ladder の2完全基底、基底内で閉じる局所積、std と `Act<Complex<R>>`・`R: Float`、除算に閉じる係数型と match による局所規則の方針。
+- [Spin-one の局所 primitive 実装仕様](spin-one-primitives.md)：三状態、15演算子 primitive、Cartesian / ladder の2完全基底、基底内で閉じる局所積、std と `Act<Complex<R>>`・`R: Float`、除算に閉じる係数型と match による局所規則、受入検証。
 
 ## 関連文書
 
