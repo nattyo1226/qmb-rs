@@ -6,7 +6,7 @@ use num_complex::Complex;
 use num_traits::{FromPrimitive, Num, ToPrimitive};
 use qmb_core::{
     Act, Adjoint, Basis, Dimension, Identity, InnerProduct, LinearCombination as Lc, Product,
-    Trace, operator_basis_len, state_basis_len,
+    Trace, dim_op, dim_state,
 };
 use qmb_spin_half::{
     CartesianBasis, LadderBasis, SpinHalfOperator as Op, SpinHalfState as State, SzBasis,
@@ -363,7 +363,7 @@ fn check_spin_relations<T: Real>() {
 fn check_operator_basis<T: Real, B: Basis<Op, Complex<T>>>(basis: &B, expected: [Op; 4]) {
     let elements: Vec<_> = basis.elements().collect();
     assert_eq!(elements, expected);
-    assert_eq!(elements.len(), operator_basis_len::<Op>().unwrap());
+    assert_eq!(elements.len(), dim_op::<Op>().unwrap());
     for op in OPS {
         assert_eq!(basis.index(&op), expected.iter().position(|&p| p == op));
         let expanded = basis.expand(&op);
@@ -388,7 +388,7 @@ fn check_bases<T: Real>() {
     fn state_basis<T: Real, B: Basis<State, Complex<T>>>(basis: &B) {
         let elements: Vec<_> = basis.elements().collect();
         assert_eq!(elements, STATES);
-        assert_eq!(elements.len(), state_basis_len::<State>().unwrap());
+        assert_eq!(elements.len(), dim_state::<State>().unwrap());
         for (i, state) in STATES.into_iter().enumerate() {
             assert_eq!(basis.index(&state), Some(i));
             assert_eq!(basis.expand(&state), Lc::primitive(state));
@@ -517,7 +517,7 @@ fn check_local_expressions<T: Real>() {
         for b in OPS {
             let b_expr = O::<T>::primitive(b) + O::primitive(Sy).scaled(c(0.2, 0.3));
             let b_matrix = add(matrix(b), scale(matrix(Sy), c(0.2, 0.3)));
-            let product = a_expr.product(&b_expr);
+            let product = a_expr.clone() * &b_expr;
             let product_matrix = multiply(a_matrix, b_matrix);
             assert_matrix::<T>(expression_matrix(&product), product_matrix);
             assert_matrix::<T>(
@@ -530,7 +530,7 @@ fn check_local_expressions<T: Real>() {
                 matrix_trace(dagger(product_matrix)),
             );
             assert_complex::<T>(
-                complex64(a_expr.hilbert_schmidt_inner_product(&b_expr)),
+                complex64(a_expr.hs_inner_product(&b_expr)),
                 matrix_trace(multiply(dagger(a_matrix), b_matrix)),
             );
             assert_matrix::<T>(
@@ -562,35 +562,35 @@ fn check_local_expressions<T: Real>() {
     for basis in [CartesianBasis] {
         for primitive in OPS {
             let expanded = <CartesianBasis as Basis<Op, Complex<T>>>::expand(&basis, &primitive);
-            let expression = O::from_linear_combination(expanded.map(O::primitive));
+            let expression = O::from_terms(expanded.map(O::primitive));
             assert_matrix::<T>(expression_matrix(&expression), matrix(primitive));
         }
     }
     for primitive in OPS {
         let expanded = <LadderBasis as Basis<Op, Complex<T>>>::expand(&LadderBasis, &primitive);
         assert_matrix::<T>(
-            expression_matrix(&O::from_linear_combination(expanded.map(O::primitive))),
+            expression_matrix(&O::from_terms(expanded.map(O::primitive))),
             matrix(primitive),
         );
     }
     for primitive in STATES {
         let expanded = <SzBasis as Basis<State, Complex<T>>>::expand(&SzBasis, &primitive);
         assert_vector::<T>(
-            expression_vector(&S::from_linear_combination(expanded.map(S::primitive))),
+            expression_vector(&S::from_terms(expanded.map(S::primitive))),
             vector(primitive),
         );
     }
     for op in [
         O::<T>::zero(),
         O::sum([]),
-        O::primitive(SPlus).product(&O::primitive(SPlus)),
+        (O::primitive(SPlus).clone() * &O::primitive(SPlus)),
     ] {
         assert_matrix::<T>(expression_matrix(&op), [[c(0.0, 0.0); 2]; 2]);
         assert_complex::<T>(complex64(op.trace()), c(0.0, 0.0));
     }
-    assert_complex::<T>(complex64(O::<T>::product_all([]).trace()), c(2.0, 0.0));
+    assert_complex::<T>(complex64(O::<T>::product([]).trace()), c(2.0, 0.0));
     assert_complex::<T>(
-        complex64(O::<T>::identity().hilbert_schmidt_inner_product(&O::identity())),
+        complex64(O::<T>::identity().hs_inner_product(&O::identity())),
         c(2.0, 0.0),
     );
     assert_vector::<T>(expression_vector(&S::<T>::zero()), [c(0.0, 0.0); 2]);
@@ -721,8 +721,7 @@ fn long_operator_trace_and_destruction_fit_a_small_stack() {
             type O = LocalOperator<qmb_spin_half::SpinHalfOperator, Complex<f64>>;
             let mut expression = O::primitive(Sz);
             for _ in 0..20_000 {
-                expression = expression
-                    .product(&O::identity())
+                expression = (expression.clone() * &O::identity())
                     .adjoint()
                     .scaled(c(1.0, 0.0));
             }
@@ -732,8 +731,7 @@ fn long_operator_trace_and_destruction_fit_a_small_stack() {
             let factor = GlobalSpace::factor(0);
             let mut placed = O::primitive(Sz).at(&factor).unwrap();
             for _ in 0..20_000 {
-                placed = placed
-                    .product(&GlobalOperator::identity())
+                placed = (placed.clone() * &GlobalOperator::identity())
                     .unwrap()
                     .adjoint()
                     .scaled(c(1.0, 0.0));
@@ -809,7 +807,7 @@ fn dense_dot(a: &[Complex<f64>], b: &[Complex<f64>]) -> Complex<f64> {
 
 fn global_basis<T: Real>(factors: &[GlobalSpace; 3], n: usize) -> GlobalState<T> {
     qmb_core::State::tensor_in(
-        &GlobalSpace::tensor(factors.iter().cloned()).unwrap(),
+        &GlobalSpace::tensor_all(factors.iter().cloned()).unwrap(),
         factors.iter().enumerate().map(|(k, factor)| {
             qmb_core::LocalState::primitive(if (n >> (2 - k)) & 1 == 0 { Up } else { Down })
                 .at(factor)
@@ -839,9 +837,9 @@ fn check_composite_expressions<T: Real>() {
         GlobalSpace::factor(7),
     ];
     let h = factors[0]
-        .tensor_product(&factors[1])
+        .tensor(&factors[1])
         .unwrap()
-        .tensor_product(&factors[2])
+        .tensor(&factors[2])
         .unwrap();
     let [a, b, d] = &factors;
     let local =
@@ -856,8 +854,7 @@ fn check_composite_expressions<T: Real>() {
     let left = qmb_core::State::tensor_in(
         &h,
         [
-            qmb_core::State::tensor_in(&a.tensor_product(b).unwrap(), [s0.clone(), s1.clone()])
-                .unwrap(),
+            qmb_core::State::tensor_in(&a.tensor(b).unwrap(), [s0.clone(), s1.clone()]).unwrap(),
             s2.clone(),
         ],
     )
@@ -866,7 +863,7 @@ fn check_composite_expressions<T: Real>() {
         &h,
         [
             s0,
-            qmb_core::State::tensor_in(&b.tensor_product(d).unwrap(), [s1, s2]).unwrap(),
+            qmb_core::State::tensor_in(&b.tensor(d).unwrap(), [s1, s2]).unwrap(),
         ],
     )
     .unwrap();
@@ -875,9 +872,7 @@ fn check_composite_expressions<T: Real>() {
         &global_vector(&left, &factors),
         &global_vector(&right, &factors),
     );
-    let state = left
-        .add(&global_basis(&factors, 5).scaled(c(-0.4, 0.6)))
-        .unwrap();
+    let state = (left.clone() + &global_basis(&factors, 5).scaled(c(-0.4, 0.6))).unwrap();
     let mut reference = vec![c(0.0, 0.0); 8];
     reference[2] = c(0.7, 0.2);
     reference[6] = c(-0.3, 0.5);
@@ -889,21 +884,18 @@ fn check_composite_expressions<T: Real>() {
     );
     for oa in OPS {
         for ob in OPS {
-            let a = LO::<qmb_spin_half::SpinHalfOperator, Complex<T>>::primitive(oa)
+            let a = (LO::<qmb_spin_half::SpinHalfOperator, Complex<T>>::primitive(oa)
                 .at(d)
                 .unwrap()
                 .scaled(c(0.4, -0.2))
-                .add(&GlobalOperator::scalar(c(-0.3, 0.1)))
+                .clone()
+                + &GlobalOperator::scalar(c(-0.3, 0.1)))
                 .unwrap();
-            let b = LO::primitive(ob)
-                .at(&factors[0])
-                .unwrap()
-                .add(
-                    &LO::primitive(Sy)
-                        .at(&factors[1])
-                        .unwrap()
-                        .scaled(c(0.2, 0.3)),
-                )
+            let b = (LO::primitive(ob).at(&factors[0]).unwrap().clone()
+                + &LO::primitive(Sy)
+                    .at(&factors[1])
+                    .unwrap()
+                    .scaled(c(0.2, 0.3)))
                 .unwrap();
             let am = dense_add(
                 &dense_scale(&placed_matrix(oa, 2), c(0.4, -0.2)),
@@ -915,7 +907,7 @@ fn check_composite_expressions<T: Real>() {
             );
             // Include repeated action on the same factor as well as separated ones.
             let same = LO::primitive(SPlus).at(d).unwrap();
-            let expression = a.product(&b).unwrap().product(&same).unwrap();
+            let expression = ((a.clone() * &b).unwrap().clone() * &same).unwrap();
             let expected = dense_mul(&dense_mul(&am, &bm), &placed_matrix(SPlus, 2));
             let result = state.act(&expression).unwrap().evaluate().unwrap();
             assert_dense_vector::<T>(
@@ -944,7 +936,7 @@ fn check_composite_expressions<T: Real>() {
                 dense_dot(&reference, &dense_apply(&expected, &reference)),
             );
             assert_complex::<T>(
-                complex64(a.hilbert_schmidt_inner_product_in(&b, &h).unwrap()),
+                complex64(a.hs_inner_product_in(&b, &h).unwrap()),
                 dense_trace(&dense_mul(&dense_dagger(&am), &bm)),
             );
             let ab = dense_mul(&am, &bm);
@@ -980,48 +972,46 @@ fn check_subsystem_contractions<T: Real>() {
             .at(&factors[site])
             .unwrap()
     };
-    let ab = qmb_core::State::tensor_in(
-        &GlobalSpace::tensor([factors[0].clone(), factors[1].clone()]).unwrap(),
+    let ab = (qmb_core::State::tensor_in(
+        &GlobalSpace::tensor_all([factors[0].clone(), factors[1].clone()]).unwrap(),
         [ket(0, Up), ket(1, Up)],
     )
     .unwrap()
-    .add(
-        &qmb_core::State::tensor_in(
-            &GlobalSpace::tensor([factors[0].clone(), factors[1].clone()]).unwrap(),
+    .clone()
+        + &qmb_core::State::tensor_in(
+            &GlobalSpace::tensor_all([factors[0].clone(), factors[1].clone()]).unwrap(),
             [ket(0, Down), ket(1, Down)],
         )
         .unwrap()
-        .scaled(c(0.7, 0.2)),
-    )
-    .unwrap();
-    let last = ket(2, Up).add(&ket(2, Down).scaled(c(-0.3, 0.5))).unwrap();
+        .scaled(c(0.7, 0.2)))
+        .unwrap();
+    let last = (ket(2, Up).clone() + &ket(2, Down).scaled(c(-0.3, 0.5))).unwrap();
     let lhs = qmb_core::State::tensor_in(
-        &GlobalSpace::tensor(factors.iter().cloned()).unwrap(),
+        &GlobalSpace::tensor_all(factors.iter().cloned()).unwrap(),
         [ab, last],
     )
     .unwrap();
-    let first = ket(0, Up).add(&ket(0, Down).scaled(c(0.4, -0.6))).unwrap();
-    let bc = qmb_core::State::tensor_in(
-        &GlobalSpace::tensor([factors[1].clone(), factors[2].clone()]).unwrap(),
+    let first = (ket(0, Up).clone() + &ket(0, Down).scaled(c(0.4, -0.6))).unwrap();
+    let bc = (qmb_core::State::tensor_in(
+        &GlobalSpace::tensor_all([factors[1].clone(), factors[2].clone()]).unwrap(),
         [ket(1, Up), ket(2, Up)],
     )
     .unwrap()
-    .add(
-        &qmb_core::State::tensor_in(
-            &GlobalSpace::tensor([factors[1].clone(), factors[2].clone()]).unwrap(),
+    .clone()
+        + &qmb_core::State::tensor_in(
+            &GlobalSpace::tensor_all([factors[1].clone(), factors[2].clone()]).unwrap(),
             [ket(1, Down), ket(2, Down)],
         )
         .unwrap()
-        .scaled(c(-0.2, 0.8)),
-    )
-    .unwrap();
+        .scaled(c(-0.2, 0.8)))
+        .unwrap();
     let rhs = qmb_core::State::tensor_in(
         lhs.space(),
         [
             qmb_core::State::unit(),
             first,
             qmb_core::State::tensor_in(
-                &GlobalSpace::tensor(factors[1..].iter().cloned()).unwrap(),
+                &GlobalSpace::tensor_all(factors[1..].iter().cloned()).unwrap(),
                 [bc],
             )
             .unwrap(),
@@ -1090,13 +1080,13 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
     let factors: Vec<_> = (0..usize::BITS + 1)
         .map(qmb_core::HilbertSpace::<_>::factor)
         .collect();
-    let space = qmb_core::HilbertSpace::tensor(factors.iter().cloned()).unwrap();
+    let space = qmb_core::HilbertSpace::tensor_all(factors.iter().cloned()).unwrap();
     let state = Ket::tensor_in(
         &space,
         factors.iter().map(|f| LS::primitive(Up).at(f).unwrap()),
     )
     .unwrap();
-    assert!(space.dimension::<State>().is_err());
+    assert!(space.dim::<State>().is_err());
     assert_eq!(
         identity.trace_in(&space).unwrap(),
         c(2f64.powi(factors.len() as i32), 0.0)
@@ -1136,14 +1126,14 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
     assert!(bound_zero.domain().unwrap().shares_node_with(&space));
     assert!(bound_zero.codomain().unwrap().shares_node_with(&space));
     assert_eq!(
-        Op::product_all([]).unwrap().trace_in(unit.space()).unwrap(),
+        Op::product([]).unwrap().trace_in(unit.space()).unwrap(),
         c(1.0, 0.0)
     );
 }
 
 #[test]
 fn spin_half_has_trivial_grading_in_both_tensor_kinds() {
-    use qmb_core::{HilbertSpace, HomogeneousParity, Parity, ParityOperator, QuantumSystem};
+    use qmb_core::{HilbertSpace, HomogeneousParity, Parity, ParityOperator};
     use qmb_spin_half::SpinHalf;
     for op in OPS {
         assert_eq!(op.parity(), Parity::Even);
@@ -1155,15 +1145,13 @@ fn spin_half_has_trivial_grading_in_both_tensor_kinds() {
     let a = HilbertSpace::factor(0);
     let b = HilbertSpace::factor(1);
     let ordinary =
-        SpinHalf::<Complex<f64>>::product_state(&a.tensor_product(&b).unwrap(), [Up, Down])
-            .unwrap();
+        SpinHalf::<Complex<f64>>::product_state(&a.tensor(&b).unwrap(), [Up, Down]).unwrap();
     let graded =
-        SpinHalf::<Complex<f64>>::product_state(&a.tensor_product_g(&b).unwrap(), [Up, Down])
-            .unwrap();
+        SpinHalf::<Complex<f64>>::product_state(&a.tensor_g(&b).unwrap(), [Up, Down]).unwrap();
     for primitive in OPS {
         let op = SpinHalf::operator(primitive).at(&b).unwrap();
-        let left = ordinary.act(&op).unwrap().coordinates_in(&SzBasis).unwrap();
-        let right = graded.act(&op).unwrap().coordinates_in(&SzBasis).unwrap();
+        let left = ordinary.act(&op).unwrap().coordinates(&SzBasis).unwrap();
+        let right = graded.act(&op).unwrap().coordinates(&SzBasis).unwrap();
         assert_eq!(
             left.into_entries().collect::<Vec<_>>(),
             right.into_entries().collect::<Vec<_>>()

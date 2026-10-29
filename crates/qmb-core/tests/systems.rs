@@ -7,24 +7,18 @@ use qmb_core::{
 struct Ket;
 struct Op;
 struct Coeff;
-struct System;
+type System = qmb_core::ExpressionFactory<Ket, Op, Coeff>;
 struct Equivalent;
-macro_rules! system {
-    ($q:ty) => {
-        impl QuantumSystem for $q {
-            type State = Ket;
-            type Operator = Op;
-            type Coeff = Coeff;
-        }
-    };
+impl QuantumSystem for Equivalent {
+    type State = Ket;
+    type Operator = Op;
+    type Coeff = Coeff;
 }
-system!(System);
-system!(Equivalent);
 
 #[test]
 fn independent_construction_and_aliases_need_no_evaluation_capabilities() {
     fn state<Q: QuantumSystem>(primitive: Q::State) -> LocalStateOf<Q> {
-        Q::state(primitive)
+        LocalStateOf::<Q>::primitive(primitive)
     }
     let local: LocalState<Ket, Op, Coeff> = state::<System>(Ket);
     let operator: LocalOperator<Op, Coeff> = System::operator(Op);
@@ -34,10 +28,14 @@ fn independent_construction_and_aliases_need_no_evaluation_capabilities() {
     let state: StateOf<System, _> = local.at(&factor).unwrap();
     let op: OperatorOf<System, _> = operator.at(&factor).unwrap();
     // The chosen system is not an expression identity tag.
-    let other = Equivalent::state(Ket).at(&factor).unwrap();
-    let _: StateOf<Equivalent, _> = state.add(&other).unwrap();
-    let _: OperatorOf<Equivalent, _> = op
-        .product(&Equivalent::operator(Op).at(&factor).unwrap())
+    let other = LocalStateOf::<Equivalent>::primitive(Ket)
+        .at(&factor)
+        .unwrap();
+    let _: StateOf<Equivalent, _> = (state.clone() + &other).unwrap();
+    let _: OperatorOf<Equivalent, _> = (op.clone()
+        * &LocalOperatorOf::<Equivalent>::primitive(Op)
+            .at(&factor)
+            .unwrap())
         .unwrap();
     let _ = local.act(&operator);
 }
@@ -48,7 +46,7 @@ fn all_system_builders_accept_non_clone_primitives_coefficients_and_indices() {
     struct Index(u8);
     let a = HilbertSpace::factor(Index(3));
     let b = HilbertSpace::factor(Index(1));
-    let space = a.tensor_product(&b).unwrap();
+    let space = a.tensor(&b).unwrap();
     let tensor = System::product_state(&space, [Ket, Ket]).unwrap();
     assert_eq!(
         tensor.space().indices().map(|i| i.0).collect::<Vec<_>>(),
@@ -105,7 +103,7 @@ fn empty_system_builders_keep_the_existing_space_contracts() {
     ] {
         assert!(zero.unwrap().space().shares_node_with(&space));
     }
-    let unit_space = HilbertSpace::<u8>::tensor_g([HilbertSpace::unit()]).unwrap();
+    let unit_space = HilbertSpace::<u8>::tensor_all_g([HilbertSpace::unit()]).unwrap();
     for unit in [
         System::tensor_in(&unit_space, []),
         System::try_tensor_in(&unit_space, []),
@@ -148,7 +146,7 @@ fn explicit_builders_validate_counts_and_operators_still_validate_placement() {
     assert!(System::operator_product_at([(&a, Op), (&a, Op)]).is_ok());
     for nonleaf in [
         HilbertSpace::unit(),
-        HilbertSpace::tensor([a.clone()]).unwrap(),
+        HilbertSpace::tensor_all([a.clone()]).unwrap(),
     ] {
         assert_eq!(
             System::operator_product_at([(&nonleaf, Op)]).err(),
@@ -176,7 +174,7 @@ fn builders_share_spaces_without_borrowing_assignment_storage() {
     let (state, operator) = {
         let a = HilbertSpace::factor(BorrowedIndex(&names[0]));
         let b = HilbertSpace::factor(BorrowedIndex(&names[1]));
-        let space = a.tensor_product(&b).unwrap();
+        let space = a.tensor(&b).unwrap();
         let state = System::product_state(&space, [Ket, Ket]).unwrap();
         let op = System::operator_product_at([(&a, Op), (&b, Op)])
             .unwrap()

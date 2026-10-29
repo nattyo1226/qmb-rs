@@ -19,7 +19,7 @@
 
 ## 検討事項
 
-- [関数名・公開 API 名の整理候補](api-function-naming.md)：実装で確認した命名の不統一、長い公開名と短縮候補、移行時に維持する契約。
+- [関数名・公開 API 名の整理（実施済み）](api-function-naming.md)：採用した改名・ExpressionFactory とモデル入口への移行、維持する契約と検証記録。
 
 ## 関連文書
 

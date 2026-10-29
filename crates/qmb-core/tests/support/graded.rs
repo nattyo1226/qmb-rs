@@ -188,7 +188,7 @@ pub fn placed<T: Real>(op: Op, factor: &HilbertSpace<u8>) -> OperatorOf<T> {
 }
 pub fn ket<T: Real>(bits: usize, factors: &[HilbertSpace<u8>], kind: TensorKind) -> Psi<T> {
     State::tensor_in(
-        &HilbertSpace::tensor_with_kind(kind, factors.iter().cloned()).unwrap(),
+        &HilbertSpace::tensor_all_with(kind, factors.iter().cloned()).unwrap(),
         factors.iter().enumerate().map(|(i, f)| {
             LocalState::primitive(Ket(((bits >> (factors.len() - 1 - i)) & 1) as u8))
                 .at(f)
@@ -198,8 +198,8 @@ pub fn ket<T: Real>(bits: usize, factors: &[HilbertSpace<u8>], kind: TensorKind)
     .unwrap()
 }
 pub fn vector<T: Real>(psi: &Psi<T>) -> Vec<Complex<T>> {
-    let coords = psi.coordinates_in(&States).unwrap();
-    let mut result = vec![c(0., 0.); coords.dimension().unwrap()];
+    let coords = psi.coordinates(&States).unwrap();
+    let mut result = vec![c(0., 0.); coords.dim().unwrap()];
     for entry in coords.flat_entries() {
         let (i, v) = entry.unwrap();
         result[i] = *v;

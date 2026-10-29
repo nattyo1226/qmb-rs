@@ -14,7 +14,7 @@
 //!
 //! ```
 //! use num_complex::Complex;
-//! use qmb_core::{Product, QuantumSystem};
+//! use qmb_core::Product;
 //! use qmb_spin_one::{SpinOne, SpinOneOperator as Op, SpinOneState as Ket};
 //! type Spin = SpinOne<Complex<f64>>;
 //! let raised = Spin::state(Ket::Zero).act(&Spin::operator(Op::SPlus));
@@ -32,7 +32,7 @@
 //! This crate permits `std`, forbids unsafe code, and uses core's shared
 //! expressions, evaluation, tensor composition and basis coordinates.
 //!
-//! [`SpinOne::xyz`], [`SpinOne::heisenberg`] and [`SpinOne::blbq`] construct
+//! [`models::SpinOneModels::xyz`], [`models::SpinOneModels::heisenberg`] and [`models::SpinOneModels::blbq`] construct
 //! chain Hamiltonians on caller-owned site spaces. Positive bilinear coupling
 //! is ferromagnetic, following the spin-half model convention.
 
@@ -41,7 +41,7 @@
 
 pub mod basis;
 mod coefficient;
-mod models;
+pub mod models;
 pub mod operator;
 pub mod state;
 
@@ -52,17 +52,17 @@ pub use state::SpinOneState;
 
 /// Selects spin-1 primitives and a coefficient type without storing values.
 ///
-/// Import [`qmb_core::QuantumSystem`] for the shared construction methods.
+/// Shared construction methods are inherent and require no trait import.
 /// No precision is selected implicitly, and no numeric bound applies here.
 ///
 /// ```
 /// use num_complex::Complex;
-/// use qmb_core::{HilbertSpace, QuantumSystem};
+/// use qmb_core::HilbertSpace;
 /// use qmb_spin_one::{SpinOne, SpinOneOperator as Op, SpinOneState as Ket};
 /// type Spin = SpinOne<Complex<f32>>;
 /// let a = HilbertSpace::factor("a");
 /// let b = HilbertSpace::factor("b");
-/// let space = a.tensor_product(&b)?;
+/// let space = a.tensor(&b)?;
 /// let psi = Spin::product_state(&space, [Ket::Plus, Ket::Minus])?;
 /// let zz = Spin::operator_product_at([(&a, Op::Sz), (&b, Op::Sz)])?;
 /// assert_eq!(psi.expectation(&zz)?, Complex::new(-1.0, 0.0));
@@ -73,16 +73,9 @@ pub use state::SpinOneState;
 ///
 /// ```compile_fail
 /// use num_complex::Complex;
-/// use qmb_core::QuantumSystem;
 /// use qmb_spin_one::{SpinOne, SpinOneOperator as Op, SpinOneState as Ket};
 /// let psi = SpinOne::<Complex<f32>>::state(Ket::Zero);
 /// let op = SpinOne::<Complex<f64>>::operator(Op::Sz);
 /// let _ = psi.act(&op);
 /// ```
-pub struct SpinOne<C>(core::marker::PhantomData<fn() -> C>);
-
-impl<C> qmb_core::QuantumSystem for SpinOne<C> {
-    type State = SpinOneState;
-    type Operator = SpinOneOperator;
-    type Coeff = C;
-}
+pub type SpinOne<C> = qmb_core::ExpressionFactory<SpinOneState, SpinOneOperator, C>;

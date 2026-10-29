@@ -196,10 +196,9 @@ pub fn state_combination<T: Real>(lc: LinearCombination<S, Complex<T>>) -> Matri
     result
 }
 pub fn expression<T: Real>(lc: LinearCombination<O, Complex<T>>) -> LocalOp<T> {
-    LocalOperator::from_linear_combination(lc.map(LocalOperator::primitive))
+    LocalOperator::from_terms(lc.map(LocalOperator::primitive))
 }
 pub fn local_value<T: Real>(op: &LocalOp<T>) -> Matrix {
-    use qmb_core::QuantumSystem;
     let mut result = vec![0.0.into(); 9];
     for (col, s) in STATES.into_iter().enumerate() {
         let psi = qmb_spin_one::SpinOne::<Complex<T>>::state(s).act(op);

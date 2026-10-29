@@ -27,7 +27,7 @@ Hilbert 空間
 └─ Tensor(積の種類, 順序付きの子 Hilbert 空間列)
 ```
 
-次元は `dimension::<P>()` で指定した primitive の span を各葉に適用するか、`dimension_with(local_dimension)` で局所次元を与える。Tensor の次元は子空間の次元の積、空の Tensor は一次元とする。
+次元は `dim::<P>()` で指定した primitive の span を各葉に適用するか、`dim_with(dim_local)` で局所次元を与える。Tensor の次元は子空間の次元の積、空の Tensor は一次元とする。
 
 総次元が `usize` に収まることを空間構築の条件にしない。次元取得 API は `Result<usize, DimensionOverflow>` 相当とし、checked arithmetic により overflow を検出する。互換性・部分系判定や行列を作らない作用・内積・trace では、総次元の整数化を必須にしない。
 
@@ -167,18 +167,18 @@ Chain と、利用側が保持する Site 順の局所空間列・基本自由�
 | API | 結果・制約 |
 | --- | --- |
 | `HilbertSpace::factor(index)`・`unit()` | 既存 Index の Factor・空 Tensor を構築する。Index の Clone・Default は不要 |
-| `tensor_with_kind(kind, children)`・`tensor(children)`・`tensor_g(children)` | 種類指定・ordinary・graded の構築。`I: Eq` で重複と混在を検査し、`Result<Self, SpaceError>` を返す |
-| `tensor_product_with_kind(kind, &rhs)`・`tensor_product(&rhs)`・`tensor_product_g(&rhs)` | 同じ三種類の二項版。因子順序は左、右の順 |
+| `tensor_all_with(kind, children)`・`tensor_all(children)`・`tensor_all_g(children)` | 種類指定・ordinary・graded の構築。`I: Eq` で重複と混在を検査し、`Result<Self, SpaceError>` を返す |
+| `tensor_with(kind, &rhs)`・`tensor(&rhs)`・`tensor_g(&rhs)` | 同じ三種類の二項版。因子順序は左、右の順 |
 | `kind()`・`effective_kind()` | 保持する Tensor 節点と、空・単因子の同一視後の `Option<TensorKind>` を返す |
 | `factor_index()`・`children()`・`indices()` | Factor の `Option<&I>`・直下の子・全葉の Index を借用する |
 | `is_compatible_with(&rhs)`・`is_subsystem_of(&ambient)` | `I: Eq` で葉順・相対順序と有効な積の種類を照合する |
-| `dimension::<P>()` | `P: Dimension` の次元を因子ごとに適用し、`Result<usize, DimensionOverflow>` を返す |
-| `dimension_with(local_dimension)` | `NonZeroUsize` の局所次元を明示し、同じ Result を返す |
+| `dim::<P>()` | `P: Dimension` の次元を因子ごとに適用し、`Result<usize, DimensionOverflow>` を返す |
+| `dim_with(dim_local)` | `NonZeroUsize` の局所次元を明示し、同じ Result を返す |
 | `clone()`・`shares_node_with(&rhs)` | Index を複製せず共有ハンドルを複製・比較する |
 
-`dimension::<S>()` は状態空間、`dimension::<O>()` は演算子空間の次元を返す。Operator は S を保持しないため、その作用先の次元 d が必要なら `dimension_with` に局所次元を指定する。空 Tensor の次元は1とし、P の局所次元が overflow する場合も空 Tensor の取得は成功する。空間比較・配置・束縛には primitive 型を登録せず、異なる primitive 型の式が同じ空間構造を利用できる。
+`dim::<S>()` は状態空間、`dim::<O>()` は演算子空間の次元を返す。Operator は S を保持しないため、その作用先の次元 d が必要なら `dim_with` に局所次元を指定する。空 Tensor の次元は1とし、P の局所次元が overflow する場合も空 Tensor の取得は成功する。空間比較・配置・束縛には primitive 型を登録せず、異なる primitive 型の式が同じ空間構造を利用できる。
 
-`TensorKind::{Ordinary, Graded}` は構築時に明示する。`tensor` / `tensor_product` は ordinary、`tensor_g` / `tensor_product_g` は graded の短縮形で、共通の種類指定 constructor へ委譲する。子や primitive から種類を推測せず、既存空間の kind を書き換える変換は提供しない。`kind()` は Factor なら `None`、Tensor なら空・単因子 wrapper も含めた保持値を返す。`unit()` は ordinary の空 Tensor として保持し、`tensor_g([])` と数学的に互換である。
+`TensorKind::{Ordinary, Graded}` は構築時に明示する。`tensor_all` / `tensor` は ordinary、`tensor_all_g` / `tensor_g` は graded の短縮形で、共通の種類指定 constructor へ委譲する。子や primitive から種類を推測せず、既存空間の kind を書き換える変換は提供しない。`kind()` は Factor なら `None`、Tensor なら空・単因子 wrapper も含めた保持値を返す。`unit()` は ordinary の空 Tensor として保持し、`tensor_all_g([])` と数学的に互換である。
 
 ### 10.1. 有効な種類と混在の検証
 

@@ -97,7 +97,7 @@ let direct: Exported<ndarray::Array1<_>, _> = (&psi).export(&basis)?;
 
 ### 4.1. 密表現
 
-状態は `coordinates_in` で得た疎な座標を Vec に配置する。行列は入力基底状態を一つずつ列挙し、作用結果を状態基底で座標化して列を得る。この列生成を密・疎で共有し、全基底状態・全列の Coordinates を一括保持しない。演算子基底への全展開や、密な一列の中間生成は必須にしない。
+状態は `coordinates` で得た疎な座標を Vec に配置する。行列は入力基底状態を一つずつ列挙し、作用結果を状態基底で座標化して列を得る。この列生成を密・疎で共有し、全基底状態・全列の Coordinates を一括保持しない。演算子基底への全展開や、密な一列の中間生成は必須にしない。
 
 密行列は行優先に固定し、成分 `(row, col)` の位置は `row * ncols + col` とする。格納順序は仕様とメタデータで明示する。因子の基底番号は既存の右端が最速の mixed-radix とし、行列のメモリ配置とは区別する。
 
@@ -105,7 +105,7 @@ ndarray への変換では、ベクトルは `Array1::from_vec`、行列はメ�
 
 ### 4.2. 疎表現と sprs の構築 API
 
-疎ベクトルは Coordinates の成分から index・値の配列を作り、`CsVec::try_new(dimension, indices, data)` で構築する。疎行列の初期 export は CSC・index は `usize` に固定する。列ごとに得た座標の平坦番号順を使い、重複のない成分から `indptr`・`indices`・`data` を作って `CsMat::try_new_csc` へ渡す。検査付き API を利用し、unsafe や非公開の検査省略経路を使わない。
+疎ベクトルは Coordinates の成分から index・値の配列を作り、`CsVec::try_new(dim, indices, data)` で構築する。疎行列の初期 export は CSC・index は `usize` に固定する。列ごとに得た座標の平坦番号順を使い、重複のない成分から `indptr`・`indices`・`data` を作って `CsMat::try_new_csc` へ渡す。検査付き API を利用し、unsafe や非公開の検査省略経路を使わない。
 
 sprs に `qmb-core` の Coordinates をそのまま渡す既存 API があるという意味ではない。`qmb-export` の Export 実装が、`flat_entries()`・`into_entries()` などと sprs の constructor を接続する。密表現用の Vec 中間層や、新しい独自の疎コンテナを必須経路にしない。
 

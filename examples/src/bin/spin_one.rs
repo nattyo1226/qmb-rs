@@ -1,7 +1,7 @@
 //! Spin-1 dipoles, quadrupoles, chain models and common expression APIs.
 
 use num_complex::Complex;
-use qmb_core::{HilbertSpace, QuantumSystem};
+use qmb_core::HilbertSpace;
 use qmb_geometry::{Boundary, Chain};
 use qmb_spin_one::{
     CartesianBasis, LadderBasis, SpinOne, SpinOneOperator as Op, SpinOneState as Ket,
@@ -14,12 +14,13 @@ fn assert_close(actual: Complex<f64>, expected: Complex<f64>) {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     type Spin = SpinOne<Complex<f64>>;
+    type Models = qmb_spin_one::models::SpinOneModels<Spin>;
     let psi = Spin::state(Ket::Plus)
         + Spin::state(Ket::Zero).scaled(Complex::new(0.0, 1.0))
         + Spin::state(Ket::Minus);
     let z = Spin::operator(Op::Sz);
     // Axial and rhombic single-ion anisotropy, plus a transverse field.
-    let h = z.product(&z).scaled(0.4)
+    let h = (z.clone() * &z).scaled(0.4)
         + Spin::operator(Op::Dxy).scaled(0.2)
         + Spin::operator(Op::Sx).scaled(0.3);
     let energy = psi.expectation(&h);
@@ -27,9 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Unnormalized energy: {energy}");
 
     let plus = Spin::operator(Op::SPlus);
-    let squared = plus.product(&plus);
-    let coordinates = squared.coordinates_in(&LadderBasis)?;
-    assert_eq!(coordinates.dimension()?, 9);
+    let squared = plus.clone() * &plus;
+    let coordinates = squared.coordinates(&LadderBasis)?;
+    assert_eq!(coordinates.dim()?, 9);
     assert_eq!(coordinates.len(), 1);
     for entry in coordinates.flat_entries() {
         let (index, coefficient) = entry?;
@@ -37,27 +38,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(*coefficient, Complex::new(1.0, 0.0));
         println!("SPlus²: ladder coordinate {index} = {coefficient}");
     }
-    let round = squared
-        .expand_in(&CartesianBasis)?
-        .expand_in(&LadderBasis)?;
-    assert_eq!(round.coordinates_in(&LadderBasis)?.len(), 1);
+    let round = squared.expand(&CartesianBasis)?.expand(&LadderBasis)?;
+    assert_eq!(round.coordinates(&LadderBasis)?.len(), 1);
 
     // The same primitives work on independently identified tensor factors.
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let space = a.tensor_product(&b)?;
+    let space = a.tensor(&b)?;
     let state = Spin::product_state(&space, [Ket::Plus, Ket::Minus])?;
     let zz = Spin::operator_product_at([(&a, Op::Sz), (&b, Op::Sz)])?;
-    assert_eq!(state.space().dimension::<Ket>()?, 9);
+    assert_eq!(state.space().dim::<Ket>()?, 9);
     assert_eq!(state.expectation(&zz)?, Complex::new(-1.0, 0.0));
 
     // The model helpers use -J for bilinear coupling, as in spin-half.
     // A two-site periodic chain has one bond, counted once.
     let sites = [a, b];
     let chain = Chain::new(2, Boundary::Periodic);
-    let xyz = Spin::xyz(&chain, &sites, 1.0, 1.0, 1.0)?;
-    let heisenberg = Spin::heisenberg(&chain, &sites, 1.0)?;
-    let blbq = Spin::blbq(&chain, &sites, 1.0, 0.25)?;
+    let xyz = Models::xyz(&chain, &sites, 1.0, 1.0, 1.0)?;
+    let heisenberg = Models::heisenberg(&chain, &sites, 1.0)?;
+    let blbq = Models::blbq(&chain, &sites, 1.0, 0.25)?;
     assert_close(state.expectation(&xyz)?, Complex::new(1.0, 0.0));
     assert_close(state.expectation(&heisenberg)?, Complex::new(1.0, 0.0));
     let model_energy = state.expectation(&blbq)?;

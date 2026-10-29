@@ -51,7 +51,8 @@ impl Chain {
         connection::site_pairs_with(self.site_count(), self.nn_site_pairs(), values)
     }
 
-    /// Enumerates all leaf combinations across neighboring sites, left outermost.
+    /// Enumerates all local-factor combinations across neighboring sites, left outermost.
+    /// Within each site, factors follow their stored tensor order.
     /// Empty sites retain their positions and contribute no leaf pairs.
     /// Index uniqueness is the responsibility of space or model construction.
     pub fn nn_pairs_with<'a, I>(
@@ -62,8 +63,9 @@ impl Chain {
         Ok(connection::leaf_pairs(self.nn_site_pairs_with(factors)?))
     }
 
-    /// Pairs corresponding leaf positions, stopping at the shorter site's end.
-    pub fn nn_pairs_by_pos_with<'a, I>(
+    /// Pairs corresponding local factors in stored tensor order.
+    /// Stops at the shorter site's end.
+    pub fn nn_zip_with<'a, I>(
         &'a self,
         factors: &'a [HilbertSpace<I>],
     ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
@@ -75,7 +77,7 @@ impl Chain {
 
     /// Reads the stored top-level partition as sites and borrows site pairs.
     /// A leaf is one site; an empty tensor is zero sites. Nested grouping stays intact.
-    pub fn nn_site_pairs_on<'a, I>(
+    pub fn nn_site_pairs_in<'a, I>(
         &'a self,
         space: &'a HilbertSpace<I>,
     ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
@@ -84,7 +86,7 @@ impl Chain {
     }
 
     /// Reads top-level sites and delegates to the Cartesian leaf-pair connection.
-    pub fn nn_pairs_on<'a, I>(
+    pub fn nn_pairs_in<'a, I>(
         &'a self,
         space: &'a HilbertSpace<I>,
     ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
@@ -93,11 +95,11 @@ impl Chain {
     }
 
     /// Reads top-level sites and delegates to the positional leaf-pair connection.
-    pub fn nn_pairs_by_pos_on<'a, I>(
+    pub fn nn_zip_in<'a, I>(
         &'a self,
         space: &'a HilbertSpace<I>,
     ) -> Result<impl Iterator<Item = (&'a HilbertSpace<I>, &'a HilbertSpace<I>)> + 'a, ChainError>
     {
-        self.nn_pairs_by_pos_with(connection::sites_on(space))
+        self.nn_zip_with(connection::sites_on(space))
     }
 }

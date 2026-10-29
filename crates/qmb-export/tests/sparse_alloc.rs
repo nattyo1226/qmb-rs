@@ -62,7 +62,7 @@ fn bounded<R>(f: impl FnOnce() -> R) -> R {
 #[test]
 fn sparse_exports_need_no_dense_intermediate_and_dense_allocation_failure_is_reported() {
     let basis = SzBasis;
-    let space = HilbertSpace::tensor((0..40u8).map(HilbertSpace::factor)).unwrap();
+    let space = HilbertSpace::tensor_all((0..40u8).map(HilbertSpace::factor)).unwrap();
     let state = State::tensor_in(
         &space,
         space.indices().map(|&i| {
@@ -80,7 +80,7 @@ fn sparse_exports_need_no_dense_intermediate_and_dense_allocation_failure_is_rep
     let dense: Result<Exported<Vec<_>, VectorMetadata<'_, _, _, S>>, _> =
         bounded(|| (&state).export(&basis));
     assert!(matches!(dense, Err(ExportError::Allocation(_))));
-    let space = HilbertSpace::tensor((0..9u8).map(HilbertSpace::factor)).unwrap();
+    let space = HilbertSpace::tensor_all((0..9u8).map(HilbertSpace::factor)).unwrap();
     let identity = Operator::<u8, O, Complex<f64>>::identity();
     let matrix: Exported<qmb_export::sprs::CsMat<_>, MatrixMetadata<'_, S, _, _>> =
         bounded(|| (&identity).export(MatrixArgs::new(&basis).in_space(&space))).unwrap();

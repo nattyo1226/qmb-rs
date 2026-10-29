@@ -5,9 +5,9 @@
 
 未解決の使いやすさの論点と、今回のリファクタリングでは実装しなかった補助 API の候補を記録する。以下は追加を決めた機能の一覧ではなく、公開名・シグネチャ・実施時期は未確定である。
 
-現在の構築 API は [QuantumSystem の rustdoc](../../../crates/qmb-core/src/system.rs)、[局所式の設計](../../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)、[複合式の設計](../../design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)、幾何と配置は [Chain の設計](../../design/geometry.md)を参照する。実装済みの API・移行経緯を未完了の計画として重ねて管理しない。State／Operator の統合、Grading、延期した機能と未実施の検証は [今後の課題](../../future-work.md)で管理する。
+現在の構築 API は [ExpressionFactory と型情報の rustdoc](../../../crates/qmb-core/src/system.rs)、[局所式の設計](../../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)、[複合式の設計](../../design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)、幾何と配置は [Chain の設計](../../design/geometry.md)を参照する。実装済みの API・移行経緯を未完了の計画として重ねて管理しない。State／Operator の統合、Grading、延期した機能と未実施の検証は [今後の課題](../../future-work.md)で管理する。
 
-## 1. QuantumSystem の追加補助
+## 1. ExpressionFactory の追加補助
 
 次は初回の実装範囲から外した候補である。既存 constructor と式メソッドで同じ構築ができるため、実際の利用例で繰り返しが目立つ場合に追加を検討する。
 
@@ -26,7 +26,7 @@
 | `local_operator_sum` / `try_local_operator_sum` | 構築済みの局所演算子の集約 |
 | `local_operator_product` / `try_local_operator_product` | 構築済みの局所演算子の積 |
 
-局所式の集約用メソッドは QuantumSystem からの入口の候補であり、既にある式型の sum・try_sum・product_all と区別する。追加する場合も、既存 constructor の空入力・単項・順序・遅延構築の契約を維持し、必要な能力だけを各メソッドに課す。零・単位元の構築に数値演算を要求せず、空間入力のない複合式では Index 型を注釈などで指定する。
+局所式の集約用メソッドは ExpressionFactory からの入口の候補であり、既にある式型の sum・try_sum・product と区別する。追加する場合も、既存 constructor の空入力・単項・順序・遅延構築の契約を維持し、必要な能力だけを各メソッドに課す。零・単位元の構築に数値演算を要求せず、空間入力のない複合式では Index 型を注釈などで指定する。
 
 ## 2. 空間の読み取りと数値出力の型推論
 
@@ -64,7 +64,7 @@
 
 - 典型的な用途の依存設定・feature・trait import を最初に確認できる案内。trait の import 不足と feature 不足によるエラーを区別できるか。
 - crate root の案内と各 rustdoc・設計文書・実行例のつなぎ方。リポジトリ直下の README は未作成。
-- テスト内の [3準位系](../../../crates/qmb-core/tests/support/three_level.rs) を、独自の QuantumSystem・能力 trait・Basis を実装する利用者向けの最小例へ整理すること。
+- テスト内の [3準位系](../../../crates/qmb-core/tests/support/three_level.rs) を、独自の ExpressionFactory の型エイリアス・能力 trait・Basis を定義する利用者向けの最小例へ整理すること。
 - 因子・基底・コンテナの順序、メタデータの共有・借用、非正規直交基底での内積の解釈を、数値出力の利用者へどう案内するか。
 
 import の行数削減自体は優先課題とせず、prelude や統合窓口の追加は採用しない。共通の構築入口と、能力ごとに拡張する API の関係を説明する。

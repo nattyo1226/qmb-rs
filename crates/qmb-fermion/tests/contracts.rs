@@ -2,7 +2,7 @@ mod support;
 use num_complex::Complex;
 use qmb_core::{
     Act, Adjoint, Basis, Dimension, HomogeneousParity, Identity, InnerProduct, LinearCombination,
-    Parity, ParityOperator, Product, QuantumSystem, Trace,
+    Parity, ParityOperator, Product, Trace,
 };
 use qmb_fermion::{
     Fermion, FermionOperator as O, FermionState as S, LadderBasis, MajoranaBasis, OccupationBasis,
@@ -56,15 +56,15 @@ fn laws<T: Real>() {
     let op = Fermion::<Complex<T>>::operator;
     for a in OPS {
         for b in OPS {
-            let ab = op(a).product(&op(b));
-            close::<T>(to64(ab.trace()), to64(op(b).product(&op(a)).trace()));
+            let ab = op(a).clone() * &op(b);
+            close::<T>(to64(ab.trace()), to64((op(b).clone() * &op(a)).trace()));
             close::<T>(
                 to64(ab.trace()),
                 trace(&support::product(&matrix(a), &matrix(b))),
             );
             values::<T>(
                 &local_value(&ab.adjoint()),
-                &local_value(&op(b).adjoint().product(&op(a).adjoint())),
+                &local_value(&(op(b).adjoint().clone() * &op(a).adjoint())),
             );
             values::<T>(&local_value(&op(a).adjoint().adjoint()), &matrix(a));
             for s in STATES {
@@ -83,13 +83,13 @@ fn laws<T: Real>() {
             }
             for d in OPS {
                 values::<T>(
-                    &local_value(&ab.product(&op(d))),
-                    &local_value(&op(a).product(&op(b).product(&op(d)))),
+                    &local_value(&(ab.clone() * &op(d))),
+                    &local_value(&(op(a).clone() * &(op(b).clone() * &op(d)))),
                 );
             }
         }
-        values::<T>(&local_value(&op(O::I).product(&op(a))), &matrix(a));
-        values::<T>(&local_value(&op(a).product(&op(O::I))), &matrix(a));
+        values::<T>(&local_value(&(op(O::I).clone() * &op(a))), &matrix(a));
+        values::<T>(&local_value(&(op(a).clone() * &op(O::I))), &matrix(a));
     }
     let [a, d, n, p, x, y, z] = [
         O::Annihilate,
@@ -102,27 +102,27 @@ fn laws<T: Real>() {
     ]
     .map(op);
     let zero = vec![0.0.into(); 4];
-    values::<T>(&local_value(&a.product(&a)), &zero);
-    values::<T>(&local_value(&d.product(&d)), &zero);
+    values::<T>(&local_value(&(a.clone() * &a)), &zero);
+    values::<T>(&local_value(&(d.clone() * &d)), &zero);
     values::<T>(&local_value(&a.anticommutator(&d)), &matrix(O::I));
-    values::<T>(&local_value(&d.product(&a)), &matrix(O::Number));
-    values::<T>(&local_value(&n.product(&n)), &matrix(O::Number));
-    values::<T>(&local_value(&p.product(&p)), &matrix(O::I));
+    values::<T>(&local_value(&(d.clone() * &a)), &matrix(O::Number));
+    values::<T>(&local_value(&(n.clone() * &n)), &matrix(O::Number));
+    values::<T>(&local_value(&(p.clone() * &p)), &matrix(O::I));
     values::<T>(&local_value(&p.anticommutator(&a)), &zero);
     values::<T>(&local_value(&p.anticommutator(&d)), &zero);
     for (l, r, out) in [(&x, &y, &z), (&y, &z, &x), (&z, &x, &y)] {
-        let comm = l.product(r) + r.product(l).scaled(c::<T>(-1., 0.));
+        let comm = (l.clone() * r) + (r.clone() * l).scaled(c::<T>(-1., 0.));
         values::<T>(
             &local_value(&comm),
             &local_value(&out.scaled(c::<T>(0., 1.))),
         );
     }
     values::<T>(
-        &local_value(&(x.product(&x) + y.product(&y) + z.product(&z))),
+        &local_value(&((x.clone() * &x) + (y.clone() * &y) + (z.clone() * &z))),
         &scale(&matrix(O::I), 0.75.into()),
     );
     values::<T>(
-        &local_value(&x.product(&y).scaled(c::<T>(0., -2.))),
+        &local_value(&(x.clone() * &y).scaled(c::<T>(0., -2.))),
         &matrix(O::MajoranaZ),
     );
 }
@@ -142,14 +142,14 @@ fn bases<T: Real>() {
             }
             values::<T>(&combination(expansion), &matrix(primitive));
             let op = Fermion::<Complex<T>>::operator(primitive);
-            let expanded = op.expand_in(&basis).unwrap();
+            let expanded = op.expand(&basis).unwrap();
             values::<T>(&local_value(&expanded), &matrix(primitive));
             let round = expanded
-                .expand_in(&LadderBasis)
+                .expand(&LadderBasis)
                 .unwrap()
-                .expand_in(&MajoranaBasis)
+                .expand(&MajoranaBasis)
                 .unwrap()
-                .expand_in(&basis)
+                .expand(&basis)
                 .unwrap();
             values::<T>(&local_value(&round), &matrix(primitive));
             close::<T>(to64(expanded.trace()), trace(&matrix(primitive)));
@@ -176,7 +176,7 @@ fn bases<T: Real>() {
     for (i, a) in majoranas.iter().enumerate() {
         for (j, b) in majoranas.iter().enumerate() {
             close::<T>(
-                to64(a.hilbert_schmidt_inner_product(b)),
+                to64(a.hs_inner_product(b)),
                 (if i != j {
                     0.
                 } else if i == 0 {

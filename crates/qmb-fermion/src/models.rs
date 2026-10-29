@@ -3,7 +3,7 @@
 use crate::{Fermion, FermionOperator as O};
 use alloc::vec::Vec;
 use core::ops::Neg;
-use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, QuantumSystem, SpaceError, TensorKind};
+use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError, TensorKind};
 use qmb_geometry::{Chain, ChainError};
 
 /// Failure to construct a Hubbard model on a site-ordered space assignment.
@@ -26,7 +26,12 @@ pub enum UtilityError {
     },
 }
 
-impl<C> Fermion<C> {
+/// Model constructors for the selected Fermion system.
+///
+/// No values are stored; select the coefficient type through `Fermion<C>`.
+pub struct FermionModels<Q>(core::marker::PhantomData<fn() -> Q>);
+
+impl<C> FermionModels<Fermion<C>> {
     /// Builds `-t Σ_(i,j),σ (f†_iσ f_jσ + f†_jσ f_iσ) + U Σ_i n_i↑ n_i↓`.
     ///
     /// Each site must have exactly two leaves in `(up, down)` order and an
@@ -46,8 +51,8 @@ impl<C> Fermion<C> {
     /// use qmb_geometry::{Boundary, Chain};
     /// use qmb_fermion::Fermion;
     /// type F = Fermion<Complex<f64>>;
-    /// let site = HilbertSpace::tensor_g([HilbertSpace::factor("up"), HilbertSpace::factor("down")])?;
-    /// let h = F::hubbard(&Chain::new(1, Boundary::Open), &[site], 1., 4.)?;
+    /// let site = HilbertSpace::tensor_all_g([HilbertSpace::factor("up"), HilbertSpace::factor("down")])?;
+    /// let h = qmb_fermion::models::FermionModels::<F>::hubbard(&Chain::new(1, Boundary::Open), &[site], 1., 4.)?;
     /// assert_eq!(h.trace()?, Complex::new(4., 0.));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -56,7 +61,7 @@ impl<C> Fermion<C> {
         sites: &[HilbertSpace<I>],
         t: R,
         u: R,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<Fermion<C>, I>, UtilityError>
     where
         C: Clone + From<R> + Neg<Output = C>,
     {
@@ -77,7 +82,7 @@ impl<C> Fermion<C> {
         sites: &[HilbertSpace<I>],
         t: R,
         u: R,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<Fermion<C>, I>, UtilityError>
     where
         C: Clone + From<R> + Neg<Output = C>,
     {
@@ -90,7 +95,7 @@ impl<C> Fermion<C> {
         t: C,
         u: C,
         interaction: O,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<Fermion<C>, I>, UtilityError>
     where
         C: Clone + Neg<Output = C>,
     {
@@ -109,12 +114,12 @@ impl<C> Fermion<C> {
             };
             modes.push(pair);
         }
-        let space = HilbertSpace::tensor_g(sites.iter().cloned())?;
+        let space = HilbertSpace::tensor_all_g(sites.iter().cloned())?;
         let mut terms = Vec::new();
         let minus_t = -t;
         for [up, down] in &modes {
             terms.push(
-                Self::operator_product_at([(*up, interaction), (*down, interaction)])?
+                Fermion::<C>::operator_product_at([(*up, interaction), (*down, interaction)])?
                     .scaled(u.clone()),
             );
         }
@@ -122,12 +127,15 @@ impl<C> Fermion<C> {
             for spin in 0..2 {
                 for (from, to) in [(left[spin], right[spin]), (right[spin], left[spin])] {
                     terms.push(
-                        Self::operator_product_at([(to, O::Create), (from, O::Annihilate)])?
-                            .scaled(minus_t.clone()),
+                        Fermion::<C>::operator_product_at([
+                            (to, O::Create),
+                            (from, O::Annihilate),
+                        ])?
+                        .scaled(minus_t.clone()),
                     );
                 }
             }
         }
-        Ok(Self::operator_sum(terms)?.bind(&space)?)
+        Ok(Fermion::<C>::operator_sum(terms)?.bind(&space)?)
     }
 }

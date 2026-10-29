@@ -1,16 +1,10 @@
 //! The same input-error priority applies to every fallible collection entry.
 use core::cell::Cell;
 use qmb_core::{
-    ExpressionError as E, HilbertSpace as H, LocalOperator, LocalState, Operator, QuantumSystem,
-    State,
+    ExpressionError as E, HilbertSpace as H, LocalOperator, LocalState, Operator, State,
 };
 
-struct System;
-impl QuantumSystem for System {
-    type State = ();
-    type Operator = ();
-    type Coeff = ();
-}
+type System = qmb_core::ExpressionFactory<(), (), ()>;
 
 // Panics on any next() after the first Err, including an end-of-input probe.
 fn failing_at<'a, T: 'a>(
@@ -64,7 +58,7 @@ fn every_try_collection_stops_at_the_first_input_error() {
             &pulls,
             || System::operator(()).at(&a).unwrap()
         )));
-        check!(Operator::<_, (), ()>::try_product_all(failing_at(
+        check!(Operator::<_, (), ()>::try_product(failing_at(
             position,
             &pulls,
             || System::operator(()).at(&a).unwrap()

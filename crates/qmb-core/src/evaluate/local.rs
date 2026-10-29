@@ -82,15 +82,14 @@ impl<S, O, C> LocalState<S, O, C> {
                         tasks.push(StateTask::Apply(state, a.operand.clone(), !adjoint))
                     }
                     OperatorNode::Primitive(op) if adjoint => {
-                        let op = LocalOperator::from_linear_combination(
-                            op.adjoint().map(LocalOperator::primitive),
-                        );
+                        let op =
+                            LocalOperator::from_terms(op.adjoint().map(LocalOperator::primitive));
                         tasks.push(StateTask::Apply(state, op, false));
                     }
                     OperatorNode::Primitive(op) => match state.node() {
-                        StateNode::Primitive(primitive) => values.push(
-                            Self::from_linear_combination(primitive.act(op).map(Self::primitive)),
-                        ),
+                        StateNode::Primitive(primitive) => {
+                            values.push(Self::from_terms(primitive.act(op).map(Self::primitive)))
+                        }
                         StateNode::Scale(s) => {
                             tasks.push(StateTask::Scale(s.coefficient.clone()));
                             tasks.push(StateTask::Apply(
@@ -135,7 +134,7 @@ enum OperatorTask<O, C> {
 }
 
 impl<O, C> LocalOperator<O, C> {
-    pub(crate) fn evaluated(&self) -> Self
+    pub(crate) fn evaluate(&self) -> Self
     where
         C: Clone + Mul<Output = C> + Conjugate<Output = C>,
         O: Product<C, Term = O> + Adjoint<C, Term = O>,
@@ -147,9 +146,7 @@ impl<O, C> LocalOperator<O, C> {
                 OperatorTask::Visit(op, adjoint) => match op.node() {
                     OperatorNode::Primitive(p) => {
                         if adjoint {
-                            values.push(Self::from_linear_combination(
-                                p.adjoint().map(Self::primitive),
-                            ));
+                            values.push(Self::from_terms(p.adjoint().map(Self::primitive)));
                         } else {
                             values.push(op);
                         }
@@ -206,9 +203,7 @@ impl<O, C> LocalOperator<O, C> {
                         }
                     }
                     (OperatorNode::Primitive(a), OperatorNode::Primitive(b)) => {
-                        values.push(Self::from_linear_combination(
-                            a.product(b).map(Self::primitive),
-                        ));
+                        values.push(Self::from_terms(a.product(b).map(Self::primitive)));
                     }
                     _ => unreachable!("linear operator operands"),
                 },

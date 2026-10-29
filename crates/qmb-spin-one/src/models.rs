@@ -2,7 +2,7 @@
 
 use crate::{SpinOne, SpinOneOperator as O};
 use core::ops::Neg;
-use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, QuantumSystem, SpaceError};
+use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError};
 use qmb_geometry::{Chain, ChainError};
 
 /// Failure to construct a spin-1 model on a site-ordered space assignment.
@@ -25,10 +25,15 @@ fn model_space<I: Eq>(
     sites: &[HilbertSpace<I>],
 ) -> Result<HilbertSpace<I>, UtilityError> {
     let _ = chain.nn_site_pairs_with(sites)?;
-    Ok(HilbertSpace::tensor(sites.iter().cloned())?)
+    Ok(HilbertSpace::tensor_all(sites.iter().cloned())?)
 }
 
-impl<C> SpinOne<C> {
+/// Model constructors for the selected SpinOne system.
+///
+/// No values are stored; select the coefficient type through `SpinOne<C>`.
+pub struct SpinOneModels<Q>(core::marker::PhantomData<fn() -> Q>);
+
+impl<C> SpinOneModels<SpinOne<C>> {
     /// Builds `-sum_(i,j) sum_(a in i,b in j) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)`.
     ///
     /// Each input space is one site, with any number of leaves. All leaf pairs
@@ -48,7 +53,7 @@ impl<C> SpinOne<C> {
         jx: R,
         jy: R,
         jz: R,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<SpinOne<C>, I>, UtilityError>
     where
         C: Clone + From<R> + Neg<Output = C>,
     {
@@ -62,12 +67,12 @@ impl<C> SpinOne<C> {
         for (left, right) in chain.nn_pairs_with(sites)? {
             for (axis, coupling) in &axes {
                 terms.push(
-                    Self::operator_product_at([(left, *axis), (right, *axis)])?
+                    SpinOne::<C>::operator_product_at([(left, *axis), (right, *axis)])?
                         .scaled(coupling.clone()),
                 );
             }
         }
-        Ok(Self::operator_sum(terms)?.bind(&space)?)
+        Ok(SpinOne::<C>::operator_sum(terms)?.bind(&space)?)
     }
 
     /// Builds `-J sum_(i,j) sum_(a in i,b in j) S_a dot S_b`.
@@ -78,7 +83,7 @@ impl<C> SpinOne<C> {
         chain: &Chain,
         sites: &[HilbertSpace<I>],
         j: R,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<SpinOne<C>, I>, UtilityError>
     where
         C: Clone + From<R> + Neg<Output = C>,
     {
@@ -100,12 +105,12 @@ impl<C> SpinOne<C> {
     ///
     /// ```
     /// use num_complex::Complex;
-    /// use qmb_core::{HilbertSpace, QuantumSystem};
+    /// use qmb_core::HilbertSpace;
     /// use qmb_geometry::{Boundary, Chain};
     /// use qmb_spin_one::{SpinOne, SpinOneState as Ket};
     /// type Spin = SpinOne<Complex<f64>>;
     /// let sites = [HilbertSpace::factor("a"), HilbertSpace::factor("b")];
-    /// let h = Spin::blbq(&Chain::new(2, Boundary::Open), &sites, 1.0, 0.5)?;
+    /// let h = qmb_spin_one::models::SpinOneModels::<Spin>::blbq(&Chain::new(2, Boundary::Open), &sites, 1.0, 0.5)?;
     /// let psi = Spin::product_state(h.space().unwrap(), [Ket::Plus, Ket::Plus])?;
     /// assert!((psi.expectation(&h)?.re + 1.5).abs() < 1e-12);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -115,7 +120,7 @@ impl<C> SpinOne<C> {
         sites: &[HilbertSpace<I>],
         j: R,
         k: R,
-    ) -> Result<OperatorOf<Self, I>, UtilityError>
+    ) -> Result<OperatorOf<SpinOne<C>, I>, UtilityError>
     where
         C: Clone + From<R> + Neg<Output = C>,
     {
@@ -124,13 +129,13 @@ impl<C> SpinOne<C> {
         let minus_k = -C::from(k);
         let mut terms = Vec::new();
         for (left, right) in chain.nn_pairs_with(sites)? {
-            let bilinear = Self::try_operator_sum(
+            let bilinear = SpinOne::<C>::try_operator_sum(
                 [O::Sx, O::Sy, O::Sz]
-                    .map(|axis| Self::operator_product_at([(left, axis), (right, axis)])),
+                    .map(|axis| SpinOne::<C>::operator_product_at([(left, axis), (right, axis)])),
             )?;
             terms.push(bilinear.scaled(minus_j.clone()));
-            terms.push(bilinear.product(&bilinear)?.scaled(minus_k.clone()));
+            terms.push((bilinear.clone() * &bilinear)?.scaled(minus_k.clone()));
         }
-        Ok(Self::operator_sum(terms)?.bind(&space)?)
+        Ok(SpinOne::<C>::operator_sum(terms)?.bind(&space)?)
     }
 }

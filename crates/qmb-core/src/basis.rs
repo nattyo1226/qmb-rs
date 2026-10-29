@@ -6,7 +6,7 @@ mod coordinates;
 mod enumeration;
 mod expansion;
 pub use coordinates::{BasisError, Coordinates};
-pub use enumeration::{operator_basis_len, state_basis_len};
+pub use enumeration::{dim_op, dim_state};
 
 /// Expansion, indexing and enumeration of a complete, ordered basis.
 ///

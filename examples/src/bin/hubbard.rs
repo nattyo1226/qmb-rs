@@ -1,13 +1,14 @@
 //! Standard and symmetric Hubbard models on a two-site graded chain.
 use num_complex::Complex;
 use qmb_basic::Id128;
-use qmb_core::{HilbertSpace, QuantumSystem};
+use qmb_core::HilbertSpace;
 use qmb_fermion::{Fermion, FermionOperator as O, FermionState as S, MajoranaBasis};
 use qmb_geometry::{Boundary, Chain};
 #[cfg(feature = "normalize")]
 use qmb_normalize::{Normalize, NormalizedExpectation};
 
 type F = Fermion<Complex<f64>>;
+type Models = qmb_fermion::models::FermionModels<F>;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let chain = Chain::new(2, Boundary::Open);
@@ -15,10 +16,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let modes: Vec<_> = (0..4).map(|_| HilbertSpace::factor(Id128::new())).collect();
     let sites: Vec<_> = modes
         .chunks_exact(2)
-        .map(|pair| HilbertSpace::tensor_g(pair.iter().cloned()))
+        .map(|pair| HilbertSpace::tensor_all_g(pair.iter().cloned()))
         .collect::<Result<_, _>>()?;
-    let h = F::hubbard(&chain, &sites, 1., 4.)?;
-    let symmetric = F::symmetric_hubbard(&chain, &sites, 1., 4.)?;
+    let h = Models::hubbard(&chain, &sites, 1., 4.)?;
+    let symmetric = Models::symmetric_hubbard(&chain, &sites, 1., 4.)?;
     let psi = F::product_state(
         h.space().expect("model is bound"),
         [S::Occupied, S::Empty, S::Empty, S::Occupied],
@@ -36,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (normalized.normalized_expectation(&symmetric)? - shifted_energy).norm_sqr() < 1e-24
         );
     }
-    let p = F::operator(O::Parity).coordinates_in(&MajoranaBasis)?;
+    let p = F::operator(O::Parity).coordinates(&MajoranaBasis)?;
     for entry in p.flat_entries() {
         let (index, coefficient) = entry?;
         println!("Parity in MajoranaBasis: coordinate {index} = {coefficient}");

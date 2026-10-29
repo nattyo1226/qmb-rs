@@ -18,7 +18,7 @@ pub struct VectorMetadata<'b, B, H = (), P = ()> {
     pub(crate) space: H,
     pub(crate) dimension: usize,
     pub(crate) factor_count: usize,
-    pub(crate) local_dimension: Option<usize>,
+    pub(crate) dim_local: Option<usize>,
     pub(crate) primitive: PhantomData<fn() -> P>,
 }
 
@@ -48,8 +48,8 @@ impl<'b, B, H, P> VectorMetadata<'b, B, H, P> {
         self.factor_count
     }
     /// Returns the local basis size, or None for the zero-factor unit space.
-    pub fn local_dimension(&self) -> Option<usize> {
-        self.local_dimension
+    pub fn dim_local(&self) -> Option<usize> {
+        self.dim_local
     }
     pub(crate) fn with_primitive<Q>(self) -> VectorMetadata<'b, B, H, Q> {
         VectorMetadata {
@@ -57,7 +57,7 @@ impl<'b, B, H, P> VectorMetadata<'b, B, H, P> {
             space: self.space,
             dimension: self.dimension,
             factor_count: self.factor_count,
-            local_dimension: self.local_dimension,
+            dim_local: self.dim_local,
             primitive: PhantomData,
         }
     }
@@ -78,7 +78,7 @@ pub struct MatrixMetadata<'b, S, B, H = ()> {
     pub(crate) space: H,
     pub(crate) dimension: usize,
     pub(crate) factor_count: usize,
-    pub(crate) local_dimension: Option<usize>,
+    pub(crate) dim_local: Option<usize>,
     pub(crate) state: PhantomData<fn() -> S>,
 }
 
@@ -112,7 +112,7 @@ impl<'b, S, B, H> MatrixMetadata<'b, S, B, H> {
         self.factor_count
     }
     /// Returns the local state-basis size, or None on the unit space.
-    pub fn local_dimension(&self) -> Option<usize> {
-        self.local_dimension
+    pub fn dim_local(&self) -> Option<usize> {
+        self.dim_local
     }
 }

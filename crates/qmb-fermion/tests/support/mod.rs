@@ -2,7 +2,7 @@
 
 use num_complex::Complex;
 use num_traits::{Float, FromPrimitive};
-use qmb_core::{LinearCombination, LocalOperator, QuantumSystem};
+use qmb_core::{LinearCombination, LocalOperator};
 use qmb_fermion::{Fermion, FermionOperator as O, FermionState as S, LadderBasis};
 
 pub const OPS: [O; 8] = [
@@ -88,10 +88,10 @@ pub fn combination<T: Real>(terms: LinearCombination<O, Complex<T>>) -> Matrix {
 pub fn expression<T: Real>(
     terms: LinearCombination<O, Complex<T>>,
 ) -> LocalOperator<O, Complex<T>> {
-    LocalOperator::from_linear_combination(terms.map(Fermion::<Complex<T>>::operator))
+    LocalOperator::from_terms(terms.map(Fermion::<Complex<T>>::operator))
 }
 pub fn local_value<T: Real>(op: &LocalOperator<O, Complex<T>>) -> Matrix {
-    let coords = op.coordinates_in(&LadderBasis).unwrap();
+    let coords = op.coordinates(&LadderBasis).unwrap();
     let basis = [O::I, O::Annihilate, O::Create, O::Number];
     coords.flat_entries().fold(vec![0.0.into(); 4], |m, t| {
         let (j, c) = t.unwrap();

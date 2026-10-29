@@ -28,7 +28,7 @@ cargo run -p examples --bin heisenberg --no-default-features
 cargo run -p examples --bin heisenberg --no-default-features --features export
 ```
 
-`basis_expansion` は `type Spin = SpinHalf<Complex<f64>>` で係数型を一度選び、`QuantumSystem` の `Spin::state`・`Spin::operator` で局所式を作る。`heisenberg` は Index を利用側で発行して Site 順の局所空間列を作り、`Spin::heisenberg`・`Spin::neel` から構築した式を正規化・密疎 export まで使う。単精度へ切り替える場合は Spin の定義を `Complex<f32>` に変更する。
+`basis_expansion` は `type Spin = SpinHalf<Complex<f64>>` で係数型を一度選び、`ExpressionFactory` の型エイリアスから `Spin::state`・`Spin::operator` で局所式を作る。`heisenberg` は Index を利用側で発行して Site 順の局所空間列を作り、`SpinHalfModels<Spin>` の `heisenberg`・`neel` から構築した式を正規化・密疎 export まで使う。単精度へ切り替える場合は Spin の定義を `Complex<f32>` に変更する。
 
 戻り値型には `qmb_core::StateOf<Spin,I>`・`OperatorOf<Spin,I>`、局所式には `LocalStateOf<Spin>`・`LocalOperatorOf<Spin>` を使える。行列 export の `MatrixArgs::<SpinHalfState,_>` は作用する状態 primitive 型の指定であり、係数精度の再指定ではない。出力先コンテナは引き続き `Exported<Vec<_>,_>` などで選ぶ。
 

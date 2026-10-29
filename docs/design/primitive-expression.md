@@ -149,7 +149,7 @@ Primitive が線型独立でないため、同じ数学的対象に複数の式�
 
 ## 7. 式構築の入口と係数変換（2026-10-28）
 
-構築・集約の基本の入口は qmb_core::QuantumSystem とし、構築済みの式の操作・計算はインスタンスメソッドで行う。LocalStateOf・LocalOperatorOf・StateOf・OperatorOf は主に型注釈で使う。状態のテンソル構築は既存空間を明示する tensor_in・try_tensor_in に移行し、QuantumSystem の同名既定メソッドも基礎 API へ委譲する。primitive の葉順の配置には product_state を使う。具体的な配置・合成の契約は[複合式の設計](composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
+構築・集約の基本の入口は qmb_core::ExpressionFactory とし、構築済みの式の操作・計算はインスタンスメソッドで行う。LocalStateOf・LocalOperatorOf・StateOf・OperatorOf は主に型注釈で使う。状態のテンソル構築は既存空間を明示する tensor_in・try_tensor_in に移行し、ExpressionFactory の同名 inherent method も基礎 API へ委譲する。primitive の葉順の配置には product_state を使う。具体的な配置・合成の契約は[複合式の設計](composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
 
 局所・複合の4式型と LinearCombination の scaled は `impl Into<C>` を受け取り、入口で一度だけ C に変換する。式型は係数を保持するだけで数値能力・Clone を要求せず、LinearCombination は従来の `C: Clone + Mul<Output=C>` を維持する。変換元の Clone は不要で、空の LinearCombination でも変換は一度行う。C の精度は維持し、新たなキャストや精度変換は導入しない。Mul・scalar・term の引数は広げない。
 
@@ -157,10 +157,12 @@ Primitive が線型独立でないため、同じ数学的対象に複数の式�
 
 | 旧引数型に依存していた箇所 | 現在の書き方 |
 | --- | --- |
-| scaled の引数から式の C を推論 | QuantumSystem で先に C を選ぶか、`LocalOperator::<Op, Complex<f64>>` などで明示する |
+| scaled の引数から式の C を推論 | ExpressionFactory で先に C を選ぶか、`LocalOperator::<Op, Complex<f64>>` などで明示する |
 | `.scaled(value.into())` の内側の変換先 | `.scaled(value)` と入力を直接渡す |
 | `.scaled(Default::default())` の生成型 | `.scaled(Complex::<f64>::default())` など入力型を明示する |
 
 係数型を選択済みなら `.scaled(0.5)` と同じ精度の実数を渡せる。標準の `Complex<f32>` へ明示的な f64 を渡すなど、既存の Into が提供しない変換は受け入れない。利用例は[基底展開](../../examples/src/bin/basis_expansion.rs)と[2スピンの計算](../../examples/src/bin/two_spins.rs)を参照する。
 
-LocalState::try_sum・LocalOperator::try_sum は `Result<式,ExpressionError>` の列を集約し、最初の入力 Err 以降を取り出さずに、そのまま返す。全成功時は既存 sum と同じ項順・重複・零係数・空／単項の扱いを保ち、primitive を評価しない。QuantumSystem の局所式用転送メソッドは後続候補であり、今回追加していない。
+LocalState::try_sum・LocalOperator::try_sum は `Result<式,ExpressionError>` の列を集約し、最初の入力 Err 以降を取り出さずに、そのまま返す。全成功時は既存 sum と同じ項順・重複・零係数・空／単項の扱いを保ち、primitive を評価しない。ExpressionFactory の局所式用転送メソッドは後続候補であり、今回追加していない。
+
+名前付きの和・積の構築は式型の列版 `sum` / `product` に絞り、二項は標準の `+` / `*` を使う。primitive の `Product::product` は局所規則として維持する。局所式の係数付き構築は `from_terms(impl IntoIterator<Item=Term<Self,C>>)` とし、配列・iterator・既存の LinearCombination を受け取る。数値演算・Clone・評価を要求せず、入力順・重複・ゼロ係数を保つ。

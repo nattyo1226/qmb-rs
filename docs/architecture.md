@@ -54,15 +54,15 @@ qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs �
 
 ### 2.4. Fermion（実装済み）
 
-`qmb-fermion` は `no_std + alloc` で、二状態の単一 mode、I・a・a†・n・su(2) 規格化した MajoranaX/Y/Z・Parity の八つの primitive を提供する。状態基底は OccupationBasis、演算子基底は LadderBasis と MajoranaBasis とする。`Fermion<C>` は既存 QuantumSystem の構築入口を使い、局所規則に Float・係数の Clone / Copy を要求しない。
+`qmb-fermion` は `no_std + alloc` で、二状態の単一 mode、I・a・a†・n・su(2) 規格化した MajoranaX/Y/Z・Parity の八つの primitive を提供する。状態基底は OccupationBasis、演算子基底は LadderBasis と MajoranaBasis とする。`Fermion<C>` は ExpressionFactory の型エイリアスとして共通の構築入口を使い、局所規則に Float・係数の Clone / Copy を要求しない。
 
-複数 mode の交換符号は primitive の parity と core の graded 評価に委ねる。モデル構築は `Fermion::hubbard`・`symmetric_hubbard` に、Chain と各 Site が `(up,down)` の2 mode を持つ graded 空間列を渡す。両モデルの係数 bound は `Clone + From<R> + Neg` だけであり、構築に局所 Product・Act を要求しない。規約・基底・検証記録は [Fermion の局所代数](design/local-structure.md#9-fermion-の局所代数)、モデル API は [Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)、利用例は [hubbard.rs](../examples/src/bin/hubbard.rs) に記録する。
+複数 mode の交換符号は primitive の parity と core の graded 評価に委ねる。モデル構築は `models::FermionModels<Fermion<C>>::hubbard`・`symmetric_hubbard` に、Chain と各 Site が `(up,down)` の2 mode を持つ graded 空間列を渡す。両モデルの係数 bound は `Clone + From<R> + Neg` だけであり、構築に局所 Product・Act を要求しない。規約・基底・検証記録は [Fermion の局所代数](design/local-structure.md#9-fermion-の局所代数)、モデル API は [Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)、利用例は [hubbard.rs](../examples/src/bin/hubbard.rs) に記録する。
 
 ### 2.5. Spin-one（実装済み）
 
 `qmb-spin-one` は三状態と I・スピン5値・四重極9値の計15演算子 primitive を提供し、状態空間3次元・演算子空間9次元を表す。状態基底は SzBasis、演算子基底は CartesianBasis / LadderBasis。同じ基底の primitive 同士の積はその基底内に閉じる。std を許可し、作用は `Complex<R>`・`R: Float`、他の局所規則は操作ごとの小さい bound とする。規則は直接の match で実装し、全要素 even・P=I で共通の ordinary / graded 評価へ接続する。規約・係数能力・検証は [Spin-one の局所代数](design/local-structure.md#10-spin-one-の局所代数)にまとめる。
 
-`SpinOne::xyz`・`heisenberg`・`blbq` は Chain と外部の Site 空間列から束縛済み Hamiltonian を構築する。符号・全葉ペア・空 Site・空間共有の扱いは spin-half にそろえ、BLBQ は各葉ペアの内積を個別に二乗する。構築に必要な係数能力は `Clone + From<R> + Neg` だけで、局所評価は遅延する。[SpinOne のモデル構築](design/geometry.md#7-spinone-のモデル構築)に定義と検証を記録する。
+`models::SpinOneModels<SpinOne<C>>::xyz`・`heisenberg`・`blbq` は Chain と外部の Site 空間列から束縛済み Hamiltonian を構築する。符号・全葉ペア・空 Site・空間共有の扱いは spin-half にそろえ、BLBQ は各葉ペアの内積を個別に二乗する。構築に必要な係数能力は `Clone + From<R> + Neg` だけで、局所評価は遅延する。[SpinOne のモデル構築](design/geometry.md#7-spinone-のモデル構築)に定義と検証を記録する。
 
 ## 3. Index・自由度・局所構造・空間
 
@@ -120,7 +120,7 @@ Primitive の線型独立性は要求せず、数学的に同じ対象を表す�
 
 基底要素数は、対応する局所構造と対象種別から導出する。局所 Hilbert 空間の次元が `d` なら状態基底は `d`、全演算子基底は `d²` 要素となる。Basis に独立した要素数の提供を要求しない。
 
-Core の共通機構が展開を線型に式全体へ拡張し、順序番号から座標を得る。内積・Gram 行列・双対基底は展開の実装に利用できるが、Basis の必須の独立能力とはしない。Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` を削除した。利用側で状態には `Basis<S, C>`、演算子には `Basis<O, C>` を直接要求する。次元からの要素数取得と基底の数学的契約は維持する。Step 5 で `expand_in`・`coordinates_in`・Coordinates・BasisError と HilbertSpace 上の複合基底の遅延列挙を実装した。詳細な契約と公開 API は [基底の数学的能力](design/basis.md)に定める。
+Core の共通機構が展開を線型に式全体へ拡張し、順序番号から座標を得る。内積・Gram 行列・双対基底は展開の実装に利用できるが、Basis の必須の独立能力とはしない。Step 2 では `Basis<P, C>` を維持し、`StateBasis`・`OperatorBasis` を削除した。利用側で状態には `Basis<S, C>`、演算子には `Basis<O, C>` を直接要求する。次元からの要素数取得と基底の数学的契約は維持する。Step 5 で `expand`・`coordinates`・Coordinates・BasisError と HilbertSpace 上の複合基底の遅延列挙を実装した。詳細な契約と公開 API は [基底の数学的能力](design/basis.md)に定める。
 
 初期版では局所規則に基づく `evaluate` に加え、指定基底への展開と係数取得を提供する。分配だけ、局所積だけなど、特定の簡約ルールのみを選択して適用する独立した操作は future work とする。必要な分配・局所積・係数の結合は、基底展開や作用・内積・trace の内部処理として維持する。入力の式は変更せず、通常の評価に基底展開を必須としない。
 
@@ -142,15 +142,15 @@ Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 
 
 ## 8. 型選択・幾何・モデル構築
 
-`qmb_core::QuantumSystem` は primitive の `State`・`Operator` と係数型 `Coeff` を関連付ける。`state(primitive)`・`operator(primitive)` は既存の局所式を返し、構築時の数値能力や Clone を要求しない。評価の能力は引き続き各操作で要求する。`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は既存の式型への投影別名であり、系を表す識別子や新たな式ラッパーは保持しない。
+`qmb_core::QuantumSystem` は primitive の `State`・`Operator` と係数型 `Coeff` を関連付ける。`qmb_core::ExpressionFactory<S,O,C>` の inherent method `state(primitive)`・`operator(primitive)` は既存の局所式を返し、構築時の数値能力や Clone を要求しない。評価の能力は引き続き各操作で要求する。`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は既存の式型への投影別名であり、系を表す識別子や新たな式ラッパーは保持しない。
 
-`qmb_spin_half::SpinHalf<C>` で代数と係数型を一度選択する。既定精度・個別 primitive 用メソッド・異精度の暗黙変換は設けない。状態の tensor constructor は既存空間を明示する入口へ移行した。明示的な戻り値型には投影別名を使え、Q は構築入口で選ぶ。構築・集約は QuantumSystem の product_state・operator_product_at・state_sum・operator_sum・tensor_in・operator_product と集約の try_ 版に揃え、構築済み式の操作はインスタンスメソッドで行う。scaled は `impl Into<C>` を一度変換して保持する。try_ は最初の ExpressionError で入力消費を止め、全成功時だけ合成を検証する。契約は[複合式の設計](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
+`qmb_spin_half::SpinHalf<C>` で代数と係数型を一度選択する。既定精度・個別 primitive 用メソッド・異精度の暗黙変換は設けない。状態の tensor constructor は既存空間を明示する入口へ移行した。明示的な戻り値型には投影別名を使え、Q は構築入口で選ぶ。構築・集約は ExpressionFactory の product_state・operator_product_at・state_sum・operator_sum・tensor_in・operator_product と集約の try_ 版に揃え、構築済み式の操作はインスタンスメソッドで行う。scaled は `impl Into<C>` を一度変換して保持する。try_ は最初の ExpressionError で入力消費を止め、全成功時だけ合成を検証する。契約は[複合式の設計](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
 
 Chain はサイト数と境界条件のみを持ち、Index の入力・発行・ToSpace による空間生成を行わない。`Chain::new(n, boundary)` は Self を返す。近接 Site 対は辞書順で、0・1 Site は辺なし、2 Site は open／periodic とも一辺とする。
 
-外部の Site 順列を借用する `_with` API は、列長を列挙前に検証する。`nn_site_pairs_with` は入力要素対、`nn_pairs_with` は Site 間の全葉の直積、`nn_pairs_by_pos_with` は短い方までの葉の位置対応を返す。`_on` は保存された全空間のトップレベル分割を Site と読み `_with` へ委譲する。葉の列挙には core の `leaves()` を使い、要素・Index の Clone・Eq を要求しない。
+外部の Site 順列を借用する `_with` API は、列長を列挙前に検証する。`nn_site_pairs_with` は入力要素対、`nn_pairs_with` は Site 間の全葉の直積、`nn_zip_with` は短い方までの葉の位置対応を返す。`_in` は保存された全空間のトップレベル分割を Site と読み `_with` へ委譲する。葉の列挙には core の `leaves()` を使い、要素・Index の Clone・Eq を要求しない。
 
-モデル構築は SpinHalf<C> の関連関数 xyz・heisenberg・neel で提供し、Chain と局所空間列を受け取る。Index の重複と列長を辺の有無によらず検証する。Hamiltonian は局所空間ハンドルを共有して列順に tensor した空間へ束縛する。標準モデルは複数葉と空 Site を受け入れ、XYZ・Heisenberg は Site 間の全葉ペアへ結合を与え、Neel は Site ごとに向きを決めて全葉へ割り当てる。空 Site は位置と偶奇を保ち、前後を直接結び直さない。0 Site では単位空間上の zero Hamiltonian と単位状態を返す。
+モデル構築は `qmb_spin_half::models::SpinHalfModels<SpinHalf<C>>` の関連関数 xyz・heisenberg・neel で提供し、Chain と局所空間列を受け取る。Index の重複と列長を辺の有無によらず検証する。Hamiltonian は局所空間ハンドルを共有して列順に tensor した空間へ束縛する。標準モデルは複数葉と空 Site を受け入れ、XYZ・Heisenberg は Site 間の全葉ペアへ結合を与え、Neel は Site ごとに向きを決めて全葉へ割り当てる。空 Site は位置と偶奇を保ち、前後を直接結び直さない。0 Site では単位空間上の zero Hamiltonian と単位状態を返す。
 
 Index は引き続き Eq だけで照合し、共有に Clone・再発行を要求しない。局所 grouping は維持するが、別途保持する全空間の上位 grouping・異なる因子順序を復元する契約は持たない。契約と検証は [Chain の設計](design/geometry.md)に記録する。
 
@@ -208,3 +208,5 @@ LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を
 2026-10-29 に共通機構を実装した。`HilbertSpace<I>` が `TensorKind` と順序を保持し、primitive が `HomogeneousParity` / `ParityOperator` を提供する。共通の作用評価では Act ごとの選択済み空間に従って P を挿入する。演算子の intrinsic な基底展開と通常表現による trace は private な走査型を分ける。export / normalize は core の共通 API に接続する。
 
 空・単因子の同一視後にも残る異種 tensor kind の混在は拒否する。幾何・Index に grading の責任は追加しない。構築 API・最小能力と breaking change は [複合式の共通評価と移行](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。Fermion と Spin-one の製品実装は第2.4〜2.5節に記録する。Operator / State 統合は後続に残す。
+
+共通の構築入口は `ExpressionFactory<S,O,C>` の inherent method とし、`SpinHalf<C>`・`SpinOne<C>`・`Fermion<C>` はその型エイリアスである。QuantumSystem trait は型情報だけを持ち、通常の構築呼び出しに trait import は不要である。モデル固有構築は各 primitive crate の公開 models module の `SpinHalfModels<SpinHalf<C>>`・`SpinOneModels<SpinOne<C>>`・`FermionModels<Fermion<C>>` に置く。

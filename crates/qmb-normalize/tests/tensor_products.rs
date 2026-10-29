@@ -9,11 +9,12 @@ fn check<T: Real + num_traits::Float>() {
         HilbertSpace::factor(1),
         HilbertSpace::factor(2),
     ];
-    let h = HilbertSpace::tensor_g(factors.clone()).unwrap();
+    let h = HilbertSpace::tensor_all_g(factors.clone()).unwrap();
     let op = placed::<T>(A, &factors[2]);
-    let psi = ket(7, &factors, TensorKind::Graded)
+    let psi = (ket(7, &factors, TensorKind::Graded)
         .scaled(c(0.3, -0.6))
-        .add(&ket(6, &factors, TensorKind::Graded).scaled(c(-0.7, 0.4)))
+        .clone()
+        + &ket(6, &factors, TensorKind::Graded).scaled(c(-0.7, 0.4)))
         .unwrap();
     let m = embedding(A, 2, 3, TensorKind::Graded);
     let v = vector(&psi);

@@ -251,17 +251,17 @@ Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要�
 | 対象 | 主な API と契約 |
 | --- | --- |
 | 局所式の配置 | `LocalState::at(&factor)`・`LocalOperator::at(&factor)` は因子への配置を検証し、局所式を共有する。状態は所属空間を持ち、演算子は未束縛とする |
-| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`try_sum`・`add`・`tensor_in(&space, states)`・`try_tensor_in(&space, states)`・`scaled` と、`space`・`domain`・`codomain` を提供する |
+| `State<I, S, O, C>` の構築・空間 | `place`・`zero(&space)`・`unit()`・`sum`・`try_sum`・`tensor_in(&space, states)`・`try_tensor_in(&space, states)`・`scaled` と、`space`・`domain`・`codomain` を提供する |
 | `State<I, S, O, C>` の演算・評価 | `act`・`act_in`・`evaluate`・`inner_product`・`norm_squared`・`expectation`・`expectation_in` を提供する。作用は遅延構築する |
-| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`try_sum`・`add`・`product_all`・`try_product_all`・`product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
-| `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hilbert_schmidt_inner_product`・`hilbert_schmidt_inner_product_in` を提供する。交換子は遅延構築する |
+| `Operator<I, O, C>` の構築・空間 | `place`・`zero()`・`identity()`・`scalar`・`sum`・`try_sum`・`product`・`try_product`・`scaled`・`adjoint`・`bind` と、`space`・`domain`・`codomain` を提供する。未束縛の場合、空間の取得は `None` を返す |
+| `Operator<I, O, C>` の演算・評価 | `commutator`・`anticommutator`・`trace`・`trace_in`・`hs_inner_product`・`hs_inner_product_in` を提供する。交換子は遅延構築する |
 | エラー | 空間の重複には `SpaceError`、複合式の接続・評価には `ExpressionError`、次元取得には `DimensionOverflow` を使う |
 
-Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
+通常の和・積の名前付き構築は列を受け取る `sum` / `product` とし、二項には標準の `+` / `*` を使う。Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
 
 ## 11. QuantumSystem の構築入口と fallible 集約（2026-10-28）
 
-QuantumSystem は状態・演算子 primitive と係数型を関連付け、以下の既定メソッドから既存の core 式を構築する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
+QuantumSystem は状態・演算子 primitive と係数型だけを関連付ける。構築は ExpressionFactory の以下の inherent method から既存の core 式を生成する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
 
 | 入口 | 入力・契約 |
 | --- | --- |
@@ -276,9 +276,9 @@ operator_product_at の _at は配置も行う入口を意味し、裸の primit
 
 try_ は Result 入力を表し、通常版も複合式では Result を返す。エラー型は ExpressionError に固定する。最初の入力 Err をそのまま返し、その後は Iterator の next を呼ばない。全入力が Ok の場合だけ合成を検証するため、入力エラーは先の項の空間不整合・重複より優先する。事前に配列・Vec を作った場合の生成処理や副作用は巻き戻さない。全入力成功後の合成検証が失敗する場合も、入力生成は最後まで行う。
 
-State::try_sum・try_tensor_in、Operator::try_sum・try_product_all を基礎 API として公開し、QuantumSystem はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
+State::try_sum・try_tensor_in、Operator::try_sum・try_product を基礎 API として公開し、ExpressionFactory はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
 
-各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の QuantumSystem 補助、局所式の集約用転送メソッドは後続候補として維持する。
+各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の ExpressionFactory 補助、局所式の集約用転送メソッドは後続候補として維持する。
 
 ## 12. Ordinary / graded の共通評価と移行
 
@@ -290,8 +290,8 @@ State::try_sum・try_tensor_in、Operator::try_sum・try_product_all を基礎 A
 | --- | --- |
 | State | `tensor_in(&space, states)` |
 | fallible な State | `try_tensor_in(&space, states)` |
-| QuantumSystem | `tensor_in(&space, states)` |
-| fallible な QuantumSystem | `try_tensor_in(&space, states)` |
+| ExpressionFactory | `tensor_in(&space, states)` |
+| fallible な ExpressionFactory | `try_tensor_in(&space, states)` |
 | primitive の配置・合成 | `product_state(&space, primitives)` |
 
 所属空間を先に構築し、状態構築ではその空間を共有する。状態の Tensor 節点は子の列だけを保持し、種類を重複して保存しない。状態側の種類指定版・`_g` 版・二項専用版は撤去した。HilbertSpace 側の種類指定 API は維持する。
@@ -302,7 +302,7 @@ State::try_sum・try_tensor_in、Operator::try_sum・try_product_all を基礎 A
 
 ### 12.2. 共通 API と最小能力
 
-`evaluate`・`trace`・`expand_in`・`coordinates_in` と各明示空間版を ordinary / graded 共通の入口とし、種類別の評価 API や adapter を追加しない。Rust の trait bound は実行時の kind で切り替えられないため、ordinary 空間でも操作に必要な grading 能力を要求する。実際の符号処理は選択空間の `effective_kind()` で決め、ordinary では P の挿入や交差符号を加えない。
+`evaluate`・`trace`・`expand`・`coordinates` と各明示空間版を ordinary / graded 共通の入口とし、種類別の評価 API や adapter を追加しない。Rust の trait bound は実行時の kind で切り替えられないため、ordinary 空間でも操作に必要な grading 能力を要求する。実際の符号処理は選択空間の `effective_kind()` で決め、ordinary では P の挿入や交差符号を加えない。
 
 | 操作 | 従来の能力に追加するもの |
 | --- | --- |

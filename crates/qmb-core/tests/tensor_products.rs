@@ -8,61 +8,61 @@ use qmb_core::{HilbertSpace as H, *};
 fn normalized_kinds_grouping_subsystems_and_errors() {
     for kind in [TensorKind::Ordinary, TensorKind::Graded] {
         let [a, b, d] = [H::factor(8), H::factor(2), H::factor(5)];
-        let ab = H::tensor_with_kind(kind, [a.clone(), b.clone()]).unwrap();
-        let abc = ab.tensor_product_with_kind(kind, &d).unwrap();
+        let ab = H::tensor_all_with(kind, [a.clone(), b.clone()]).unwrap();
+        let abc = ab.tensor_with(kind, &d).unwrap();
         let regrouped = a
-            .tensor_product_with_kind(kind, &b.tensor_product_with_kind(kind, &d).unwrap())
+            .tensor_with(kind, &b.tensor_with(kind, &d).unwrap())
             .unwrap();
         assert!(abc.is_compatible_with(&regrouped));
         assert!(!abc.is_compatible_with(
-            &H::tensor_with_kind(kind, [d.clone(), b.clone(), a.clone()]).unwrap()
+            &H::tensor_all_with(kind, [d.clone(), b.clone(), a.clone()]).unwrap()
         ));
         assert!(
-            H::tensor_with_kind(kind, [a.clone(), d.clone()])
+            H::tensor_all_with(kind, [a.clone(), d.clone()])
                 .unwrap()
                 .is_subsystem_of(&abc)
         );
         assert!(
-            !H::tensor_with_kind(kind, [d.clone(), a.clone()])
+            !H::tensor_all_with(kind, [d.clone(), a.clone()])
                 .unwrap()
                 .is_subsystem_of(&abc)
         );
         assert!(a.is_subsystem_of(&abc));
         assert!(H::unit().is_subsystem_of(&abc));
         assert!(matches!(
-            ab.tensor_product_with_kind(kind, &a),
+            ab.tensor_with(kind, &a),
             Err(SpaceError::DuplicateIndex)
         ));
     }
     let a = H::factor(0);
     let b = H::factor(1);
     let d = H::factor(2);
-    let g = H::tensor_g([a.clone(), b.clone()]).unwrap();
-    let o = H::tensor([a.clone(), b.clone()]).unwrap();
+    let g = H::tensor_all_g([a.clone(), b.clone()]).unwrap();
+    let o = H::tensor_all([a.clone(), b.clone()]).unwrap();
     assert!(!g.is_compatible_with(&o));
     assert!(!o.is_subsystem_of(&g));
-    assert!(H::<u8>::unit().is_compatible_with(&H::tensor_g([]).unwrap()));
+    assert!(H::<u8>::unit().is_compatible_with(&H::tensor_all_g([]).unwrap()));
     assert!(
-        H::tensor([H::tensor_g([]).unwrap(), a.clone()])
+        H::tensor_all([H::tensor_all_g([]).unwrap(), a.clone()])
             .unwrap()
-            .is_compatible_with(&H::tensor_g([a.clone()]).unwrap())
+            .is_compatible_with(&H::tensor_all_g([a.clone()]).unwrap())
     );
-    let wrapper = H::tensor([H::unit(), g.clone()]).unwrap();
+    let wrapper = H::tensor_all([H::unit(), g.clone()]).unwrap();
     assert_eq!(wrapper.kind(), Some(TensorKind::Ordinary));
     assert_eq!(wrapper.effective_kind(), Some(TensorKind::Graded));
     assert_eq!(wrapper.children().len(), 2);
     assert!(wrapper.is_compatible_with(&g));
     assert!(matches!(
-        H::tensor([d.clone(), H::tensor([g.clone()]).unwrap()]),
+        H::tensor_all([d.clone(), H::tensor_all([g.clone()]).unwrap()]),
         Err(SpaceError::MixedTensorKinds)
     ));
     assert!(matches!(
-        H::tensor_g([d, o]),
+        H::tensor_all_g([d, o]),
         Err(SpaceError::MixedTensorKinds)
     ));
     assert!(matches!(
         State::tensor_in(
-            &H::tensor([a.clone(), H::factor(1), H::factor(3)]).unwrap(),
+            &H::tensor_all([a.clone(), H::factor(1), H::factor(3)]).unwrap(),
             [
                 ket::<f64>(0, &[a.clone(), b], TensorKind::Graded),
                 ket(0, &[H::factor(3)], TensorKind::Ordinary)
@@ -72,11 +72,10 @@ fn normalized_kinds_grouping_subsystems_and_errors() {
     ));
     let bound = placed::<f64>(A, &a).bind(&g).unwrap();
     assert!(matches!(
-        bound.product(
-            &Operator::identity()
-                .bind(&H::tensor([a.clone(), H::factor(1)]).unwrap())
-                .unwrap()
-        ),
+        bound.clone()
+            * &Operator::identity()
+                .bind(&H::tensor_all([a.clone(), H::factor(1)]).unwrap())
+                .unwrap(),
         Err(ExpressionError::IncompatibleSpaces)
     ));
     let bad = placed::<f64>(A, &H::factor(99)).scaled(c(0., 0.));
@@ -84,11 +83,11 @@ fn normalized_kinds_grouping_subsystems_and_errors() {
         bad.trace_in(&g),
         Err(ExpressionError::MissingIndex)
     ));
-    assert!(bad.expand_in_space(&Units, &g).is_err());
+    assert!(bad.expand_in(&Units, &g).is_err());
 }
 
 fn matrix_of<T: Real>(op: &OperatorOf<T>, space: &H<u8>) -> Vec<num_complex::Complex<T>> {
-    let n = space.dimension::<Ket>().unwrap();
+    let n = space.dim::<Ket>().unwrap();
     let mut result = vec![c(0., 0.); n * n];
     for (j, input) in space.basis_states(&States).unwrap().enumerate() {
         let col = vector(&input.unwrap().act(op).unwrap());
@@ -103,7 +102,7 @@ fn check<T: Real>() {
         for n in [2, 3] {
             // Deliberately not sorted by Index value.
             let factors: Vec<_> = [9, 1, 4].into_iter().take(n).map(H::factor).collect();
-            let h = H::tensor_with_kind(kind, factors.clone()).unwrap();
+            let h = H::tensor_all_with(kind, factors.clone()).unwrap();
             let inputs: Vec<_> = h
                 .basis_states::<Ket, Op, num_complex::Complex<T>, _>(&States)
                 .unwrap()
@@ -115,7 +114,7 @@ fn check<T: Real>() {
                         for b in OPS {
                             let lhs = placed::<T>(a, &factors[i]);
                             let rhs = placed(b, &factors[j]);
-                            let op = lhs.product(&rhs).unwrap().bind(&h).unwrap();
+                            let op = (lhs.clone() * &rhs).unwrap().bind(&h).unwrap();
                             let expected =
                                 product(&embedding(a, i, n, kind), &embedding(b, j, n, kind));
                             values(&matrix_of(&op, &h), &expected);
@@ -123,11 +122,11 @@ fn check<T: Real>() {
                             values(&matrix_of(&op.adjoint().adjoint(), &h), &expected);
                             close(op.trace().unwrap(), trace(&expected));
                             close(
-                                rhs.product(&lhs).unwrap().trace_in(&h).unwrap(),
+                                (rhs.clone() * &lhs).unwrap().trace_in(&h).unwrap(),
                                 trace(&expected),
                             );
                             close(
-                                lhs.hilbert_schmidt_inner_product_in(&rhs, &h).unwrap(),
+                                lhs.hs_inner_product_in(&rhs, &h).unwrap(),
                                 trace(&product(
                                     &adjoint(&embedding(a, i, n, kind)),
                                     &embedding(b, j, n, kind),
@@ -135,33 +134,33 @@ fn check<T: Real>() {
                             );
                             for basis in [false, true] {
                                 let expanded = if basis {
-                                    op.expand_in(&Parities).unwrap()
+                                    op.expand(&Parities).unwrap()
                                 } else {
-                                    op.expand_in(&Units).unwrap()
+                                    op.expand(&Units).unwrap()
                                 };
                                 values(&matrix_of(&expanded, &h), &expected);
                                 close(expanded.trace().unwrap(), trace(&expected));
                                 let first = if basis {
-                                    op.coordinates_in(&Parities)
+                                    op.coordinates(&Parities)
                                         .unwrap()
                                         .into_entries()
                                         .collect::<Vec<_>>()
                                 } else {
-                                    op.coordinates_in(&Units).unwrap().into_entries().collect()
+                                    op.coordinates(&Units).unwrap().into_entries().collect()
                                 };
                                 let again = if basis {
                                     expanded
-                                        .expand_in(&Parities)
+                                        .expand(&Parities)
                                         .unwrap()
-                                        .coordinates_in(&Parities)
+                                        .coordinates(&Parities)
                                         .unwrap()
                                         .into_entries()
                                         .collect::<Vec<_>>()
                                 } else {
                                     expanded
-                                        .expand_in(&Units)
+                                        .expand(&Units)
                                         .unwrap()
-                                        .coordinates_in(&Units)
+                                        .coordinates(&Units)
                                         .unwrap()
                                         .into_entries()
                                         .collect()
@@ -195,9 +194,8 @@ fn check<T: Real>() {
                 + LocalOperator::primitive(Op::P))
             .at(&factors[n - 1])
             .unwrap();
-            let psi = inputs[0]
-                .scaled(c(0.3, 0.2))
-                .add(&inputs[(1 << n) - 1].scaled(c(-0.7, 0.4)))
+            let psi = (inputs[0].scaled(c(0.3, 0.2)).clone()
+                + &inputs[(1 << n) - 1].scaled(c(-0.7, 0.4)))
                 .unwrap();
             let m: Vec<_> = embedding::<T>(A, n - 1, n, kind)
                 .into_iter()
@@ -206,18 +204,9 @@ fn check<T: Real>() {
                 .collect();
             let acted = psi.act(&mixed).unwrap();
             values(&vector(&acted), &act(&m, &vector(&psi)));
+            values(&matrix_of(&mixed.expand_in(&Units, &h).unwrap(), &h), &m);
             values(
-                &matrix_of(&mixed.expand_in_space(&Units, &h).unwrap(), &h),
-                &m,
-            );
-            values(
-                &vector(
-                    &acted
-                        .expand_in(&States)
-                        .unwrap()
-                        .expand_in(&States)
-                        .unwrap(),
-                ),
+                &vector(&acted.expand(&States).unwrap().expand(&States).unwrap()),
                 &vector(&acted),
             );
             close(psi.inner_product(&psi).unwrap(), c(0.78, 0.));
@@ -260,7 +249,7 @@ fn independent_two_and_three_factor_reference_f64() {
 fn scope_and_intrinsic_coordinates_are_preserved() {
     let factors = [H::factor(0), H::factor(1)];
     let [a, b] = factors.clone();
-    let h = H::tensor_g(factors.clone()).unwrap();
+    let h = H::tensor_all_g(factors.clone()).unwrap();
     let op = placed::<f64>(A, &b);
     let left = ket(1, &[a], TensorKind::Graded);
     let right = ket(1, &[b], TensorKind::Graded);
@@ -276,14 +265,14 @@ fn scope_and_intrinsic_coordinates_are_preserved() {
         .unwrap();
     values(&vector(&inner), &vector(&inner_ready));
     values(&vector(&outer), &vector(&inner.scaled(c(-1., 0.))));
-    values(&vector(&inner.expand_in(&States).unwrap()), &vector(&inner));
-    let coords = op.coordinates_in_space(&Parities, &h).unwrap();
+    values(&vector(&inner.expand(&States).unwrap()), &vector(&inner));
+    let coords = op.coordinates_in(&Parities, &h).unwrap();
     let entries: Vec<_> = coords.entries().collect();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].0, &[0, 2]);
     close(*entries[0].1, c(1., 0.));
     values(&matrix_of(&op, &h), &kron(&local(Op::P), &local(A)));
-    let old = op.bind(&H::tensor(factors.clone()).unwrap()).unwrap();
+    let old = op.bind(&H::tensor_all(factors.clone()).unwrap()).unwrap();
     values(
         &vector(
             &ket(3, &factors, TensorKind::Graded)
@@ -293,23 +282,18 @@ fn scope_and_intrinsic_coordinates_are_preserved() {
         &[c(0., 0.), c(0., 0.), c(-1., 0.), c(0., 0.)],
     );
     close(
-        op.adjoint().product(&op).unwrap().trace_in(&h).unwrap(),
+        (op.adjoint().clone() * &op).unwrap().trace_in(&h).unwrap(),
         c(2., 0.),
     );
 }
 
 #[test]
 fn constructors_fallibility_and_deep_graded_trees() {
-    struct Q;
-    impl QuantumSystem for Q {
-        type State = Ket;
-        type Operator = Op;
-        type Coeff = num_complex::Complex<f64>;
-    }
+    type Q = qmb_core::ExpressionFactory<Ket, Op, num_complex::Complex<f64>>;
     let a = H::factor(0);
     let b = H::factor(1);
     let g = Q::product_state(
-        &H::tensor_g([a.clone(), b.clone()]).unwrap(),
+        &H::tensor_all_g([a.clone(), b.clone()]).unwrap(),
         [Ket(1), Ket(1)],
     )
     .unwrap();
@@ -319,7 +303,7 @@ fn constructors_fallibility_and_deep_graded_trees() {
     for kind in [TensorKind::Ordinary, TensorKind::Graded] {
         let x = Q::state(Ket(1)).at(&a).unwrap();
         let y = Q::state(Ket(1)).at(&b).unwrap();
-        let target = H::tensor_with_kind(kind, [a.clone(), b.clone()]).unwrap();
+        let target = H::tensor_all_with(kind, [a.clone(), b.clone()]).unwrap();
         let candidates = [
             Q::tensor_in(&target, [x.clone(), y.clone()]).unwrap(),
             Q::try_tensor_in(&target, [Ok(x.clone()), Ok(y.clone())]).unwrap(),
@@ -356,14 +340,16 @@ fn constructors_fallibility_and_deep_graded_trees() {
             let factors = [H::factor(0), H::factor(1)];
             let mut psi = ket::<f64>(3, &factors, TensorKind::Graded);
             for _ in 0..20_000 {
-                psi =
-                    State::tensor_in(&H::tensor_g(factors.clone()).unwrap(), [State::unit(), psi])
-                        .unwrap();
+                psi = State::tensor_in(
+                    &H::tensor_all_g(factors.clone()).unwrap(),
+                    [State::unit(), psi],
+                )
+                .unwrap();
             }
             assert_eq!(psi.space().kind(), Some(TensorKind::Graded));
             assert!(
                 psi.space()
-                    .is_compatible_with(&H::tensor_g(factors.clone()).unwrap())
+                    .is_compatible_with(&H::tensor_all_g(factors.clone()).unwrap())
             );
             let out = psi
                 .act(&placed(A, &factors[1]))
@@ -435,7 +421,7 @@ fn graded_action_needs_neither_product_nor_numeric_coefficient_operations() {
     }
     let count = Cell::new(0);
     let factors = [H::factor(0), H::factor(1), H::factor(2)];
-    let space = H::tensor_g(factors.iter().cloned()).unwrap();
+    let space = H::tensor_all_g(factors.iter().cloned()).unwrap();
     let psi = State::tensor_in(
         &space,
         factors
@@ -455,7 +441,7 @@ fn graded_action_needs_neither_product_nor_numeric_coefficient_operations() {
 fn large_separable_states_and_traces_do_not_need_global_dimensions_or_bases() {
     let factors: Vec<_> = (0..80).map(H::factor).collect();
     let psi = State::<_, Ket, Op, num_complex::Complex<f64>>::tensor_in(
-        &H::tensor_g(factors.iter().cloned()).unwrap(),
+        &H::tensor_all_g(factors.iter().cloned()).unwrap(),
         factors.iter().map(|f| {
             (LocalState::primitive(Ket(0)) + LocalState::primitive(Ket(1)))
                 .at(f)
@@ -463,13 +449,12 @@ fn large_separable_states_and_traces_do_not_need_global_dimensions_or_bases() {
         }),
     )
     .unwrap();
-    assert!(psi.space().dimension::<Ket>().is_err());
+    assert!(psi.space().dim::<Ket>().is_err());
     let a = placed(A, &factors[79]);
     let result = psi.act(&a).unwrap().evaluate().unwrap();
     close(result.inner_product(&result).unwrap(), c(2f64.powi(79), 0.));
     close(
-        a.adjoint()
-            .product(&a)
+        (a.adjoint().clone() * &a)
             .unwrap()
             .trace_in(psi.space())
             .unwrap(),
@@ -481,32 +466,32 @@ fn large_separable_states_and_traces_do_not_need_global_dimensions_or_bases() {
 fn local_expression_homomorphism_three_odd_factors_and_empty_bases() {
     for kind in [TensorKind::Ordinary, TensorKind::Graded] {
         let factors = [H::factor(0), H::factor(1), H::factor(2)];
-        let h = H::tensor_with_kind(kind, factors.clone()).unwrap();
+        let h = H::tensor_all_with(kind, factors.clone()).unwrap();
         let local = qmb_core::LocalOperator::<Op, num_complex::Complex<f64>>::primitive(A)
             .scaled(c(0.3, 0.4))
             + LocalOperator::primitive(Op::P);
-        let local_product = local.product(&local.adjoint()).adjoint();
+        let local_product = (local.clone() * &local.adjoint()).adjoint();
         let placed_local = local_product.at(&factors[2]).unwrap();
         let lifted = local.at(&factors[2]).unwrap();
-        let placed_product = lifted.product(&lifted.adjoint()).unwrap().adjoint();
+        let placed_product = (lifted.clone() * &lifted.adjoint()).unwrap().adjoint();
         values(
             &matrix_of(&placed_local, &h),
             &matrix_of(&placed_product, &h),
         );
         values(
-            &matrix_of(&placed_local.expand_in_space(&Units, &h).unwrap(), &h),
+            &matrix_of(&placed_local.expand_in(&Units, &h).unwrap(), &h),
             &matrix_of(&placed_product, &h),
         );
         for order in [[0, 1, 2], [2, 1, 0], [1, 2, 0]] {
             let mut op = OperatorOf::<f64>::identity();
             let mut m = embedding(Op::I, 0, 3, kind);
             for i in order {
-                op = op.product(&placed(A, &factors[i])).unwrap();
+                op = (op.clone() * &placed(A, &factors[i])).unwrap();
                 m = product(&m, &embedding(A, i, 3, kind));
             }
             values(&matrix_of(&op, &h), &m);
             values(
-                &matrix_of(&op.adjoint().expand_in_space(&Units, &h).unwrap(), &h),
+                &matrix_of(&op.adjoint().expand_in(&Units, &h).unwrap(), &h),
                 &adjoint(&m),
             );
         }
@@ -515,13 +500,13 @@ fn local_expression_homomorphism_three_odd_factors_and_empty_bases() {
             .unwrap()
             .enumerate()
         {
-            let coords = op.unwrap().coordinates_in(&Parities).unwrap();
+            let coords = op.unwrap().coordinates(&Parities).unwrap();
             assert_eq!(coords.len(), 1);
             let (index, value) = coords.flat_entries().next().unwrap().unwrap();
             assert_eq!(index, i);
             close(*value, c(1., 0.));
         }
-        let unit = H::<u8>::tensor_with_kind(kind, []).unwrap();
+        let unit = H::<u8>::tensor_all_with(kind, []).unwrap();
         let one = State::<u8, Ket, Op, num_complex::Complex<f64>>::tensor_in(&unit, []).unwrap();
         assert_eq!(one.space().kind(), Some(kind));
         close(one.inner_product(&one).unwrap(), c(1., 0.));
@@ -531,7 +516,7 @@ fn local_expression_homomorphism_three_odd_factors_and_empty_bases() {
             .next()
             .unwrap()
             .unwrap();
-        assert_eq!(state.coordinates_in(&States).unwrap().factor_count(), 0);
+        assert_eq!(state.coordinates(&States).unwrap().factor_count(), 0);
         assert_eq!(
             unit.basis_operators::<Op, num_complex::Complex<f64>, _>(&Units)
                 .unwrap()

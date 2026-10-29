@@ -36,7 +36,7 @@ pub enum ExpressionError {
 /// let b = HilbertSpace::factor(1u8);
 /// let left = LocalState::<u8, (), ()>::primitive(0).at(&a).unwrap();
 /// let right = LocalState::<u16, (), ()>::primitive(0).at(&b).unwrap();
-/// let h = a.tensor_product(&b).unwrap();
+/// let h = a.tensor(&b).unwrap();
 /// let _ = qmb_core::State::tensor_in(&h, [left, right]);
 /// ```
 ///
@@ -179,7 +179,7 @@ impl<I, S, O, C> StateExpr<I, S, O, C> {
             children => Self::new(StateNode::Sum(children)),
         }
     }
-    pub(crate) fn same_node(&self, rhs: &Self) -> bool {
+    pub(crate) fn shares_node_with(&self, rhs: &Self) -> bool {
         Arc::ptr_eq(
             self.root.as_ref().expect("live state"),
             rhs.root.as_ref().expect("live state"),
@@ -288,10 +288,6 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     ) -> Result<Self, ExpressionError> {
         let states: SumExpr<Self> = states.into_iter().collect::<Result<_, _>>()?;
         Self::sum(space, states)
-    }
-    /// Adds states on compatible ordered spaces, without evaluating local rules.
-    pub fn add(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        self.clone().into_add(rhs.clone())
     }
     pub(crate) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
         if !self.space.is_compatible_with(&rhs.space) {
@@ -503,15 +499,11 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             ambient,
         })
     }
-    /// Adds operators, validating compatible bindings when both are bound.
-    pub fn add(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::sum([self.clone(), rhs.clone()])
-    }
     pub(crate) fn into_add(self, rhs: Self) -> Result<Self, ExpressionError> {
         Self::sum([self, rhs])
     }
     /// Constructs a product in input order; the empty product is unbound identity.
-    pub fn product_all(operators: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
+    pub fn product(operators: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
         Self::product_collected(operators.into_iter().collect())
     }
     /// Collects fallible operators before validating the whole product's binding.
@@ -519,7 +511,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     /// The first input error stops iteration and takes precedence over binding
     /// errors. Order is preserved, with the right operand acting first.
     /// Empty input is unbound identity. No primitive rules are evaluated.
-    pub fn try_product_all(
+    pub fn try_product(
         operators: impl IntoIterator<Item = Result<Self, ExpressionError>>,
     ) -> Result<Self, ExpressionError> {
         Self::product_collected(operators.into_iter().collect::<Result<_, _>>()?)
@@ -538,16 +530,12 @@ impl<I: Eq, O, C> Operator<I, O, C> {
             ambient,
         })
     }
-    /// Constructs `self * rhs`, with the right operand acting first.
-    pub fn product(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::product_all([self.clone(), rhs.clone()])
-    }
     pub(crate) fn into_product(self, rhs: Self) -> Result<Self, ExpressionError> {
-        Self::product_all([self, rhs])
+        Self::product([self, rhs])
     }
     /// Constructs the anticommutator without evaluating local rules.
     pub fn anticommutator(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::sum([self.product(rhs)?, rhs.product(self)?])
+        Self::sum([(self * rhs)?, (rhs * self)?])
     }
     /// Binds or rebinds this syntax to an explicit space, leaving the input intact.
     pub fn bind(&self, ambient: &HilbertSpace<I>) -> Result<Self, ExpressionError> {

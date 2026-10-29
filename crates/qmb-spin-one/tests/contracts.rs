@@ -3,7 +3,7 @@ mod support;
 use num_complex::Complex;
 use qmb_core::{
     Act, Adjoint, Basis, Dimension, HomogeneousParity, Identity, InnerProduct,
-    LinearCombination as Lc, Parity, ParityOperator, Product, QuantumSystem, Trace,
+    LinearCombination as Lc, Parity, ParityOperator, Product, Trace,
 };
 use qmb_spin_one::{
     CartesianBasis, LadderBasis, SpinOne, SpinOneOperator as O, SpinOneState as S, SzBasis,
@@ -145,7 +145,7 @@ fn spin_relations<T: Real>() {
     let op = SpinOne::<Complex<T>>::operator;
     let [x, y, z, p, m, q0] = [O::Sx, O::Sy, O::Sz, O::SPlus, O::SMinus, O::Q0].map(op);
     for (a, b, result) in [(&x, &y, &z), (&y, &z, &x), (&z, &x, &y)] {
-        let comm = a.product(b) - b.product(a);
+        let comm = (a.clone() * b) - (b.clone() * a);
         values::<T>(
             &local_value(&comm),
             &local_value(&result.scaled(c::<T>(0., 1.))),
@@ -153,28 +153,28 @@ fn spin_relations<T: Real>() {
     }
     for (ladder, sign) in [(&p, 1.), (&m, -1.)] {
         values::<T>(
-            &local_value(&(z.product(ladder) - ladder.product(&z))),
+            &local_value(&((z.clone() * ladder) - (ladder.clone() * &z))),
             &local_value(&ladder.scaled(c::<T>(sign, 0.))),
         );
         values::<T>(
-            &local_value(&ladder.product(ladder).product(ladder)),
+            &local_value(&((ladder.clone() * ladder).clone() * ladder)),
             &[0.0.into(); 9],
         );
     }
     values::<T>(
-        &local_value(&(p.product(&m) - m.product(&p))),
+        &local_value(&((p.clone() * &m) - (m.clone() * &p))),
         &scale(&matrix(O::Sz), 2.0.into()),
     );
     values::<T>(
-        &local_value(&(x.product(&x) + y.product(&y) + z.product(&z))),
+        &local_value(&((x.clone() * &x) + (y.clone() * &y) + (z.clone() * &z))),
         &scale(&matrix(O::I), 2.0.into()),
     );
     values::<T>(
-        &local_value(&z.product(&z)),
+        &local_value(&(z.clone() * &z)),
         &local_value(&(op(O::I).scaled(c::<T>(2. / 3., 0.)) + q0.scaled(c::<T>(1. / 3., 0.)))),
     );
     for a in [&x, &y, &z] {
-        close::<T>(to64(a.product(a).trace()), 2.0.into());
+        close::<T>(to64((a.clone() * a).trace()), 2.0.into());
     }
     assert_eq!(
         <O as Product<Complex<T>>>::product(&O::SPlus, &O::SPlus),
@@ -191,7 +191,7 @@ fn spin_relations<T: Real>() {
         (O::Q2Minus, -2.),
     ] {
         values::<T>(
-            &local_value(&(z.product(&op(a)) - op(a).product(&z))),
+            &local_value(&((z.clone() * &op(a)) - (op(a).clone() * &z))),
             &scale(&matrix(a), sign.into()),
         );
     }
@@ -207,18 +207,18 @@ fn bases<T: Real>() {
             assert!(expansion.terms().all(|t| expected.contains(&t.operand)));
             values::<T>(&combination(expansion), &matrix(p));
             let expr = SpinOne::<Complex<T>>::operator(p);
-            let expanded = expr.expand_in(&basis).unwrap();
+            let expanded = expr.expand(&basis).unwrap();
             let round = expanded
-                .expand_in(&LadderBasis)
+                .expand(&LadderBasis)
                 .unwrap()
-                .expand_in(&CartesianBasis)
+                .expand(&CartesianBasis)
                 .unwrap()
-                .expand_in(&basis)
+                .expand(&basis)
                 .unwrap();
             values::<T>(&local_value(&round), &matrix(p));
             close::<T>(to64(expanded.trace()), trace(&matrix(p)));
-            let coords = expr.coordinates_in(&basis).unwrap();
-            assert_eq!(coords.dimension().unwrap(), 9);
+            let coords = expr.coordinates(&basis).unwrap();
+            assert_eq!(coords.dim().unwrap(), 9);
             let restored = coords
                 .flat_entries()
                 .fold(LocalOp::<T>::zero(), |sum, entry| {
@@ -232,7 +232,7 @@ fn bases<T: Real>() {
                 close::<T>(
                     to64(
                         SpinOne::<Complex<T>>::operator(a)
-                            .hilbert_schmidt_inner_product(&SpinOne::<Complex<T>>::operator(b)),
+                            .hs_inner_product(&SpinOne::<Complex<T>>::operator(b)),
                     ),
                     if i == j { norms[i] } else { 0. }.into(),
                 );

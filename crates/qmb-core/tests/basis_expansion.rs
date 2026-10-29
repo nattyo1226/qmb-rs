@@ -49,19 +49,19 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
         Ket::Phase.coordinates::<T>()[i] * c(0.3, -0.7)
             + Ket::Sum.coordinates::<T>()[i] * c(-0.2, 0.6)
     });
-    let expanded = p.expand_in(&NonOrthogonal).unwrap();
+    let expanded = p.expand(&NonOrthogonal).unwrap();
     assert_values(
-        state_vector(&expanded.coordinates_in(&Canonical).unwrap()),
+        state_vector(&expanded.coordinates(&Canonical).unwrap()),
         reference,
     );
     assert_values(
-        state_vector(&p.coordinates_in(&NonOrthogonal).unwrap()),
+        state_vector(&p.coordinates(&NonOrthogonal).unwrap()),
         reference,
     );
     assert_complex(expanded.inner_product(&expanded), dot(reference, reference));
     assert_complex(p.inner_product(&p), expanded.inner_product(&expanded));
     let b = Ls::<T>::primitive(Ket::Unit(Axis::B));
-    let coords = b.coordinates_in(&NonOrthogonal).unwrap();
+    let coords = b.coordinates(&NonOrthogonal).unwrap();
     let entries: Vec<_> = coords
         .flat_entries()
         .map(Result::unwrap)
@@ -77,28 +77,27 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
         c(0.0, 0.0),
     );
     assert!(std::ptr::eq(coords.basis(), &NonOrthogonal));
-    assert_eq!(coords.dimension().unwrap(), 3);
+    assert_eq!(coords.dim().unwrap(), 3);
 
     for a in [Operator::Identity, Operator::Unit(Axis::A, Axis::B)] {
         for b in [Operator::Identity, Operator::Unit(Axis::B, Axis::C)] {
-            let op = Lo::<T>::primitive(a)
-                .product(&Lo::primitive(b))
+            let op = (Lo::<T>::primitive(a).clone() * &Lo::primitive(b))
                 .adjoint()
                 .scaled(c(0.4, -0.2));
             let expected = matmul(matrix::<T>(a), matrix(b));
             let expected = std::array::from_fn::<_, 3, _>(|i| {
                 std::array::from_fn::<_, 3, _>(|j| expected[j][i].conj() * c(0.4, -0.2))
             });
-            let expanded = op.expand_in(&MatrixUnits).unwrap();
-            let coords = expanded.coordinates_in(&MatrixUnits).unwrap();
+            let expanded = op.expand(&MatrixUnits).unwrap();
+            let coords = expanded.coordinates(&MatrixUnits).unwrap();
             let mut actual = [[c(0.0, 0.0); 3]; 3];
             for (index, coefficient) in coords.flat_entries().map(Result::unwrap) {
                 actual[index / 3][index % 3] = *coefficient;
             }
             assert_matrix(actual, expected);
-            let acted = p.act(&op).expand_in(&NonOrthogonal).unwrap();
+            let acted = p.act(&op).expand(&NonOrthogonal).unwrap();
             assert_values(
-                state_vector(&acted.coordinates_in(&Canonical).unwrap()),
+                state_vector(&acted.coordinates(&Canonical).unwrap()),
                 matvec(expected, reference),
             );
         }
@@ -106,10 +105,10 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
 
     let f = HilbertSpace::factor(3u8);
     let g = HilbertSpace::factor(8u8);
-    let space = HilbertSpace::tensor_with_kind(
+    let space = HilbertSpace::tensor_all_with(
         kind,
         [
-            HilbertSpace::tensor_with_kind(kind, [f.clone()]).unwrap(),
+            HilbertSpace::tensor_all_with(kind, [f.clone()]).unwrap(),
             g.clone(),
         ],
     )
@@ -124,10 +123,11 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
         ],
     )
     .unwrap();
-    let state = qmb_core::State::tensor_in(&space, [a, b])
+    let state = (qmb_core::State::tensor_in(&space, [a, b])
         .unwrap()
         .scaled(c(0.3, -0.7))
-        .add(&other.scaled(c(-0.2, 0.6)))
+        .clone()
+        + &other.scaled(c(-0.2, 0.6)))
         .unwrap();
     let placed = Lo::<T>::primitive(Operator::Unit(Axis::C, Axis::A))
         .at(&f)
@@ -144,12 +144,12 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
             })
         })
         .collect();
-    let expanded = state.expand_in(&NonOrthogonal).unwrap();
+    let expanded = state.expand(&NonOrthogonal).unwrap();
     assert!(expanded.space().shares_node_with(state.space()));
-    let coords = expanded.coordinates_in(&Canonical).unwrap();
+    let coords = expanded.coordinates(&Canonical).unwrap();
     assert_values(state_vector(&coords), reference);
     assert_values(
-        state_vector(&state.coordinates_in(&NonOrthogonal).unwrap()),
+        state_vector(&state.coordinates(&NonOrthogonal).unwrap()),
         state_vector(&coords),
     );
     assert_complex(
@@ -160,21 +160,21 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
     // Identity is not a MatrixUnits basis primitive. Both spectator identities
     // must expand into sums of three diagonal units, rather than a fake index.
     let identity = qmb_core::Operator::<_, Operator, Complex<T>>::identity();
-    let coords = identity.coordinates_in_space(&MatrixUnits, &space).unwrap();
-    assert_eq!(coords.dimension().unwrap(), 81);
+    let coords = identity.coordinates_in(&MatrixUnits, &space).unwrap();
+    assert_eq!(coords.dim().unwrap(), 81);
     assert_eq!(coords.len(), 9);
     for (digits, value) in coords.entries() {
         assert!(digits.iter().all(|i| [0, 4, 8].contains(i)));
         assert_complex(*value, c(1.0, 0.0));
     }
-    let expanded = identity.expand_in_space(&MatrixUnits, &space).unwrap();
+    let expanded = identity.expand_in(&MatrixUnits, &space).unwrap();
     assert!(expanded.space().unwrap().shares_node_with(&space));
     assert_complex(expanded.trace().unwrap(), c(9.0, 0.0));
     let placed = Lo::<T>::primitive(Operator::Unit(Axis::A, Axis::B))
         .at(&f)
         .unwrap();
-    let x = placed.expand_in_space(&MatrixUnits, &space).unwrap();
-    assert_eq!(x.coordinates_in(&MatrixUnits).unwrap().len(), 3);
+    let x = placed.expand_in(&MatrixUnits, &space).unwrap();
+    assert_eq!(x.coordinates(&MatrixUnits).unwrap().len(), 3);
     assert_complex(x.trace().unwrap(), c(0.0, 0.0));
 
     let basis = space
@@ -182,7 +182,7 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
         .unwrap();
     for (index, state) in basis.enumerate() {
         let state = state.unwrap();
-        let coords = state.coordinates_in(&Canonical).unwrap();
+        let coords = state.coordinates(&Canonical).unwrap();
         assert_eq!(coords.len(), 1);
         let (actual, coefficient) = coords.flat_entries().next().unwrap().unwrap();
         assert_eq!(actual, index);
@@ -195,16 +195,16 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
             .count(),
         81
     );
-    let regrouped = f.tensor_product_with_kind(kind, &g).unwrap();
+    let regrouped = f.tensor_with(kind, &g).unwrap();
     let left: Vec<_> = space
         .basis_states::<Ket, Operator, Complex<T>, _>(&NonOrthogonal)
         .unwrap()
-        .map(|s| state_vector(&s.unwrap().coordinates_in(&Canonical).unwrap()))
+        .map(|s| state_vector(&s.unwrap().coordinates(&Canonical).unwrap()))
         .collect();
     let right: Vec<_> = regrouped
         .basis_states::<Ket, Operator, Complex<T>, _>(&NonOrthogonal)
         .unwrap()
-        .map(|s| state_vector(&s.unwrap().coordinates_in(&Canonical).unwrap()))
+        .map(|s| state_vector(&s.unwrap().coordinates(&Canonical).unwrap()))
         .collect();
     for (a, b) in left.into_iter().zip(right) {
         assert_values(a, b);
@@ -240,11 +240,11 @@ impl Basis<Ket, Complex<f64>> for BrokenBasis {
 fn malformed_expansion_and_enumeration_are_errors_even_under_zero_scale() {
     let state = Ls::<f64>::primitive(Ket::Phase).scaled(c(0.0, 0.0));
     assert!(matches!(
-        state.coordinates_in(&BrokenBasis(0)),
+        state.coordinates(&BrokenBasis(0)),
         Err(BasisError::NonBasisElement)
     ));
     assert!(matches!(
-        state.expand_in(&BrokenBasis(1)),
+        state.expand(&BrokenBasis(1)),
         Err(BasisError::IndexOutOfBounds {
             index: 3,
             dimension: 3
@@ -266,7 +266,7 @@ fn zero_state_factor_does_not_hide_invalid_basis_expansion_in_another_factor() {
     let a = HilbertSpace::factor(0u8);
     let b = HilbertSpace::factor(1u8);
     let state = qmb_core::State::tensor_in(
-        &a.tensor_product(&b).unwrap(),
+        &a.tensor(&b).unwrap(),
         [
             qmb_core::State::<_, Ket, Operator, Complex<f64>>::zero(&a),
             Ls::<f64>::primitive(Ket::Phase).at(&b).unwrap(),
@@ -274,11 +274,11 @@ fn zero_state_factor_does_not_hide_invalid_basis_expansion_in_another_factor() {
     )
     .unwrap();
     assert!(matches!(
-        state.coordinates_in(&BrokenBasis(0)),
+        state.coordinates(&BrokenBasis(0)),
         Err(BasisError::NonBasisElement)
     ));
     assert!(matches!(
-        state.expand_in(&BrokenBasis(1)),
+        state.expand(&BrokenBasis(1)),
         Err(BasisError::IndexOutOfBounds { .. })
     ));
 }
@@ -300,17 +300,17 @@ impl Basis<Operator, Complex<f64>> for BrokenOperatorBasis {
 fn zero_operator_does_not_hide_invalid_basis_expansion_on_a_later_factor() {
     let a = HilbertSpace::factor(0u8);
     let b = HilbertSpace::factor(1u8);
-    let space = a.tensor_product(&b).unwrap();
+    let space = a.tensor(&b).unwrap();
     let operator = Lo::<f64>::primitive(Operator::Unit(Axis::A, Axis::B))
         .at(&b)
         .unwrap()
         .scaled(c(0.0, 0.0));
     assert!(matches!(
-        operator.coordinates_in_space(&BrokenOperatorBasis, &space),
+        operator.coordinates_in(&BrokenOperatorBasis, &space),
         Err(BasisError::NonBasisElement)
     ));
     assert!(matches!(
-        operator.expand_in_space(&BrokenOperatorBasis, &space),
+        operator.expand_in(&BrokenOperatorBasis, &space),
         Err(BasisError::NonBasisElement)
     ));
 }

@@ -1,7 +1,7 @@
 //! Build singlet/triplet states and an exchange Hamiltonian using QuantumSystem.
 
 use num_complex::Complex;
-use qmb_core::{HilbertSpace, QuantumSystem};
+use qmb_core::HilbertSpace;
 use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket};
 
 // Choose primitives and coefficient precision once for states and operators.
@@ -10,7 +10,7 @@ type Spin = SpinHalf<Complex<f64>>;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let space = a.tensor_product(&b)?;
+    let space = a.tensor(&b)?;
 
     let up_down = Spin::product_state(&space, [Ket::Up, Ket::Down])?;
     let down_up = Spin::product_state(&space, [Ket::Down, Ket::Up])?;
