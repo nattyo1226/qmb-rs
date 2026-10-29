@@ -2,13 +2,13 @@
 
 作成日: 2026-10-29
 更新日: 2026-10-29
-状態: 検討案。記載する crate・型・追加 API は未実装。
+状態: 実装済み。`qmb-fermion` の仕様と、レビューでの合意・受入検証を記録する。
 
-レビュー中。状態と基本4演算子、Majorana 系の3演算子の su(2) 規格化、独立した Parity 演算子の保持を合意済みとする。演算子基底は LadderBasis と MajoranaBasis の二種類を提供する。標準 Hubbard と symmetric Hubbard のモデル構築も実装範囲に含める。合意と残る提案を2.1節に記録する。
+状態と基本4演算子、Majorana 系の3演算子の su(2) 規格化、独立した Parity 演算子の保持を合意済みとする。演算子基底は LadderBasis と MajoranaBasis の二種類を提供する。標準 Hubbard と symmetric Hubbard のモデル構築も実装した。合意を2.1節、実装時の決定と検証を13節に記録する。
 
 ## 1. 対象と既存実装との関係
 
-単一 fermion mode の二次元占有空間、その上の全演算子代数、および局所基底を実装する案を記録する。局所の積・作用・内積・随伴・通常 trace・基底展開は、現在の `qmb-core` の能力だけで実装・検証できる。因子間の符号、空間の種類、Jordan–Wigner string は [実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)の担当とし、本書の局所規則に埋め込まない。
+単一 fermion mode の二次元占有空間、その上の全演算子代数、および局所基底の仕様と実装を記録する。局所の積・作用・内積・随伴・通常 trace・基底展開は、現在の `qmb-core` の能力だけで実装・検証できる。因子間の符号、空間の種類、Jordan–Wigner string は [実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)の担当とし、本書の局所規則に埋め込まない。
 
 spinful fermion は [要件 2.4 節](../../requirements.md)に従い二つの基本 mode の局所複合系とする。単一 mode の primitive を四状態の別 primitive へ置き換えることは、本案の前提にしない。単一 mode の完成と、graded 合成を使った spinful / 多 mode 系の完成を分けて判定する。
 
@@ -23,9 +23,9 @@ spinful fermion は [要件 2.4 節](../../requirements.md)に従い二つの基
 | [spin-half の lib.rs](../../../crates/qmb-spin-half/src/lib.rs)・[system.rs](../../../crates/qmb-core/src/system.rs) | `QuantumSystem` による係数型の選択、共通の局所式を返す入口 |
 | [要件](../../requirements.md) 2.4、5.5 節 | 単一 mode の CAR、homogeneous な primitive、P の規約、spinful の位相 |
 
-Workspace に fermion crate はまだ存在しない。Core の `Parity`・`HomogeneousParity`・`ParityOperator` は実装済みであり、[局所契約](../../design/local-structure.md#8-grading-の局所能力と移行)に従って接続する。spin-half は通常のスピン行列を提供するが、別因子の反交換関係を持つ fermion と同一の型にはしない。
+Workspace に `qmb-fermion` を追加した。Core の `Parity`・`HomogeneousParity`・`ParityOperator` の[局所契約](../../design/local-structure.md#8-grading-の局所能力と移行)に従って接続する。spin-half は通常のスピン行列を提供するが、別因子の反交換関係を持つ fermion と同一の型にはしない。
 
-## 2. 提案する crate と公開型
+## 2. Crate と公開型
 
 `qmb-fermion` を追加し、`no_std + alloc`、`unsafe` 禁止、crate root からの主要型・基底の再公開という既存の具体的代数の構成に合わせる。
 
@@ -48,9 +48,9 @@ enum FermionOperator {
 
 `Fermion<C>` を `PhantomData<fn() -> C>` の型選択 marker とし、`QuantumSystem` の State / Operator / Coeff を上記型と C に関連付ける。marker や primitive の保持・`state` / `operator` に評価・数値能力の bound を課さない。独自の式木・evaluator・演算子構文は作らない。
 
-想定ファイルは `src/{lib,state,operator,basis,models}.rs`、必要なら小さな定数生成をまとめる `coefficient.rs`、`tests/{contracts,minimal_scalar,local_expressions,models}.rs` とする。本番依存は既存 workspace の `qmb-core`・`num-traits` とし、モデルの Chain 接続・エラー処理に `qmb-geometry`・`thiserror` を使う。`num-complex` は両精度の検証用 dev-dependency とする。局所規則・基底は geometry に依存せず、Index 発行・数値 backend を本番依存に加えない。
+実装ファイルは `src/{lib,state,operator,basis,models,coefficient}.rs`、検証は `tests/{contracts,minimal_scalar,local_expressions,models}.rs` と参照計算用の `tests/support/mod.rs` とする。本番依存は既存 workspace の `qmb-core`・`num-traits` とし、モデルの Chain 接続・エラー処理に `qmb-geometry`・`thiserror` を使う。dev-dependency の `num-complex`・`qmb-normalize`・`qmb-export`（ndarray・sprs 有効）で両精度・全 backend の接続を検証する。局所規則・基底は geometry に依存せず、Index 発行・数値 backend を本番依存に加えない。
 
-### 2.1. レビューでの合意と追加提案
+### 2.1. レビューでの合意
 
 2026-10-29 のレビューで、以下を確認した。
 
@@ -62,7 +62,7 @@ enum FermionOperator {
 - 係数型には各操作で必要な trait bound を個別に要求する。全 variant を扱う積・作用などに分数と虚数単位の能力が必要になることを受け入れ、式の保持・構築には数値制約を波及させない。
 - モデル構築として標準 Hubbard と symmetric Hubbard を提供する。後者は前者の相互作用項 `U n↑n↓` だけを `U(n↑−1/2)(n↓−1/2)` に置き換える。
 
-追加 variant の仮称を `MajoranaX`・`MajoranaY`・`MajoranaZ` とし、3節の X・Y・Z に対応させる。名称は引き続き検討対象とする。
+追加 variant の名称は `MajoranaX`・`MajoranaY`・`MajoranaZ` とし、3節の X・Y・Z に対応させる。
 
 生成・消滅演算子を使う演算子基底は、既存 spin-half の命名に合わせて `LadderBasis` と呼ぶ。状態基底の `OccupationBasis` と区別し、両者に Operator / State の長い接尾辞は付けない。
 
@@ -218,11 +218,11 @@ spinful の内部順序は `(up,down)`、二重占有の位相は `|up down>=f_u
 
 ### 7.1. Hubbard モデルの構築
 
-標準 Hubbard と symmetric Hubbard の二種類を今回の実装範囲に含める。以下の Hamiltonian は合意した相互作用の違いを具体化したものであり、API と配置入力は既存 spin-half に合わせた提案とする。
+標準 Hubbard と symmetric Hubbard の二種類を実装した。以下の Hamiltonian は合意した相互作用の違いを具体化したものであり、API と配置入力は既存 spin-half に合わせる。
 
 #### Hamiltonian の規約
 
-まず一様な実パラメータ t・U・μ、Chain の最近接辺、spin を保存するホッピングを対象とする。
+一様な実パラメータ t・U、Chain の最近接辺、spin を保存するホッピングを対象とする。両モデルとも化学ポテンシャル項を含めない。
 
 ```math
 K(t)=-t\sum_{\langle i,j\rangle,\sigma}
@@ -232,46 +232,45 @@ N=\sum_{i,\sigma}n_{i\sigma},
 ```
 
 ```math
-H_{\mathrm{Hubbard}}(t,U,\mu)
- =K(t)+U\sum_i n_{i\uparrow}n_{i\downarrow}-\mu N,
+H_{\mathrm{Hubbard}}(t,U)
+ =K(t)+U\sum_i n_{i\uparrow}n_{i\downarrow},
 ```
 
 ```math
-H_{\mathrm{symmetric}}(t,U,\mu)
+H_{\mathrm{symmetric}}(t,U)
  =K(t)+U\sum_i\left(n_{i\uparrow}-\frac I2\right)
-                  \left(n_{i\downarrow}-\frac I2\right)-\mu N.
+                  \left(n_{i\downarrow}-\frac I2\right).
 ```
 
-標準形は [ALPS の Hubbard 定義](https://alps.comp-phys.org/documentation/models/hubbard/)、symmetric 形は [TRIQS/TPRF の定義](https://triqs.github.io/tprf/3.1.x/user_guide/Linearized%20Eliashberg%20equation%20on%20the%20attractive%20Hubbard%20model.html) と同じ符号規約である。化学ポテンシャル μ を共通の引数に含める案とし、化学ポテンシャル項が不要なら0を渡す。
+標準形は [ALPS の Hubbard 定義](https://alps.comp-phys.org/documentation/models/hubbard/)、symmetric 形は [TRIQS/TPRF の定義](https://triqs.github.io/tprf/3.1.x/user_guide/Linearized%20Eliashberg%20equation%20on%20the%20attractive%20Hubbard%20model.html) のホッピング・相互作用と同じ符号規約である。化学ポテンシャル引数は設けない。
 
-symmetric でもホッピング・化学ポテンシャル項は変更せず、定数項を落とさない。L Site に対して、展開から次の恒等式が得られる。
+symmetric ではホッピングを変更せず、相互作用の展開で生じる定数項を落とさない。L Site に対して、展開から次の恒等式が得られる。
 
 ```math
-H_{\mathrm{symmetric}}(t,U,\mu)
- =H_{\mathrm{Hubbard}}(t,U,\mu)
-   -\frac U2 N+\frac{UL}{4}I
- =H_{\mathrm{Hubbard}}\left(t,U,\mu+\frac U2\right)+\frac{UL}{4}I.
+H_{\mathrm{symmetric}}(t,U)
+ =H_{\mathrm{Hubbard}}(t,U)
+   -\frac U2 N+\frac{UL}{4}I.
 ```
 
-μ の読み替えを API が自動で行うことはしない。`n−I/2=−Z` なので、symmetric な局所相互作用は `U Z↑Z↓` とも表せる。両表現の値の一致を検証する。
+`n−I/2=−Z` なので、symmetric な局所相互作用は `U Z↑Z↓` とも表せる。両表現の値の一致を検証する。
 
-#### 公開入口と配置の案
+#### 公開入口と配置
 
 既存の `SpinHalf<C>` と同様に `models.rs` で構築し、`Fermion<C>` の関連関数として公開する。QuantumSystem trait にモデル固有メソッドを追加しない。
 
 ```rust,ignore
-Fermion::hubbard(&chain, &sites, t, u, mu)
-Fermion::symmetric_hubbard(&chain, &sites, t, u, mu)
-// いずれも Result<OperatorOf<Fermion<C>, I>, UtilityError> を返す想定。
+Fermion::hubbard(&chain, &sites, t, u)
+Fermion::symmetric_hubbard(&chain, &sites, t, u)
+// いずれも Result<OperatorOf<Fermion<C>, I>, UtilityError> を返す。
 ```
 
 - `sites: &[HilbertSpace<I>]` の一要素を一つの物理 Site とし、各 Site は葉順 `(up,down)` の二 mode の graded 空間とする。Index は利用側で発行し、関数内で再発行しない。
 - 全作用空間は Site 順、各 Site 内の up・down 順で graded 合成し、入力の Site 空間を共有して構築する。返す演算子はこの全空間に bind する。
 - ホッピングは隣接 Site の同じ spin 同士だけを結ぶ。spin-half の XYZ が使う全葉ペアの直積は用いない。各辺に両方向のホッピングを一度ずつ加え、符号は core の graded 合成に委ねる。
 - open / periodic の辺は既存 Chain の契約に従う。0・1 Site は辺なし、2 Site の periodic でも辺は一つとし、ホッピングを重複させない。
-- Site 数の一致、各 Site が二つの葉を持つ graded 空間であること、全 mode の Index 重複を、結合値が0でも検証する。不正な Site 構成もエラーとして返す。エラー型の詳細は実装時に定める。
-- 0 Site は graded な単位空間に束縛した zero Hamiltonian を返す。1 Site はホッピングなしで相互作用・化学ポテンシャル項を保持する。
-- モデル構築に必要な係数の変換・複製・符号反転・定数生成だけを各関数の bound とし、局所 Product・Act や Float を構築のために要求しない。t・U・μ が実数に対応することはモデルの数学的契約とする。
+- Site 数の一致、各 Site が二つの葉を持つ graded 空間であること、全 mode の Index 重複を、結合値が0でも検証する。不正な Site 構成は `UtilityError::InvalidSite { site }` とし、列長・空間・式のエラーはそれぞれ `Chain`・`Space`・`Expression` variant に元エラーを保持する。
+- 0 Site は graded な単位空間に束縛した zero Hamiltonian を返す。1 Site はホッピングなしで相互作用を保持する。
+- 両モデルの係数 bound は `C: Clone + From<R> + Neg<Output=C>`、入力 t・U は同じ R とする。symmetric 相互作用は `U Z↑Z↓` を使うため、構築に定数生成・除算・虚数単位や局所 Product・Act・Float を要求しない。t・U が実数に対応することはモデルの数学的契約とする。
 
 ## 8. 実装順序と受入条件
 
@@ -281,7 +280,7 @@ Fermion::symmetric_hubbard(&chain, &sites, t, u, mu)
 4. 実装済みの core の grading trait と graded 空間の構築 API に接続し、多 mode / spinful の統合検証を別途行う。
 5. 標準 Hubbard・symmetric Hubbard のモデル構築、利用例、独立な小規模 Fock 空間の参照行列との統合検証を追加する。
 
-局所実装の完成条件は以下とする。これらは実装後の検証計画であり、現時点の Rust テスト結果ではない。
+局所実装の完成条件は以下とする。実際の Rust テストによる受入確認は13節に記録する。
 
 - 64組の Product、16組の Act、8種の Adjoint / Trace、4組の内積を、3節の独立な2×2行列・二成分ベクトルと照合する。
 - primitive の全三重積512組の結合則、全 Product / 状態の128組の作用整合性、単位元、随伴の反準同型性・二回の随伴、trace の巡回性を検証する。構造の一致ではなく値を比較する。
@@ -294,7 +293,7 @@ Fermion::symmetric_hubbard(&chain, &sites, t, u, mu)
 モデル実装の完成条件は局所代数と分けて記録し、今回の実装範囲として以下を検証する。
 
 - 二 mode の CAR、spinful の二重占有からの消滅符号、および全空間の mode 順を確認する。
-- 1 Site の表示順 `[empty,up,down,double]` で、標準形の対角成分が `[0,−μ,−μ,U−2μ]`、symmetric 形が `[U/4,−U/4−μ,−U/4−μ,U/4−2μ]` となることを確認する。実際の列挙順との対応は明示する。
+- 1 Site の表示順 `[empty,up,down,double]` で、標準形の対角成分が `[0,0,0,U]`、symmetric 形が `[U/4,−U/4,−U/4,U/4]` となることを確認する。実際の列挙順との対応は明示する。
 - 2 Site（4 mode、16状態）の両モデルを、core の評価・export を使わない Fock 空間の符号規則から構築した参照行列と比較する。実パラメータでの Hermite 性、粒子数・各 spin の粒子数の保存、`t=0`・`U=0` の極限を確認する。
 - 両モデルの差が `−(U/2)N+(UL/4)I` であることと、symmetric 相互作用の `U Z↑Z↓` による構築を、定数項を含めて比較する。
 - 0・1・2 Site と3 Site 以上の open / periodic、Site 数不一致、mode 数の過不足、ordinary な Site、Index 重複、非 Clone Index を検証する。
@@ -306,13 +305,13 @@ Fermion::symmetric_hubbard(&chain, &sites, t, u, mu)
 
 レビューで合意した構成は、a・a†・n・I と、spin-half に規格化を合わせた X・Y・Z、および grading 用の P を直接保持する八つの線型従属な primitive とする。四つの行列単位だけにすると規則は単純になるが、現行 `Identity` に必要な I は別途 primitive の値として追加する必要がある。物理的な名前と P の直接保持を優先する。演算子基底には LadderBasis と MajoranaBasis を提供し、ParityBasis は今回の対象に含めない。
 
-追加 variant・基底の最終命名と、7.1節のモデル API・配置入力の案は実装前に固定する。Core の grading trait と tensor API は実装済みであり、その契約に接続する。局所代数の規約・表・次元は多 mode の統合検証と独立に確定・検証できる。標準 Hubbard と symmetric Hubbard は今回の対象に含める。汎用の spinful 構築 utility、粒子数 sector、任意格子・Site ごとや辺ごとの可変結合、複素ホッピング・磁場・pairing は後続に分ける。
+追加 variant・基底の最終命名と、7.1節のモデル API・配置入力を採用して実装した。Core の grading trait と tensor API の契約に接続し、fermion 固有分岐や別 evaluator は追加していない。局所代数と多 mode・モデルの検証は別々のテストに分ける。汎用の spinful 構築 utility、粒子数 sector、任意格子・Site ごとや辺ごとの可変結合、複素ホッピング・磁場・pairing は後続に分ける。
 
 ## 10. 本ドキュメント作成時の確認
 
 初稿作成時に設計文書・core 契約・spin-half 実装を照合した。補助的な Python 標準ライブラリの行列計算では、Majorana 追加前の表を読み取って25組の積と10組の作用を参照行列と照合し、局所 CAR、P の平方・交換関係、trace の値も確認した。初稿の相対ファイルリンク・コードフェンス・差分の空白を確認した記録であり、追加後の確認は11節に記録する。
 
-変更は計画文書のみであり、Rust の fermion 実装・crate 追加・ビルド・テストは行っていない。8節の受入条件は実装後に検証する。
+初稿作成時点の変更は計画文書のみであり、Rust の fermion 実装・crate 追加・ビルド・テストは行っていなかった。実装後の確認は13節に記録する。
 
 ## 11. Majorana 追加レビュー時の確認
 
@@ -320,10 +319,35 @@ Python 標準ライブラリの補助計算で、文書の表を読み取った6
 
 Parity の保持と MajoranaBasis の採用を反映した後、更新した基底展開表の全16展開を独立な参照行列と照合し、両方向の基底変換行列の積が単位行列になること、MajoranaBasis の Gram 行列が `diag(2,1/2,1/2,1/2)` になることを確認した。既存の64積・16作用の照合も再実行し、全件一致した。
 
-変更は計画文書のみであり、追加後の Rust 実装・ビルド・テストは未実施である。
+このレビュー時点の変更は計画文書のみであり、追加後の Rust 実装・ビルド・テストは未実施だった。
 
 ## 12. Hubbard モデル追加時の確認
 
-Python 標準ライブラリの Fraction を使う独立な Fock 空間の参照計算で、0〜3 Site、open / periodic、非零結合・`t=0`・`U=0` の計24ケースを確認した。両モデルの差、μ のシフトと定数項を含む恒等式、1 Site の上記対角成分、Hermite 性、各 spin の粒子数保存、および `(n↑−1/2)(n↓−1/2)=Z↑Z↓` を厳密比較で確認した。
+Python 標準ライブラリの Fraction を使う独立な Fock 空間の参照計算で、0〜3 Site、open / periodic、非零結合・`t=0`・`U=0` の計24ケースを確認した。両モデルの差、定数項を含む恒等式、1 Site の上記対角成分、Hermite 性、各 spin の粒子数保存、および `(n↑−1/2)(n↓−1/2)=Z↑Z↓` を厳密比較で確認した。
 
-これは計画書の数式・検証条件を確認する補助計算であり、Rust のモデル構築・graded 評価・export の統合検証は未実施である。
+これは計画書の数式・検証条件を確認した補助計算であり、この時点では Rust のモデル構築・graded 評価・export の統合検証は未実施だった。
+
+## 13. Rust 実装と受入確認
+
+2026-10-29、`qmb-fermion` を workspace に追加した。公開名は本書の enum・marker・三つの基底名を採用し、`UtilityError` を crate root から再公開する。モデル API は7.1節の形を採用し、結合引数は t・u の二つとする。既存 core・spin-half・export・normalize の製品コードは変更していない。
+
+| 検証ファイル | 確認した内容 |
+| --- | --- |
+| [contracts.rs](../../../crates/qmb-fermion/tests/contracts.rs) | 独立な2×2行列による64積・16作用・8随伴/trace・4内積、512三重積の結合則、128組の作用整合性、随伴と内積、単位元・trace 巡回性、CAR・su(2)・Casimir・parity、両演算子基底の列挙・展開・再展開・Gram 行列 |
+| [minimal_scalar.rs](../../../crates/qmb-fermion/tests/minimal_scalar.rs) | 非 Clone / Copy / Float の厳密な複素有理係数で全局所積・作用・両基底を確認。One だけの係数による随伴・状態基底、整数による内積・trace、数値能力なしでの遅延構築、評価能力・算術能力のない係数と非 Clone Index による両モデル構築 |
+| [local_expressions.rs](../../../crates/qmb-fermion/tests/local_expressions.rs) | 複素係数の作用・期待値・共役・trace、norm・位相を保存する正規化・正規化期待値、展開・座標、全 primitive の行列 export と Vec / ndarray / sprs の一致 |
+| [models.rs](../../../crates/qmb-fermion/tests/models.rs) | 二 mode の CAR・spinful の消滅符号・総 parity、graded な基底再展開、独立な Fock 空間参照による0〜3 Site の両モデル、open / periodic、`t=0`・`U=0`、定数を含む両モデルの差、各 spin の粒子数保存、norm・期待値・全 backend、空間共有と不正入力 |
+
+数値検証は `Complex<f32>` / `Complex<f64>` の両方で実行した。`qmb-fermion` の統合テスト13件と doctest 4件（異精度を混ぜる compile-fail を含む）が成功した。
+
+Rust 1.99.1 の direnv devShell で、次の確認に成功した。
+
+- `cargo test -p qmb-fermion`
+- `cargo test --workspace --all-features`（doctest を含む）
+- `cargo check -p qmb-fermion --no-default-features`
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`
+- `cargo fmt --all -- --check`
+
+利用例 [hubbard.rs](../../../examples/src/bin/hubbard.rs) は2 Site の標準／symmetric Hubbard と基底座標を示す。`--all-features`、`--no-default-features`、`--no-default-features --features export` で実行を確認し、期待値0・−2と16×16の密疎行列の一致を検証した。
+
+no-default-features の確認はホスト上のビルドであり、専用 no_std target・MSRV 1.85 の実ビルド・性能ベンチマークは実施していない。これらは既存の未実施事項として、[今後の課題](../../future-work.md#3-未実施の検証と性能)に残す。

@@ -12,10 +12,10 @@
 | 機能 | 内容 |
 | --- | --- |
 | Graded tensor product | 共通機構を実装済み。[共通評価と移行](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照 |
-| Fermion | Fermion の局所代数、反交換関係・符号規則への対応、標準 Hubbard・symmetric Hubbard のモデル構築 |
+| Fermion | `qmb-fermion` に局所代数、Majorana 系・parity、graded 接続、標準 Hubbard・symmetric Hubbard を実装。詳細・検証は下記文書を参照 |
 | Spin-one | Spin-1 の局所代数の提供 |
 
-Fermion / spin-one の詳細仕様・公開 API・crate 構成と実装順序は、以下の実装案で検討する。Graded tensor product の実装済み契約は設計文書に記録する。
+Fermion の仕様・実装と検証記録、spin-one の詳細な実装案は以下に記録する。Graded tensor product の実装済み契約は設計文書に記録する。
 
 ## 詳細検討
 
