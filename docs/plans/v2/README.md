@@ -20,6 +20,8 @@
 ## 詳細検討
 
 - [Ordinary / graded tensor product の実装修正案](tensor-products.md)：現行実装との差分、情報の保持、評価・基底・export の変更、移行方針と受入条件。
+- [Fermion の局所 primitive 実装案](fermion-primitives.md)：単一 mode の局所規則・parity・基底・係数要件と、spinful への接続範囲。
+- [Spin-one の局所 primitive 実装案](spin-one-primitives.md)：三状態・全九次元演算子空間の表現、局所規則・完全基底・√2 の係数能力。
 
 ## 関連文書
 
