@@ -144,7 +144,9 @@ Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 
 
 `qmb_core::QuantumSystem` は primitive の `State`・`Operator` と係数型 `Coeff` を関連付ける。`qmb_core::ExpressionFactory<S,O,C>` の inherent method `state(primitive)`・`operator(primitive)` は既存の局所式を返し、構築時の数値能力や Clone を要求しない。評価の能力は引き続き各操作で要求する。`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は既存の式型への投影別名であり、系を表す識別子や新たな式ラッパーは保持しない。
 
-`qmb_spin_half::SpinHalf<C>` で代数と係数型を一度選択する。既定精度・個別 primitive 用メソッド・異精度の暗黙変換は設けない。状態の tensor constructor は既存空間を明示する入口へ移行した。明示的な戻り値型には投影別名を使え、Q は構築入口で選ぶ。構築・集約は ExpressionFactory の product_state・operator_product_at・state_sum・operator_sum・tensor_in・operator_product と集約の try_ 版に揃え、構築済み式の操作はインスタンスメソッドで行う。scaled は `impl Into<C>` を一度変換して保持する。try_ は最初の ExpressionError で入力消費を止め、全成功時だけ合成を検証する。契約は[複合式の設計](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
+共通の構築入口は `ExpressionFactory<S,O,C>` の inherent method とし、`SpinHalf<C>`・`SpinOne<C>`・`Fermion<C>` はその型エイリアスである。QuantumSystem trait は型情報だけを持ち、通常の構築呼び出しに trait import は不要である。モデル固有構築は各 primitive crate の公開 models module の `SpinHalfModels<SpinHalf<C>>`・`SpinOneModels<SpinOne<C>>`・`FermionModels<Fermion<C>>` に置く。
+
+`qmb_spin_half::SpinHalf<C>` で代数と係数型を一度選択する。既定精度・個別 primitive 用メソッド・異精度の暗黙変換は設けない。状態の tensor constructor は既存空間を明示する入口へ移行した。明示的な戻り値型には投影別名を使え、Q は構築入口で選ぶ。構築・集約は ExpressionFactory の product_state・operator_product_at・state_sum・operator_sum・tensor_in・operator_product と集約の try_ 版に揃え、構築済み式の操作はインスタンスメソッドで行う。scaled は `impl Into<C>` を一度変換して保持する。try_ は最初の ExpressionError で入力消費を止め、全成功時だけ合成を検証する。契約は[複合式の設計](design/composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)に記録する。
 
 Chain はサイト数と境界条件のみを持ち、Index の入力・発行・ToSpace による空間生成を行わない。`Chain::new(n, boundary)` は Self を返す。近接 Site 対は辞書順で、0・1 Site は辺なし、2 Site は open／periodic とも一辺とする。
 
@@ -208,5 +210,3 @@ LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を
 2026-10-29 に共通機構を実装した。`HilbertSpace<I>` が `TensorKind` と順序を保持し、primitive が `HomogeneousParity` / `ParityOperator` を提供する。共通の作用評価では Act ごとの選択済み空間に従って P を挿入する。演算子の intrinsic な基底展開と通常表現による trace は private な走査型を分ける。export / normalize は core の共通 API に接続する。
 
 空・単因子の同一視後にも残る異種 tensor kind の混在は拒否する。幾何・Index に grading の責任は追加しない。構築 API・最小能力と breaking change は [複合式の共通評価と移行](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。Fermion と Spin-one の製品実装は第2.4〜2.5節に記録する。Operator / State 統合は後続に残す。
-
-共通の構築入口は `ExpressionFactory<S,O,C>` の inherent method とし、`SpinHalf<C>`・`SpinOne<C>`・`Fermion<C>` はその型エイリアスである。QuantumSystem trait は型情報だけを持ち、通常の構築呼び出しに trait import は不要である。モデル固有構築は各 primitive crate の公開 models module の `SpinHalfModels<SpinHalf<C>>`・`SpinOneModels<SpinOne<C>>`・`FermionModels<Fermion<C>>` に置く。

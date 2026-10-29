@@ -1044,6 +1044,6 @@ ExpressionFactory は product_state・operator_product_at、state_sum・operator
 
 scaled は4式型と LinearCombination で `impl Into<C>` を受け取り、入口で一度だけ変換する。式の保持に数値能力・Clone を追加せず、LinearCombination の既存の乗算用制約は維持する。選択済みの精度を変更しない。型推論の完全互換は要求せず、構築入口の型注釈や不要な into() の除去で移行する。
 
-try_ の入力エラーは ExpressionError に固定し、最初の入力 Err で Iterator の消費を止める。全入力が成功した後に空間・束縛を検証する。既に行った入力生成の副作用は巻き戻さず、部分的な和・積は返さない。順序・重複・零係数を保存し、合成時に primitive を評価しない。空・単項、状態の重複拒否、演算子の重複受理、束縛の選択は既存 constructor の規約を維持する。詳細は[複合式の構築 API](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に定める。
+try_ の入力エラーは ExpressionError に固定し、最初の入力 Err で Iterator の消費を止める。全入力が成功した後に空間・束縛を検証する。既に行った入力生成の副作用は巻き戻さず、部分的な和・積は返さない。順序・重複・零係数を保存し、合成時に primitive を評価しない。空・単項、状態の重複拒否、演算子の重複受理、束縛の選択は既存 constructor の規約を維持する。詳細は[複合式の構築 API](design/composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)に定める。
 
 QuantumSystem trait は型情報に限定し、ExpressionFactory に一括実装する。SpinHalf・SpinOne・Fermion は ExpressionFactory の型エイリアス、モデル固有構築は各 models module の SpinHalfModels・SpinOneModels・FermionModels に分離する。基本構築にもモデル構築にも trait import を要求しない。通常の式の二項加算・乗算は標準の `+` / `*`、列集約は `sum` / `product` を使い、primitive の独自規則 `Product::product` は維持する。

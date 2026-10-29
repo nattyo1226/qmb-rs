@@ -17,9 +17,16 @@
 
 3機能とも実装済みであり、仕様・検証記録は上表の設計文書に集約する。この文書は v2 の対象範囲と参照先を案内する。
 
-## 検討事項
+## 公開 API
 
-- [関数名・公開 API 名の整理（実施済み）](api-function-naming.md)：採用した改名・ExpressionFactory とモデル入口への移行、維持する契約と検証記録。
+名前の整理と構築入口の分離は実装済みであり、現在の API と契約は以下の設計文書で管理する。
+
+- [局所式の構築](../../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)：二項演算・列集約と係数付きの項列。
+- [共通の構築入口と型情報](../../design/composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)：ExpressionFactory・QuantumSystem と型注釈。
+- [基底処理と座標](../../design/basis.md)：展開・座標取得・次元問い合わせ。
+- [幾何とモデル構築](../../design/geometry.md)：Chain の接続と各 Models 型。
+
+補助 API や利用開始の導線など、残る検討事項は [API の使いやすさ](../api-usability/README.md)に記録する。
 
 ## 関連文書
 

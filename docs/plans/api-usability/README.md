@@ -5,7 +5,7 @@
 
 未解決の使いやすさの論点と、今回のリファクタリングでは実装しなかった補助 API の候補を記録する。以下は追加を決めた機能の一覧ではなく、公開名・シグネチャ・実施時期は未確定である。
 
-現在の構築 API は [ExpressionFactory と型情報の rustdoc](../../../crates/qmb-core/src/system.rs)、[局所式の設計](../../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)、[複合式の設計](../../design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)、幾何と配置は [Chain の設計](../../design/geometry.md)を参照する。実装済みの API・移行経緯を未完了の計画として重ねて管理しない。State／Operator の統合、Grading、延期した機能と未実施の検証は [今後の課題](../../future-work.md)で管理する。
+現在の構築 API は [ExpressionFactory と型情報の rustdoc](../../../crates/qmb-core/src/system.rs)、[局所式の設計](../../design/primitive-expression.md#7-式構築の入口と係数変換2026-10-28)、[複合式の設計](../../design/composite-expression.md#11-expressionfactory-の構築入口と-fallible-集約2026-10-28)、幾何と配置は [Chain の設計](../../design/geometry.md)を参照する。実装済みの API・移行経緯を未完了の計画として重ねて管理しない。State／Operator の統合、Grading、延期した機能と未実施の検証は [今後の課題](../../future-work.md)で管理する。
 
 ## 1. ExpressionFactory の追加補助
 

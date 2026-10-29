@@ -259,9 +259,13 @@ Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要�
 
 通常の和・積の名前付き構築は列を受け取る `sum` / `product` とし、二項には標準の `+` / `*` を使う。Index の照合と数値能力は必要な操作で要求する。検証が必要な複合操作は `Result` を返し、状態への作用評価は演算子 primitive の `Product` を要求しない。基底展開・座標取得は[基底の設計](basis.md)、norm・正規化・正規化期待値は[正規化 API の契約](primitive-expression.md#41-norm正規化の-api-と-feature)に従う。Hilbert 空間の API は[空間の設計](hilbert-space.md#10-現在の公開-api)に記録する。
 
-## 11. QuantumSystem の構築入口と fallible 集約（2026-10-28）
+## 11. ExpressionFactory の構築入口と fallible 集約（2026-10-28）
 
 QuantumSystem は状態・演算子 primitive と係数型だけを関連付ける。構築は ExpressionFactory の以下の inherent method から既存の core 式を生成する。空間や Index を登録・保持せず、係数・primitive・Index の Clone や評価能力を一律に要求しない。複数式の合成は既存と同じ I: Eq を要求する。
+
+`ExpressionFactory<S,O,C>` は値を保持せず、インスタンス生成を必要としない構築入口であり、QuantumSystem を一括実装する。`SpinHalf<C>`・`SpinOne<C>`・`Fermion<C>` は具体的な primitive を選ぶ型エイリアスで、構築に trait の import は不要である。独自の primitive も ExpressionFactory の型エイリアスから利用できる。同じ primitive と係数型からは同じ式型を構築し、システム名を式の同一性へ追加しない。
+
+`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は型注釈として維持する。システム単位のジェネリック API では `Q: QuantumSystem` から型情報を取得し、構築には `LocalStateOf::<Q>::primitive(...)` などの式型の入口、または `ExpressionFactory<Q::State,Q::Operator,Q::Coeff>` を使う。QuantumSystem 自体に構築メソッドは置かない。モデル固有の構築は各 primitive crate の公開 `models` module に分離し、[幾何とモデルの設計](geometry.md)に従う。
 
 | 入口 | 入力・契約 |
 | --- | --- |
