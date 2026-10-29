@@ -1,7 +1,7 @@
 # v2（0.2.0）の範囲
 
 作成日: 2026-10-29
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 0.2.0 に向けた機能追加の範囲を記録する。今後の合意に応じて、このディレクトリへ詳細を追記する。
 
@@ -13,13 +13,9 @@
 | --- | --- |
 | Graded tensor product | 共通機構を実装済み。[共通評価と移行](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照 |
 | Fermion | `qmb-fermion` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#9-fermion-の局所代数)と[標準／symmetric Hubbard](../../design/geometry.md#6-fermion-の-hubbard-モデル)を参照 |
-| Spin-one | Spin-1 の局所代数の提供 |
+| Spin-one | `qmb-spin-one` に実装済み。[局所代数・基底・検証](../../design/local-structure.md#10-spin-one-の局所代数)と[XYZ・Heisenberg・BLBQ](../../design/geometry.md#7-spinone-のモデル構築)を参照 |
 
-Graded tensor product と Fermion の実装済み仕様・検証記録は設計文書に集約する。このディレクトリには未実装の Spin-one の計画を保持する。
-
-## 詳細検討
-
-- [Spin-one の局所 primitive 実装案](spin-one-primitives.md)：三状態・全九次元演算子空間の表現、局所規則・完全基底・√2 の係数能力。
+3機能とも実装済みであり、仕様・検証記録は上表の設計文書に集約する。この文書は v2 の対象範囲と参照先を案内する。
 
 ## 関連文書
 
