@@ -298,7 +298,7 @@ State::try_sum・try_tensor_in、Operator::try_sum・try_product_all を基礎 A
 
 入力状態の葉の連結は指定空間の葉と順序も含めて完全一致し、複数因子の部分系の有効な種類も互換でなければならない。grouping は異なっていてよい。不足・過剰・重複・順序違い・種類不整合、primitive 数の不一致は `ExpressionError::IncompatibleSpaces` とする。第11節の入力エラー優先・消費停止を try_ 入口で維持する。
 
-空入力は零因子の単位空間だけで受理し、指定した空間のハンドルと grouping を保持する。単項も検証後に指定空間を保持する。`State::unit()` は正準的な単位空間を作る便宜として維持し、`State::zero(&space)` は指定空間上の零状態を作る。構築に Index・primitive の Clone や係数演算を追加要求しない。移行範囲と API の詳細は[明示空間の状態構築](../plans/v2/explicit-state-space.md)を参照する。
+空入力は零因子の単位空間だけで受理し、指定した空間のハンドルと grouping を保持する。単項も検証後に指定空間を保持する。`State::unit()` は正準的な単位空間を作る便宜として維持し、`State::zero(&space)` は指定空間上の零状態を作る。構築に Index・primitive の Clone や係数演算を追加要求しない。
 
 ### 12.2. 共通 API と最小能力
 
