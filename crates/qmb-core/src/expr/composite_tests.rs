@@ -21,21 +21,46 @@ impl Drop for Primitive<'_> {
         self.1.drops.set(self.1.drops.get() + 1);
     }
 }
-struct Op;
+enum Op {
+    Flip,
+    Parity,
+}
+#[allow(non_upper_case_globals)]
+const Op: Op = Op::Flip;
+impl qmb_core::HomogeneousParity for Op {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Op {
+    fn parity_operator() -> Self {
+        Self::Parity
+    }
+}
 
 // No Product or Identity capability. Metadata, indices and primitives are not Clone.
 impl<'a> Act<Complex<f64>> for Primitive<'a> {
     type Operator = Op;
     type Term = Self;
-    fn act(&self, _: &Op) -> Lc<Self, Complex<f64>> {
+    fn act(&self, op: &Op) -> Lc<Self, Complex<f64>> {
         self.1.acts.set(self.1.acts.get() + 1);
-        Lc::primitive(Primitive(1 - self.0, self.1))
+        Lc::primitive(Primitive(
+            if matches!(op, Op::Parity) {
+                self.0
+            } else {
+                1 - self.0
+            },
+            self.1,
+        ))
     }
 }
 impl Adjoint<Complex<f64>> for Op {
     type Term = Self;
     fn adjoint(&self) -> Lc<Self, Complex<f64>> {
-        Lc::primitive(Op)
+        Lc::primitive(match self {
+            Self::Flip => Self::Flip,
+            Self::Parity => Self::Parity,
+        })
     }
 }
 impl InnerProduct<Complex<f64>> for Primitive<'_> {
@@ -250,10 +275,10 @@ fn action_uses_no_product_shares_spectators_and_preserves_original_inputs() {
     assert_eq!(counts.acts.get(), 0);
     let result = action.evaluate().unwrap();
     assert_eq!(counts.acts.get(), 1);
-    let StateNode::Tensor(before) = state.expression.node() else {
+    let StateNode::Tensor(_, before) = state.expression.node() else {
         panic!("tensor");
     };
-    let StateNode::Tensor(after) = result.expression.node() else {
+    let StateNode::Tensor(_, after) = result.expression.node() else {
         panic!("tensor");
     };
     assert!(before.as_slice()[1].same_node(&after.as_slice()[1]));
@@ -377,7 +402,13 @@ fn evaluate_does_not_require_coefficient_arithmetic() {
     impl Adjoint<Scalar> for Op {
         type Term = Self;
         fn adjoint(&self) -> Lc<Self, Scalar> {
-            Lc::term(Scalar, Op)
+            Lc::term(
+                Scalar,
+                match self {
+                    Self::Flip => Self::Flip,
+                    Self::Parity => Self::Parity,
+                },
+            )
         }
     }
     let counts = Counts::default();
@@ -719,6 +750,16 @@ fn composite_scalar_reductions_require_neither_num_float_copy_nor_division() {
         }
     }
     struct Primitive;
+    impl qmb_core::HomogeneousParity for Primitive {
+        fn parity(&self) -> qmb_core::Parity {
+            qmb_core::Parity::Even
+        }
+    }
+    impl qmb_core::ParityOperator for Primitive {
+        fn parity_operator() -> Self {
+            Self
+        }
+    }
 
     impl Identity for Primitive {
         fn identity() -> Self {

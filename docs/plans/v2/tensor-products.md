@@ -2,7 +2,7 @@
 
 作成日: 2026-10-29
 更新日: 2026-10-29
-状態: 検討案。以下の型名・メソッド名は提案であり、実装済み API ではない。
+状態: 共通機構を実装・検証済み（2026-10-29）。第1〜10節は設計時の記録。実装後の API・移行は [移行案内](tensor-products-migration.md)、検証記録は第11節を参照。
 
 ## 1. 目的と範囲
 
@@ -317,3 +317,29 @@ full trace は両種類とも通常の非正規化 trace とする。graded で�
 現行ソースと上記の設計文書を照合し、相対ファイルリンク、コードフェンス、差分の空白を確認した。補助的に Python 標準ライブラリの整数行列計算を使い、局所演算子 `{I,P,a,a†}` の二・三 mode の組合せについて、通常表現への変換と graded の積・随伴を4,432ケース照合した。二 mode の CAR、`Tr(c_1†c_1)=2`、8.2 節に記載した占有状態への作用の符号も確認した。
 
 これは初回作成時の式の整合性の確認であり、Rust の graded 実装を検証したものではない。その後の API 方針の更新でも変更は計画文書のみで、Rust のビルド・テストは実行していない。
+
+## 11. 共通機構の実装と検証（2026-10-29）
+
+本計画の ordinary / graded 共通機構を実装した。Fermion / spin-one の製品実装と v2 全体の完了は含まない。公開 API と breaking change は [0.2.0 移行案内](tensor-products-migration.md)に記録した。新しい本番依存は追加していない。
+
+| 対象 | 現在の検証根拠 |
+| --- | --- |
+| kind・同一視・混在拒否・部分系・構築入口・fallible 優先順位 | `qmb-core/tests/tensor_products.rs`、既存の spaces / fallible_construction / systems テスト |
+| 符号・CAR・作用・随伴・内積・trace・Hilbert–Schmidt 内積 | テスト専用二状態代数と独立 Kronecker 行列による二・三因子の照合（f32 / f64、ordinary / graded） |
+| Act scope・local embedding の準同型性・三つの odd 成分 | 同テストの scope / local expression / three odd factor ケース |
+| intrinsic 座標と通常行列・再展開・列挙・空の基底 | 同テストと `qmb-core/tests/basis_expansion.rs`。非正規直交な三状態基底も両種類で検証 |
+| 密疎 export と metadata | `qmb-export/tests/tensor_products.rs` の Vec / ndarray / sprs、両精度の行列・遅延作用 vector |
+| 正規化・期待値 | `qmb-normalize/tests/tensor_products.rs` の独立行列との照合（両精度） |
+| 最小能力・借用・共有・疎性 | 既存 capability / contract テストの移行、Product / 係数演算なしの graded 作用、80因子の分離状態と局所 trace、32因子の割り当て上限 |
+| 深い木 | 既存 ordinary 回帰と graded の2万段 wrapper の構築・比較・評価・破棄（128 KiB stack） |
+| spin-half・利用例 | 全 primitive が even、P=I、両種類での作用と trace の一致。`examples/src/bin/tensor_products.rs` を実行 |
+
+Rust 1.98.0 の direnv devShell で次を実行し、成功した。
+
+- `cargo test --workspace --all-features`（doctest を含む）
+- `cargo check -p qmb-core -p qmb-geometry --no-default-features`
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`
+- `cargo fmt --all -- --check`
+- `cargo run -p examples --bin tensor_products`
+
+最終調整した構築入口と export の contract テストも再実行した。no_std の確認はホスト上のビルドであり、専用 target の検証ではない。MSRV 1.85 の実ビルド・専用 no_std target・性能ベンチマークは今回も未実施で、既存の [未実施事項](../../future-work.md#3-未実施の検証と性能)として残す。

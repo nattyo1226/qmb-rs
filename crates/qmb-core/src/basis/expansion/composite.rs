@@ -11,7 +11,7 @@ use crate::{
     expr::{
         composite::{OpExpr, OpNode, StateExpr, StateNode},
         parts::{ProductExpr, ScaleExpr, SumExpr},
-        traversal::OpTerms,
+        traversal::IntrinsicOpTerms,
     },
 };
 use alloc::{collections::BTreeMap, vec, vec::Vec};
@@ -70,7 +70,7 @@ fn state_expansion<I: Eq, S, O, C, B, V: TensorValue>(
 where
     C: Clone + Zero + One + Conjugate<Output = C>,
     S: Act<C, Operator = O, Term = S>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     B: Basis<S, C>,
 {
     let state = state.evaluate()?;
@@ -90,7 +90,7 @@ where
                     tasks.push(StateTask::Scale(&s.coefficient));
                     tasks.push(StateTask::Visit(&s.operand));
                 }
-                StateNode::Sum(s) | StateNode::Tensor(s) => {
+                StateNode::Sum(s) | StateNode::Tensor(_, s) => {
                     tasks.push(if matches!(node.node(), StateNode::Sum(_)) {
                         StateTask::Sum(s.len())
                     } else {
@@ -134,17 +134,18 @@ where
 fn operator_expansion<I: Eq, O, C, B, V: TensorValue>(
     op: &Operator<I, O, C>,
     basis: &B,
+    ambient: &HilbertSpace<I>,
     factors: &[&HilbertSpace<I>],
     dimension: Option<usize>,
     make: impl Fn(O) -> V,
 ) -> Result<Expansion<V, C>, BasisError>
 where
-    C: Clone + Zero + One + Conjugate<Output = C>,
-    O: Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
+    C: Clone + Zero + One + Conjugate<Output = C> + core::ops::Neg<Output = C>,
+    O: crate::HomogeneousParity + Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
     B: Basis<O, C>,
 {
     let mut result = BTreeMap::new();
-    for (coefficient, locals) in OpTerms::new(&op.expression) {
+    for (coefficient, locals) in IntrinsicOpTerms::new(&op.expression, ambient) {
         let mut product =
             BTreeMap::from([(Vec::new(), (coefficient.unwrap_or_else(C::one), V::unit()))]);
         for factor in factors {
@@ -175,13 +176,13 @@ where
 impl<I: Eq, S, O, C> State<I, S, O, C> {
     /// Expands in one local basis applied uniformly in the space's factor order.
     ///
-    /// Returns ordinary state syntax on the original shared space. No global
+    /// Returns state syntax preserving the tensor kind on the original shared space. No global
     /// dimension, primitive clone, or primitive operator product is required.
     pub fn expand_in<B>(&self, basis: &B) -> Result<Self, BasisError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Dimension + Act<C, Operator = O, Term = S>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
         B: Basis<S, C>,
     {
         let factors = leaves(&self.space);
@@ -200,7 +201,12 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                 let term = match nodes {
                     SumExpr::Empty => StateExpr::new(StateNode::Unit),
                     SumExpr::One(node) => node,
-                    nodes => StateExpr::new(StateNode::Tensor(nodes)),
+                    nodes => StateExpr::new(StateNode::Tensor(
+                        self.space
+                            .effective_kind()
+                            .unwrap_or(crate::TensorKind::Ordinary),
+                        nodes,
+                    )),
                 };
                 term.scaled(c)
             })
@@ -219,7 +225,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Dimension + Act<C, Operator = O, Term = S>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
         B: Basis<S, C>,
     {
         let count = self.space.indices().count();
@@ -239,8 +245,12 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     /// Expands on the existing binding; an unbound operator returns an error.
     pub fn expand_in<B>(&self, basis: &B) -> Result<Self, BasisError>
     where
-        C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Dimension + Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
+        C: Clone + Zero + One + Conjugate<Output = C> + core::ops::Neg<Output = C>,
+        O: crate::HomogeneousParity
+            + Dimension
+            + Identity
+            + Product<C, Term = O>
+            + Adjoint<C, Term = O>,
         B: Basis<O, C>,
     {
         self.expand_in_space(basis, self.select_space(None, None)?)
@@ -256,14 +266,18 @@ impl<I: Eq, O, C> Operator<I, O, C> {
         ambient: &HilbertSpace<I>,
     ) -> Result<Self, BasisError>
     where
-        C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Dimension + Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
+        C: Clone + Zero + One + Conjugate<Output = C> + core::ops::Neg<Output = C>,
+        O: crate::HomogeneousParity
+            + Dimension
+            + Identity
+            + Product<C, Term = O>
+            + Adjoint<C, Term = O>,
         B: Basis<O, C>,
     {
         let ambient = self.select_space(Some(ambient), None)?;
         let factors = leaves(ambient);
         let dimension = local_size::<O>(factors.len())?;
-        let terms = operator_expansion(self, basis, &factors, dimension, |p| {
+        let terms = operator_expansion(self, basis, ambient, &factors, dimension, |p| {
             vec![LocalOperator::primitive(p)]
         })?;
         let expressions = terms
@@ -297,8 +311,12 @@ impl<I: Eq, O, C> Operator<I, O, C> {
         basis: &'b B,
     ) -> Result<Coordinates<'b, B, C, HilbertSpace<I>>, BasisError>
     where
-        C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Dimension + Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
+        C: Clone + Zero + One + Conjugate<Output = C> + core::ops::Neg<Output = C>,
+        O: crate::HomogeneousParity
+            + Dimension
+            + Identity
+            + Product<C, Term = O>
+            + Adjoint<C, Term = O>,
         B: Basis<O, C>,
     {
         self.coordinates_in_space(basis, self.select_space(None, None)?)
@@ -311,14 +329,18 @@ impl<I: Eq, O, C> Operator<I, O, C> {
         ambient: &HilbertSpace<I>,
     ) -> Result<Coordinates<'b, B, C, HilbertSpace<I>>, BasisError>
     where
-        C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Dimension + Identity + Product<C, Term = O> + Adjoint<C, Term = O>,
+        C: Clone + Zero + One + Conjugate<Output = C> + core::ops::Neg<Output = C>,
+        O: crate::HomogeneousParity
+            + Dimension
+            + Identity
+            + Product<C, Term = O>
+            + Adjoint<C, Term = O>,
         B: Basis<O, C>,
     {
         let ambient = self.select_space(Some(ambient), None)?;
         let factors = leaves(ambient);
         let dimension = local_size::<O>(factors.len())?;
-        let terms = operator_expansion(self, basis, &factors, dimension, |_| ())?;
+        let terms = operator_expansion(self, basis, ambient, &factors, dimension, |_| ())?;
         Ok(Coordinates {
             basis,
             space: ambient.clone(),

@@ -11,7 +11,7 @@
 
 | 機能 | 内容 |
 | --- | --- |
-| Graded tensor product | Grading と parity に基づく tensor product・合成則への対応 |
+| Graded tensor product | 共通機構を実装済み。API と breaking change は [移行案内](tensor-products-migration.md)を参照 |
 | Fermion | Fermion の局所代数、反交換関係・符号規則への対応 |
 | Spin-one | Spin-1 の局所代数の提供 |
 

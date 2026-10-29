@@ -42,7 +42,7 @@ fn assert_values<T: Real>(
     }
 }
 
-fn check_three_level<T: Real>() {
+fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
     let p = Ls::<T>::primitive(Ket::Phase).scaled(c(0.3, -0.7))
         + Ls::primitive(Ket::Sum).scaled(c(-0.2, 0.6));
     let reference = std::array::from_fn::<_, 3, _>(|i| {
@@ -106,17 +106,23 @@ fn check_three_level<T: Real>() {
 
     let f = HilbertSpace::factor(3u8);
     let g = HilbertSpace::factor(8u8);
-    let space =
-        HilbertSpace::tensor([HilbertSpace::tensor([f.clone()]).unwrap(), g.clone()]).unwrap();
+    let space = HilbertSpace::tensor_with_kind(
+        kind,
+        [
+            HilbertSpace::tensor_with_kind(kind, [f.clone()]).unwrap(),
+            g.clone(),
+        ],
+    )
+    .unwrap();
     let a = Ls::<T>::primitive(Ket::Phase).at(&f).unwrap();
     let b = Ls::<T>::primitive(Ket::Sum).at(&g).unwrap();
     let other = Ls::<T>::primitive(Ket::Unit(Axis::B))
         .at(&f)
         .unwrap()
-        .tensor_product(&Ls::primitive(Ket::Unit(Axis::C)).at(&g).unwrap())
+        .tensor_product_with_kind(kind, &Ls::primitive(Ket::Unit(Axis::C)).at(&g).unwrap())
         .unwrap();
     let state = a
-        .tensor_product(&b)
+        .tensor_product_with_kind(kind, &b)
         .unwrap()
         .scaled(c(0.3, -0.7))
         .add(&other.scaled(c(-0.2, 0.6)))
@@ -187,7 +193,7 @@ fn check_three_level<T: Real>() {
             .count(),
         81
     );
-    let regrouped = f.tensor_product(&g).unwrap();
+    let regrouped = f.tensor_product_with_kind(kind, &g).unwrap();
     let left: Vec<_> = space
         .basis_states::<Ket, Operator, Complex<T>, _>(&NonOrthogonal)
         .unwrap()
@@ -205,8 +211,10 @@ fn check_three_level<T: Real>() {
 
 #[test]
 fn independent_three_level_expansion_at_both_precisions() {
-    check_three_level::<f32>();
-    check_three_level::<f64>();
+    for kind in [qmb_core::TensorKind::Ordinary, qmb_core::TensorKind::Graded] {
+        check_three_level::<f32>(kind);
+        check_three_level::<f64>(kind);
+    }
 }
 
 struct BrokenBasis(u8);

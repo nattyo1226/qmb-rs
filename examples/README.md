@@ -29,3 +29,7 @@ cargo run -p examples --bin heisenberg --no-default-features --features export
 式の構築・集約は `Spin::state_sum`・`Spin::state_tensor`・`Spin::operator_sum`・`Spin::operator_product` に揃えられる。`_at` は `(&factor, primitive)` の列を受け取って配置も行い、裸の基本名は構築済みの式を受け取る。集約の `try_` 版は Result の列を受け取り、最初の入力 ExpressionError を優先し、その後の要素を取り出さない。全成功時に空間・束縛を検証する。
 
 `scaled` は `impl Into<C>` を受け取るため、選択済みの複素係数型に `.scaled(0.5)` と実数を直接渡せる。旧 scaled の期待型に依存した `.scaled(value.into())` は `.scaled(value)` とし、Default の生成型や constructor の C を推論できない場合は明示する。`*` は従来の係数型を直接受け取る契約を維持する。
+
+`cargo run -p examples --bin tensor_products` は `TensorKind` を構築時に指定し、
+共通の作用・trace API を使う例である。Spin-half は全 primitive が even、P=I
+なので、ordinary / graded で同じ数値結果になる。

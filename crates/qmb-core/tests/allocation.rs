@@ -124,3 +124,32 @@ fn singleton_fallible_collections_need_no_temporary_allocation() {
         let _ = Operator::try_product_all([Ok(op)]).unwrap();
     });
 }
+
+#[path = "support/graded.rs"]
+mod graded;
+#[test]
+fn graded_contractions_and_trace_do_not_materialize_a_global_basis() {
+    use graded::*;
+    use qmb_core::{HilbertSpace, LocalState, State};
+    let factors: Vec<_> = (0..32).map(HilbertSpace::factor).collect();
+    let psi = State::<_, Ket, Op, Complex<f64>>::tensor_g(factors.iter().map(|f| {
+        (LocalState::primitive(Ket(0)) + LocalState::primitive(Ket(1)))
+            .at(f)
+            .unwrap()
+    }))
+    .unwrap();
+    let op = placed(A, &factors[31]);
+    ALLOCATIONS.with(|count| count.set(Some(0)));
+    let acted = psi.act(&op).unwrap().evaluate().unwrap();
+    let norm = acted.inner_product(&acted).unwrap();
+    let trace = op
+        .adjoint()
+        .product(&op)
+        .unwrap()
+        .trace_in(psi.space())
+        .unwrap();
+    let allocations = ALLOCATIONS.with(|count| count.replace(None)).unwrap();
+    assert!(allocations < 20_000, "{allocations} allocations");
+    assert_eq!(norm, Complex::new(2f64.powi(31), 0.));
+    assert_eq!(norm, trace);
+}

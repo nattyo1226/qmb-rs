@@ -110,7 +110,10 @@ impl<I> HilbertSpace<I> {
             let expression = match nodes {
                 SumExpr::Empty => StateExpr::new(StateNode::Unit),
                 SumExpr::One(node) => node,
-                nodes => StateExpr::new(StateNode::Tensor(nodes)),
+                nodes => StateExpr::new(StateNode::Tensor(
+                    self.effective_kind().unwrap_or(crate::TensorKind::Ordinary),
+                    nodes,
+                )),
             };
             Ok(State {
                 space: self.clone(),

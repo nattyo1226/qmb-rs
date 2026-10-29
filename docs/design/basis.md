@@ -1,6 +1,6 @@
 # 基底の数学的能力
 
-更新日: 2026-10-27
+更新日: 2026-10-29
 
 ## 1. 対象と合意した契約
 
@@ -180,3 +180,7 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 `BasisError` は基底展開が返した非基底 primitive（`NonBasisElement`）、局所番号の範囲外（`IndexOutOfBounds`）、列挙と番号・要素数の不一致（`InvalidEnumeration`）、次元 overflow（`Dimension`）、空間不整合・未束縛など（`Expression`）を区別する。得られた情報で検出し、全基底の線型独立性・完全性を実行時に自動証明することは要求しない。零係数であっても不正な参照や不正な展開先を見逃さない。
 
 `qmb-core` の root から Basis・BasisError・Coordinates を公開する。利用例は [basis_expansion.rs](../../examples/src/bin/basis_expansion.rs) に置く。検証の概要は第7節に記録する。
+
+## Graded 基底の実装（2026-10-29）
+
+状態基底の tensor 自体には符号を加えず、元空間の kind を列挙・展開・座標へ保持する。演算子基底は因子順の配置積とし、`expand_in` / `coordinates_in` と明示空間版は intrinsic な整列項を使う。P string を含む通常行列を演算子基底の座標として返さない。展開結果は元の空間へ束縛した配置積として再構築し、再展開でも作用と座標を保つ。詳細は [0.2.0 移行案内](../plans/v2/tensor-products-migration.md)。

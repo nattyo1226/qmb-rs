@@ -61,7 +61,7 @@ impl<'b, I: Eq, S, O, C, B, A, D>
 where
     C: Clone + Zero + One + Conjugate<Output = C>,
     S: Dimension + Act<C, Operator = O, Term = S>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
     B: Basis<S, C>,
     A: Ambient<I>,
     D: MatrixStorage<C>,

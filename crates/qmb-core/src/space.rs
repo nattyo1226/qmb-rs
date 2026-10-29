@@ -1,9 +1,18 @@
-//! Immutable ordinary tensor spaces, generic over an equality-comparable index.
+//! Immutable ordinary and graded tensor spaces, generic over an equality-comparable index.
 
 use alloc::{sync::Arc, vec, vec::Vec};
 use core::{iter::FusedIterator, slice};
 
 use crate::{Dimension, DimensionOverflow, expr::parts::SumExpr};
+
+/// Composition rule for an ordered tensor product.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TensorKind {
+    /// Ordinary tensor product, with commuting distinct factors.
+    Ordinary,
+    /// Z₂-graded tensor product, with Koszul signs for odd factors.
+    Graded,
+}
 
 /// Errors constructing a tensor space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -11,14 +20,17 @@ pub enum SpaceError {
     /// The same basic index occurs more than once, including inside children.
     #[error("duplicate factor index")]
     DuplicateIndex,
+    /// Different effective composition rules remain after removing units.
+    #[error("mixed tensor kinds")]
+    MixedTensorKinds,
 }
 
 enum Node<I> {
     Factor(I),
-    Tensor(SumExpr<HilbertSpace<I>>),
+    Tensor(TensorKind, SumExpr<HilbertSpace<I>>),
 }
 
-/// A shared factor or ordered, possibly nested ordinary tensor space.
+/// A shared factor or ordered, possibly nested tensor space.
 ///
 /// Local primitive types and dimensions belong to expressions and their query
 /// inputs. Index identity is supplied by I: Eq; cloning never clones an index.
@@ -35,20 +47,39 @@ enum Node<I> {
 /// ```
 pub struct HilbertSpace<I> {
     root: Option<Arc<Node<I>>>,
+    // Saturated leaf count: 0 (unit), 1 (factor), 2 (multiple leaves).
+    // Structural metadata only; no dimensions or evaluation results are cached.
+    leaf_class: u8,
+    effective_kind: Option<TensorKind>,
 }
 
 impl<I> Clone for HilbertSpace<I> {
     fn clone(&self) -> Self {
         Self {
             root: self.root.clone(),
+            leaf_class: self.leaf_class,
+            effective_kind: self.effective_kind,
         }
     }
 }
 
 impl<I> HilbertSpace<I> {
     fn new(node: Node<I>) -> Self {
+        let (leaf_class, effective_kind) = match &node {
+            Node::Factor(_) => (1, None),
+            Node::Tensor(kind, children) => {
+                let mut nonempty = children.iter().filter(|c| c.leaf_class != 0);
+                match (nonempty.next(), nonempty.next()) {
+                    (None, _) => (0, None),
+                    (Some(child), None) => (child.leaf_class, child.effective_kind),
+                    (Some(_), Some(_)) => (2, Some(*kind)),
+                }
+            }
+        };
         Self {
             root: Some(Arc::new(node)),
+            leaf_class,
+            effective_kind,
         }
     }
 
@@ -63,22 +94,35 @@ impl<I> HilbertSpace<I> {
 
     /// Creates the empty tensor space, of dimension one.
     pub fn unit() -> Self {
-        Self::new(Node::Tensor(SumExpr::Empty))
+        Self::new(Node::Tensor(TensorKind::Ordinary, SumExpr::Empty))
     }
 
     /// Returns the index of a leaf, or `None` for a tensor (even a singleton).
     pub fn factor_index(&self) -> Option<&I> {
         match self.node() {
             Node::Factor(i) => Some(i),
-            Node::Tensor(_) => None,
+            Node::Tensor(_, _) => None,
         }
+    }
+
+    /// Returns the stored tensor kind, including empty and singleton wrappers.
+    pub fn kind(&self) -> Option<TensorKind> {
+        match self.node() {
+            Node::Factor(_) => None,
+            Node::Tensor(kind, _) => Some(*kind),
+        }
+    }
+
+    /// Returns the composition rule after ignoring units and singleton wrappers.
+    pub fn effective_kind(&self) -> Option<TensorKind> {
+        self.effective_kind
     }
 
     /// Borrows the immediate children, preserving the stored grouping.
     pub fn children(&self) -> slice::Iter<'_, Self> {
         match self.node() {
             Node::Factor(_) => [].iter(),
-            Node::Tensor(s) => s.iter(),
+            Node::Tensor(_, s) => s.iter(),
         }
     }
 
@@ -135,7 +179,32 @@ impl<I> HilbertSpace<I> {
 impl<I: Eq> HilbertSpace<I> {
     /// Constructs a tensor, retaining children and grouping and rejecting duplicates.
     pub fn tensor(children: impl IntoIterator<Item = Self>) -> Result<Self, SpaceError> {
+        Self::tensor_with_kind(TensorKind::Ordinary, children)
+    }
+
+    /// Constructs a graded tensor, preserving grouping.
+    pub fn tensor_g(children: impl IntoIterator<Item = Self>) -> Result<Self, SpaceError> {
+        Self::tensor_with_kind(TensorKind::Graded, children)
+    }
+
+    /// Constructs a tensor with an explicit composition rule.
+    pub fn tensor_with_kind(
+        kind: TensorKind,
+        children: impl IntoIterator<Item = Self>,
+    ) -> Result<Self, SpaceError> {
         let children: SumExpr<Self> = children.into_iter().collect();
+        if children
+            .iter()
+            .filter(|c| c.leaf_class != 0)
+            .take(2)
+            .count()
+            == 2
+            && children
+                .iter()
+                .any(|c| c.effective_kind.is_some_and(|k| k != kind))
+        {
+            return Err(SpaceError::MixedTensorKinds);
+        }
         // Every existing child is valid. A sole child cannot introduce duplicates,
         // and preserving this case avoids quadratic construction of deep grouping.
         if let SumExpr::Many(parts) = &children {
@@ -147,21 +216,37 @@ impl<I: Eq> HilbertSpace<I> {
                 seen.push(index);
             }
         }
-        Ok(Self::new(Node::Tensor(children)))
+        Ok(Self::new(Node::Tensor(kind, children)))
     }
 
     /// Constructs a binary tensor with this space's factors on the left.
     pub fn tensor_product(&self, rhs: &Self) -> Result<Self, SpaceError> {
-        Self::tensor([self.clone(), rhs.clone()])
+        self.tensor_product_with_kind(TensorKind::Ordinary, rhs)
+    }
+    /// Constructs a binary graded tensor.
+    pub fn tensor_product_g(&self, rhs: &Self) -> Result<Self, SpaceError> {
+        self.tensor_product_with_kind(TensorKind::Graded, rhs)
+    }
+    /// Constructs a binary tensor with an explicit rule.
+    pub fn tensor_product_with_kind(
+        &self,
+        kind: TensorKind,
+        rhs: &Self,
+    ) -> Result<Self, SpaceError> {
+        Self::tensor_with_kind(kind, [self.clone(), rhs.clone()])
     }
 
     /// Tests equality of ordered factors, independently of grouping and sharing.
     pub fn is_compatible_with(&self, rhs: &Self) -> bool {
-        self.shares_node_with(rhs) || self.indices().eq(rhs.indices())
+        self.shares_node_with(rhs)
+            || (self.effective_kind == rhs.effective_kind && self.indices().eq(rhs.indices()))
     }
 
     /// Tests whether this space's factors form an ordered subsequence of `ambient`.
     pub fn is_subsystem_of(&self, ambient: &Self) -> bool {
+        if self.leaf_class == 2 && self.effective_kind != ambient.effective_kind {
+            return false;
+        }
         let mut ambient = ambient.indices();
         self.indices()
             .all(|index| ambient.any(|other| index == other))
@@ -197,7 +282,7 @@ impl<'a, I> Iterator for Leaves<'a, I> {
         while let Some(space) = self.pending.pop() {
             match space.node() {
                 Node::Factor(_) => return Some(space),
-                Node::Tensor(children) => self.pending.extend(children.iter().rev()),
+                Node::Tensor(_, children) => self.pending.extend(children.iter().rev()),
             }
         }
         None
@@ -210,7 +295,7 @@ impl<I> Drop for HilbertSpace<I> {
         let mut first = self.root.take();
         let mut pending = Vec::new();
         while let Some(root) = first.take().or_else(|| pending.pop()) {
-            if let Some(Node::Tensor(children)) = Arc::into_inner(root) {
+            if let Some(Node::Tensor(_, children)) = Arc::into_inner(root) {
                 for mut child in children {
                     if let Some(root) = child.root.take() {
                         pending.push(root);

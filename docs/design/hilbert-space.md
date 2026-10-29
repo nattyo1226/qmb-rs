@@ -117,7 +117,7 @@ Site 上の複数の自由度は、利用側が構成する Tensor の内部因�
 
 ## 8. 例と検証条件
 
-以下で `a,b,c` は重複のない基本因子で、同じ局所構造を持ち、scalar などの合成条件は互換とする。`T_o` と `T_g` はそれぞれ ordinary と graded の Tensor、`E` は空の Tensor とする。Graded の例は後続機能の数学的契約であり、異種局所構造の混在を認める例ではない。
+以下で `a,b,c` は重複のない基本因子で、同じ局所構造を持ち、scalar などの合成条件は互換とする。`T_o` と `T_g` はそれぞれ ordinary と graded の Tensor、`E` は空の Tensor とする。Graded の例も実装済みの契約であり、異種局所構造の混在を認める例ではない。
 
 | 対象・操作 | 契約上の結果 |
 | --- | --- |
@@ -175,3 +175,7 @@ Chain と、利用側が保持する Site 順の局所空間列・基本自由�
 | `clone()`・`shares_node_with(&rhs)` | Index を複製せず共有ハンドルを複製・比較する |
 
 `dimension::<S>()` は状態空間、`dimension::<O>()` は演算子空間の次元を返す。Operator は S を保持しないため、その作用先の次元 d が必要なら `dimension_with` に局所次元を指定する。空 Tensor の次元は1とし、P の局所次元が overflow する場合も空 Tensor の取得は成功する。空間比較・配置・束縛には primitive 型を登録せず、異なる primitive 型の式が同じ空間構造を利用できる。
+
+## Ordinary / graded の実装 API（2026-10-29）
+
+`tensor_with_kind` / `tensor` / `tensor_g` と同じ三種類の二項版を実装した。`kind()` は保持する節点、`effective_kind()` は単位・単因子の同一視後の種類を返す。各ハンドルの構造 metadata は葉数の区分と有効な種類だけを保持し、singleton wrapper は定数時間で継承する。親に非空の子が二つ以上あればその有効な子の種類を親と照合し、混在を `SpaceError::MixedTensorKinds` とする。保持する木を平坦化せず、互換性・複数葉の部分系判定でも有効な種類を照合する。API 一覧と移行は [0.2.0 移行案内](../plans/v2/tensor-products-migration.md)を参照。

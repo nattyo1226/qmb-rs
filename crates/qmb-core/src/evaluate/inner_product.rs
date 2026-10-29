@@ -35,7 +35,7 @@ impl<I, S, O, C> FactorCounts<I, S, O, C> {
                 pending.push((state, true));
                 match state.node() {
                     StateNode::Scale(s) => pending.push((&s.operand, false)),
-                    StateNode::Sum(s) | StateNode::Tensor(s) => {
+                    StateNode::Sum(s) | StateNode::Tensor(_, s) => {
                         pending.extend(s.iter().map(|child| (child, false)));
                     }
                     StateNode::Local(_, _) | StateNode::Unit => {}
@@ -49,7 +49,7 @@ impl<I, S, O, C> FactorCounts<I, S, O, C> {
                 StateNode::Scale(s) => counts.get(&s.operand),
                 // All nonempty alternatives have the same ordered factor space.
                 StateNode::Sum(s) => s.iter().find_map(|child| counts.get(child)),
-                StateNode::Tensor(s) => s
+                StateNode::Tensor(_, s) => s
                     .iter()
                     .try_fold(0, |n, child| Some(n + counts.get(child)?)),
                 StateNode::Act(_) => unreachable!("evaluated state"),
@@ -81,7 +81,7 @@ fn tensor_factors<'a, I, S, O, C>(
     let mut factors = Vec::new();
     while let Some(state) = pending.pop() {
         match state.node() {
-            StateNode::Tensor(s) => pending.extend(s.iter().rev()),
+            StateNode::Tensor(_, s) => pending.extend(s.iter().rev()),
             StateNode::Unit => {}
             StateNode::Scale(s) => {
                 tasks.push(Task::Scale(&s.coefficient, conjugated));
@@ -300,7 +300,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         if !self.space.is_compatible_with(&rhs.space) {
             return Err(ExpressionError::IncompatibleSpaces);
@@ -318,7 +318,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C> + RealPart,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         Ok(self.inner_product(self)?.real_part())
     }
@@ -328,7 +328,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         self.inner_product(&self.act(operator)?)
     }
@@ -342,7 +342,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
         S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-        O: Adjoint<C, Term = O>,
+        O: Adjoint<C, Term = O> + crate::HomogeneousParity + crate::ParityOperator,
     {
         self.inner_product(&self.act_in(operator, ambient)?)
     }

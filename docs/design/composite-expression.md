@@ -1,6 +1,6 @@
 # 埋め込み・複合空間の式と数学的能力
 
-更新日: 2026-10-27
+更新日: 2026-10-29
 
 ## 1. 対象と責任分担
 
@@ -214,7 +214,7 @@ Graded な場合も埋め込み後の実際の作用を縮約する。二 mode �
 
 ## 9. 未決事項と実装範囲
 
-Step 3 の設計判断は以下を採用済みとする。Ordinary な配置・束縛・複合評価と Step 5 の基底処理は実装済みであり、後続の partial trace・graded な演算とは区別する。段階3の検証では、spin-half の三因子系と三次元代数の二因子系を両精度の独立した行列計算と照合し、空間・束縛・エラー・共有、および深い式の処理を確認した。
+Step 3 の設計判断は以下を採用済みとする。Ordinary / graded な配置・束縛・複合評価と基底処理は実装済みであり、後続の partial trace とは区別する。段階3の検証では、spin-half の三因子系と三次元代数の二因子系を両精度の独立した行列計算と照合し、空間・束縛・エラー・共有、および深い式の処理を確認した。
 
 | 対象 | 採用した方針 |
 | --- | --- |
@@ -231,7 +231,7 @@ Step 3 は期待値、commutator・anticommutator、Hilbert–Schmidt 内積ま�
 
 Step 3 で非公開の節点・作業スタック、`ExpressionError` と必要なシグネチャを実装した。LocalStructure 廃止後の公開型は `State<I, S, O, C>`・`Operator<I, O, C>` とする。現在の API は第10節に記録する。Partial trace の節点と数値 API など、後続段階の詳細はその段階で設計する。
 
-本書は数学的な契約を定める。[初期版の提供範囲](../architecture.md#9-初期版の提供範囲と完成条件)は同種局所構造の ordinary な演算とし、異種局所構造の合成と graded な演算の実装は[後続へ延期](../future-work.md#2-延期した機能と検討事項)する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
+本書は数学的な契約を定める。[初期版の提供範囲](../architecture.md#9-初期版の提供範囲と完成条件)は同種局所構造の ordinary な演算とし、異種局所構造の合成は[後続へ延期](../future-work.md#2-延期した機能と検討事項)する。独立した複合構造型や、複合系専用の primitive・局所規則の追加実装も要求しない。
 
 ## 10. 現在の公開 API
 
@@ -266,3 +266,9 @@ try_ は Result 入力を表し、通常版も複合式では Result を返す�
 State::try_sum・try_tensor、Operator::try_sum・try_product_all を基礎 API として公開し、QuantumSystem はこれらへ委譲する。演算子の束縛は全入力を見て決め、後続に未束縛項があれば、それ以前の束縛が互換でなくても未束縛として構築する。逐次二項 fold で早期に拒否する実装にはしない。
 
 各入口は構築のみを行い、評価・簡約・基底展開・自動正規化・暗黙の因子順序変更は行わない。構築の共有処理を使い、try 版のためだけの再収集や式の複製を避ける。単独 primitive 配置、zero／identity の QuantumSystem 補助、局所式の集約用転送メソッドは後続候補として維持する。
+
+## Ordinary / graded の共通評価（2026-10-29）
+
+Graded な作用・随伴・通常 trace・基底展開を実装した。`StateNode::Tensor` は kind を保持し、複合 Act は構築時の選択済み空間を保存する。作用はその scope 内の odd primitive の先行因子へ P を挿入する。係数の One / Neg や O の Product を作用のためだけに要求しない。状態全体の積和展開・全基底・密行列を共通の前処理にせず、ready な枝と spectator を共有する。
+
+演算子の intrinsic な項走査は因子順への安定整列で odd 同士の交差符号を出し、基底展開へ接続する。trace 用の通常表現は配置ごとに P string を下ろし、局所積・trace で縮約する。両経路は private な異なる型で扱う。状態内積には追加符号がなく、full trace に supertrace の符号は加えない。API と能力の変更は [0.2.0 移行案内](../plans/v2/tensor-products-migration.md)を参照。Partial trace は延期のままである。

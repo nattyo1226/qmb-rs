@@ -77,6 +77,16 @@ fn norm_does_not_require_inverse_real_embedding_or_coefficient_float() {
 }
 
 struct Op;
+impl qmb_core::HomogeneousParity for Op {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Op {
+    fn parity_operator() -> Self {
+        Self
+    }
+}
 
 impl qmb_core::Identity for Op {
     fn identity() -> Self {
