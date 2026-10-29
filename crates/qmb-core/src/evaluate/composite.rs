@@ -62,7 +62,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                             tasks.push(Task::Rebuild(state.clone(), 1));
                             tasks.push(Task::Evaluate(s.operand.clone()));
                         }
-                        StateNode::Sum(s) | StateNode::Tensor(_, s) => {
+                        StateNode::Sum(s) | StateNode::Tensor(s) => {
                             tasks.push(Task::Rebuild(state.clone(), s.len()));
                             for child in s.iter().rev() {
                                 tasks.push(Task::Evaluate(child.clone()));
@@ -223,7 +223,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                         tasks.push(Task::Rebuild(state.clone(), 1));
                         tasks.push(Task::Local(s.operand.clone(), factor, operator, prefix));
                     }
-                    StateNode::Sum(s) | StateNode::Tensor(_, s) => {
+                    StateNode::Sum(s) | StateNode::Tensor(s) => {
                         tasks.push(Task::Rebuild(state.clone(), s.len()));
                         for child in s.iter().rev() {
                             tasks.push(Task::Local(
@@ -255,20 +255,14 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                                 values.push(operand.scaled(s.coefficient.clone()));
                             }
                         }
-                        StateNode::Sum(s) | StateNode::Tensor(_, s) => {
+                        StateNode::Sum(s) | StateNode::Tensor(s) => {
                             if s.iter().zip(&parts).all(|(a, b)| a.same_node(b)) {
                                 values.push(original);
                             } else {
                                 let parts = parts.into_iter().collect();
                                 values.push(StateExpr::new(
-                                    if matches!(original.node(), StateNode::Tensor(_, _)) {
-                                        StateNode::Tensor(
-                                            match original.node() {
-                                                StateNode::Tensor(k, _) => *k,
-                                                _ => unreachable!(),
-                                            },
-                                            parts,
-                                        )
+                                    if matches!(original.node(), StateNode::Tensor(_)) {
+                                        StateNode::Tensor(parts)
                                     } else {
                                         StateNode::Sum(parts)
                                     },

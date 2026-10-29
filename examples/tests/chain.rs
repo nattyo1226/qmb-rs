@@ -41,16 +41,19 @@ fn basis<T: Real>(
     factors: &[HilbertSpace<Id128>],
     bits: usize,
 ) -> qmb_core::StateOf<SpinHalf<Complex<T>>, Id128> {
-    State::tensor(factors.iter().enumerate().map(|(i, factor)| {
-        // Independent equal-index handles need not share the original nodes.
-        LocalState::primitive(if (bits >> (factors.len() - 1 - i)) & 1 == 0 {
-            SpinHalfState::Up
-        } else {
-            SpinHalfState::Down
-        })
-        .at(&HilbertSpace::factor(*factor.factor_index().unwrap()))
-        .unwrap()
-    }))
+    State::tensor_in(
+        &HilbertSpace::tensor(factors.iter().cloned()).unwrap(),
+        factors.iter().enumerate().map(|(i, factor)| {
+            // Independent equal-index handles need not share the original nodes.
+            LocalState::primitive(if (bits >> (factors.len() - 1 - i)) & 1 == 0 {
+                SpinHalfState::Up
+            } else {
+                SpinHalfState::Down
+            })
+            .at(&HilbertSpace::factor(*factor.factor_index().unwrap()))
+            .unwrap()
+        }),
+    )
     .unwrap()
 }
 fn factors(n: usize) -> Vec<HilbertSpace<Id128>> {

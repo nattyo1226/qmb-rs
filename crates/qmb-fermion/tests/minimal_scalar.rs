@@ -210,7 +210,9 @@ fn independent_capabilities_do_not_inherit_majorana_bounds() {
     let _ = ket.act(&op.product(&op.adjoint()));
     let a = HilbertSpace::factor(0);
     let b = HilbertSpace::factor(1);
-    let psi = Fermion::<Opaque>::state_tensor_g_at([(&a, S::Empty), (&b, S::Occupied)]).unwrap();
+    let psi =
+        Fermion::<Opaque>::product_state(&a.tensor_product_g(&b).unwrap(), [S::Empty, S::Occupied])
+            .unwrap();
     let _ = psi.act(&op.at(&a).unwrap()).unwrap();
 }
 

@@ -163,9 +163,13 @@ fn total_spin<T: Real>() {
         let psi = Spin::<T>::state_sum(
             &space,
             terms.into_iter().map(|(weight, left, right)| {
-                Spin::<T>::state_tensor_at([(&sites[0], left), (&sites[1], right)])
-                    .unwrap()
-                    .scaled(c::<T>(weight, 0.0))
+                Spin::<T>::product_state(
+                    &qmb_core::HilbertSpace::tensor([(sites[0]).clone(), (sites[1]).clone()])
+                        .unwrap(),
+                    [left, right],
+                )
+                .unwrap()
+                .scaled(c::<T>(weight, 0.0))
             }),
         )
         .unwrap();

@@ -144,7 +144,7 @@ Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 
 
 `qmb_core::QuantumSystem` は primitive の `State`・`Operator` と係数型 `Coeff` を関連付ける。`state(primitive)`・`operator(primitive)` は既存の局所式を返し、構築時の数値能力や Clone を要求しない。評価の能力は引き続き各操作で要求する。`LocalStateOf<Q>`・`LocalOperatorOf<Q>`・`StateOf<Q,I>`・`OperatorOf<Q,I>` は既存の式型への投影別名であり、系を表す識別子や新たな式ラッパーは保持しない。
 
-`qmb_spin_half::SpinHalf<C>` で代数と係数型を一度選択する。既定精度・個別 primitive 用メソッド・異精度の暗黙変換は設けない。既存の core constructor は維持する。明示的な戻り値型には投影別名を使え、Q は構築入口で選ぶ。構築・集約は QuantumSystem の state_tensor_at・operator_product_at・state_sum・operator_sum・state_tensor・operator_product と集約の try_ 版に揃え、構築済み式の操作はインスタンスメソッドで行う。scaled は `impl Into<C>` を一度変換して保持する。try_ は最初の ExpressionError で入力消費を止め、全成功時だけ合成を検証する。契約は[複合式の設計](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
+`qmb_spin_half::SpinHalf<C>` で代数と係数型を一度選択する。既定精度・個別 primitive 用メソッド・異精度の暗黙変換は設けない。状態の tensor constructor は既存空間を明示する入口へ移行した。明示的な戻り値型には投影別名を使え、Q は構築入口で選ぶ。構築・集約は QuantumSystem の product_state・operator_product_at・state_sum・operator_sum・tensor_in・operator_product と集約の try_ 版に揃え、構築済み式の操作はインスタンスメソッドで行う。scaled は `impl Into<C>` を一度変換して保持する。try_ は最初の ExpressionError で入力消費を止め、全成功時だけ合成を検証する。契約は[複合式の設計](design/composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
 
 Chain はサイト数と境界条件のみを持ち、Index の入力・発行・ToSpace による空間生成を行わない。`Chain::new(n, boundary)` は Self を返す。近接 Site 対は辞書順で、0・1 Site は辺なし、2 Site は open／periodic とも一辺とする。
 

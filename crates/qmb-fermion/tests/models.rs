@@ -116,13 +116,9 @@ fn check<T: Real>() {
         T::from_f64(4.).unwrap(),
     )
     .unwrap();
-    let leaves: Vec<_> = sites[0].leaves().collect();
-    let double = Fermion::<Complex<T>>::state_tensor_g_at([
-        (leaves[0], S::Occupied),
-        (leaves[1], S::Occupied),
-    ])
-    .unwrap()
-    .scaled(c::<T>(0., 2.));
+    let double = Fermion::<Complex<T>>::product_state(&sites[0], [S::Occupied, S::Occupied])
+        .unwrap()
+        .scaled(c::<T>(0., 2.));
     let normalized = double.normalized().unwrap();
     close::<T>(
         normalized.norm().unwrap().to_f64().unwrap().into(),
@@ -219,20 +215,16 @@ fn graded<T: Real>() {
             values::<T>(&exported_matrix(&ad), &expected);
         }
     }
-    let double = Fermion::<Complex<T>>::state_tensor_g_at([
-        (&modes[0], S::Occupied),
-        (&modes[1], S::Occupied),
-    ])
+    let double = Fermion::<Complex<T>>::product_state(
+        &qmb_core::HilbertSpace::tensor_g([(modes[0]).clone(), (modes[1]).clone()]).unwrap(),
+        [S::Occupied, S::Occupied],
+    )
     .unwrap();
     for (mode, labels, sign) in [
         (0, [S::Empty, S::Occupied], 1.),
         (1, [S::Occupied, S::Empty], -1.),
     ] {
-        let target = Fermion::<Complex<T>>::state_tensor_g_at([
-            (&modes[0], labels[0]),
-            (&modes[1], labels[1]),
-        ])
-        .unwrap();
+        let target = Fermion::<Complex<T>>::product_state(double.space(), labels).unwrap();
         close::<T>(
             to64(
                 target

@@ -90,7 +90,7 @@ where
                     tasks.push(StateTask::Scale(&s.coefficient));
                     tasks.push(StateTask::Visit(&s.operand));
                 }
-                StateNode::Sum(s) | StateNode::Tensor(_, s) => {
+                StateNode::Sum(s) | StateNode::Tensor(s) => {
                     tasks.push(if matches!(node.node(), StateNode::Sum(_)) {
                         StateTask::Sum(s.len())
                     } else {
@@ -201,12 +201,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
                 let term = match nodes {
                     SumExpr::Empty => StateExpr::new(StateNode::Unit),
                     SumExpr::One(node) => node,
-                    nodes => StateExpr::new(StateNode::Tensor(
-                        self.space
-                            .effective_kind()
-                            .unwrap_or(crate::TensorKind::Ordinary),
-                        nodes,
-                    )),
+                    nodes => StateExpr::new(StateNode::Tensor(nodes)),
                 };
                 term.scaled(c)
             })

@@ -69,7 +69,7 @@
 //! let h = a.tensor_product(&b)?;
 //! let up = Spin::state(Ket::Up).at(&a)?;
 //! let down = Spin::state(Ket::Down).at(&b)?;
-//! let state = up.tensor_product(&down)?;
+//! let state = qmb_core::State::tensor_in(&h, [up, down])?;
 //! let sz = Spin::operator(Op::Sz);
 //! let zz = sz.at(&a)?.product(&sz.at(&b)?)?.bind(&h)?;
 //! assert_eq!(state.expectation(&zz)?, Complex::new(-0.25, 0.0));

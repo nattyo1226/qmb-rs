@@ -61,11 +61,14 @@ fn normalized_kinds_grouping_subsystems_and_errors() {
         Err(SpaceError::MixedTensorKinds)
     ));
     assert!(matches!(
-        State::tensor([
-            ket::<f64>(0, &[a.clone(), b], TensorKind::Graded),
-            ket(0, &[H::factor(3)], TensorKind::Ordinary)
-        ]),
-        Err(ExpressionError::Space(SpaceError::MixedTensorKinds))
+        State::tensor_in(
+            &H::tensor([a.clone(), H::factor(1), H::factor(3)]).unwrap(),
+            [
+                ket::<f64>(0, &[a.clone(), b], TensorKind::Graded),
+                ket(0, &[H::factor(3)], TensorKind::Ordinary)
+            ]
+        ),
+        Err(ExpressionError::IncompatibleSpaces)
     ));
     let bound = placed::<f64>(A, &a).bind(&g).unwrap();
     assert!(matches!(
@@ -261,11 +264,16 @@ fn scope_and_intrinsic_coordinates_are_preserved() {
     let op = placed::<f64>(A, &b);
     let left = ket(1, &[a], TensorKind::Graded);
     let right = ket(1, &[b], TensorKind::Graded);
-    let inner = left.tensor_product_g(&right.act(&op).unwrap()).unwrap();
-    let inner_ready = left
-        .tensor_product_g(&right.act(&op).unwrap().evaluate().unwrap())
+    let inner = State::tensor_in(&h, [left.clone(), right.act(&op).unwrap()]).unwrap();
+    let inner_ready = State::tensor_in(
+        &h,
+        [left.clone(), right.act(&op).unwrap().evaluate().unwrap()],
+    )
+    .unwrap();
+    let outer = State::tensor_in(&h, [left, right])
+        .unwrap()
+        .act(&op)
         .unwrap();
-    let outer = left.tensor_product_g(&right).unwrap().act(&op).unwrap();
     values(&vector(&inner), &vector(&inner_ready));
     values(&vector(&outer), &vector(&inner.scaled(c(-1., 0.))));
     values(&vector(&inner.expand_in(&States).unwrap()), &vector(&inner));
@@ -300,41 +308,25 @@ fn constructors_fallibility_and_deep_graded_trees() {
     }
     let a = H::factor(0);
     let b = H::factor(1);
-    let g = Q::state_tensor_g_at([(&a, Ket(1)), (&b, Ket(1))]).unwrap();
-    let explicit =
-        Q::state_tensor_at_with_kind(TensorKind::Graded, [(&a, Ket(1)), (&b, Ket(1))]).unwrap();
+    let g = Q::product_state(
+        &H::tensor_g([a.clone(), b.clone()]).unwrap(),
+        [Ket(1), Ket(1)],
+    )
+    .unwrap();
+    let explicit = Q::product_state(g.space(), [Ket(1), Ket(1)]).unwrap();
     assert!(g.space().is_compatible_with(explicit.space()));
     values(&vector(&g), &vector(&explicit));
     for kind in [TensorKind::Ordinary, TensorKind::Graded] {
         let x = Q::state(Ket(1)).at(&a).unwrap();
         let y = Q::state(Ket(1)).at(&b).unwrap();
-        let short = if kind == TensorKind::Graded {
-            Q::state_tensor_g([x.clone(), y.clone()])
-        } else {
-            Q::state_tensor([x.clone(), y.clone()])
-        }
-        .unwrap();
-        let try_short = if kind == TensorKind::Graded {
-            State::try_tensor_g([Ok(x.clone()), Ok(y.clone())])
-        } else {
-            State::try_tensor([Ok(x.clone()), Ok(y.clone())])
-        }
-        .unwrap();
-        let binary = if kind == TensorKind::Graded {
-            x.tensor_product_g(&y)
-        } else {
-            x.tensor_product(&y)
-        }
-        .unwrap();
-        let candidates = [
-            short,
-            try_short,
-            binary,
-            Q::state_tensor_with_kind(kind, [x.clone(), y.clone()]).unwrap(),
-            Q::try_state_tensor_with_kind(kind, [Ok(x.clone()), Ok(y.clone())]).unwrap(),
-            State::try_tensor_with_kind(kind, [Ok(x), Ok(y)]).unwrap(),
-        ];
         let target = H::tensor_with_kind(kind, [a.clone(), b.clone()]).unwrap();
+        let candidates = [
+            Q::tensor_in(&target, [x.clone(), y.clone()]).unwrap(),
+            Q::try_tensor_in(&target, [Ok(x.clone()), Ok(y.clone())]).unwrap(),
+            State::tensor_in(&target, [x.clone(), y.clone()]).unwrap(),
+            State::try_tensor_in(&target, [Ok(x), Ok(y)]).unwrap(),
+            Q::product_state(&target, [Ket(1), Ket(1)]).unwrap(),
+        ];
         for state in candidates {
             assert!(state.space().is_compatible_with(&target));
             values(
@@ -354,7 +346,7 @@ fn constructors_fallibility_and_deep_graded_trees() {
     .into_iter()
     .inspect(|_| count += 1);
     assert!(matches!(
-        Q::try_state_tensor_g(inputs),
+        Q::try_tensor_in(g.space(), inputs),
         Err(ExpressionError::MissingIndex)
     ));
     assert_eq!(count, 3);
@@ -364,7 +356,9 @@ fn constructors_fallibility_and_deep_graded_trees() {
             let factors = [H::factor(0), H::factor(1)];
             let mut psi = ket::<f64>(3, &factors, TensorKind::Graded);
             for _ in 0..20_000 {
-                psi = State::tensor_g([psi]).unwrap();
+                psi =
+                    State::tensor_in(&H::tensor_g(factors.clone()).unwrap(), [State::unit(), psi])
+                        .unwrap();
             }
             assert_eq!(psi.space().kind(), Some(TensorKind::Graded));
             assert!(
@@ -441,7 +435,9 @@ fn graded_action_needs_neither_product_nor_numeric_coefficient_operations() {
     }
     let count = Cell::new(0);
     let factors = [H::factor(0), H::factor(1), H::factor(2)];
-    let psi = State::tensor_g(
+    let space = H::tensor_g(factors.iter().cloned()).unwrap();
+    let psi = State::tensor_in(
+        &space,
         factors
             .iter()
             .map(|f| LocalState::primitive(Borrowed(&count)).at(f).unwrap()),
@@ -458,11 +454,14 @@ fn graded_action_needs_neither_product_nor_numeric_coefficient_operations() {
 #[test]
 fn large_separable_states_and_traces_do_not_need_global_dimensions_or_bases() {
     let factors: Vec<_> = (0..80).map(H::factor).collect();
-    let psi = State::<_, Ket, Op, num_complex::Complex<f64>>::tensor_g(factors.iter().map(|f| {
-        (LocalState::primitive(Ket(0)) + LocalState::primitive(Ket(1)))
-            .at(f)
-            .unwrap()
-    }))
+    let psi = State::<_, Ket, Op, num_complex::Complex<f64>>::tensor_in(
+        &H::tensor_g(factors.iter().cloned()).unwrap(),
+        factors.iter().map(|f| {
+            (LocalState::primitive(Ket(0)) + LocalState::primitive(Ket(1)))
+                .at(f)
+                .unwrap()
+        }),
+    )
     .unwrap();
     assert!(psi.space().dimension::<Ket>().is_err());
     let a = placed(A, &factors[79]);
@@ -523,8 +522,7 @@ fn local_expression_homomorphism_three_odd_factors_and_empty_bases() {
             close(*value, c(1., 0.));
         }
         let unit = H::<u8>::tensor_with_kind(kind, []).unwrap();
-        let one =
-            State::<u8, Ket, Op, num_complex::Complex<f64>>::tensor_with_kind(kind, []).unwrap();
+        let one = State::<u8, Ket, Op, num_complex::Complex<f64>>::tensor_in(&unit, []).unwrap();
         assert_eq!(one.space().kind(), Some(kind));
         close(one.inner_product(&one).unwrap(), c(1., 0.));
         let state = unit

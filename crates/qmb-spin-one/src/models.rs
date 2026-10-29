@@ -106,7 +106,7 @@ impl<C> SpinOne<C> {
     /// type Spin = SpinOne<Complex<f64>>;
     /// let sites = [HilbertSpace::factor("a"), HilbertSpace::factor("b")];
     /// let h = Spin::blbq(&Chain::new(2, Boundary::Open), &sites, 1.0, 0.5)?;
-    /// let psi = Spin::state_tensor_at([(&sites[0], Ket::Plus), (&sites[1], Ket::Plus)])?;
+    /// let psi = Spin::product_state(h.space().unwrap(), [Ket::Plus, Ket::Plus])?;
     /// assert!((psi.expectation(&h)?.re + 1.5).abs() < 1e-12);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

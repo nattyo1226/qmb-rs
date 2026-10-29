@@ -19,12 +19,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect::<Result<_, _>>()?;
     let h = F::hubbard(&chain, &sites, 1., 4.)?;
     let symmetric = F::symmetric_hubbard(&chain, &sites, 1., 4.)?;
-    let psi = F::state_tensor_g_at([
-        (&modes[0], S::Occupied),
-        (&modes[1], S::Empty),
-        (&modes[2], S::Empty),
-        (&modes[3], S::Occupied),
-    ])?;
+    let psi = F::product_state(
+        h.space().expect("model is bound"),
+        [S::Occupied, S::Empty, S::Empty, S::Occupied],
+    )?;
     assert!((psi.norm_squared()? - 1.).abs() < 1e-12);
     let energy = psi.expectation(&h)?;
     let shifted_energy = psi.expectation(&symmetric)?;

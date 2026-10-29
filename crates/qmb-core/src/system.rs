@@ -25,7 +25,8 @@ use crate::{ExpressionError, HilbertSpace, LocalOperator, LocalState, Operator, 
 /// let delayed = ket.act(&Custom::operator(Op));
 /// let a = qmb_core::HilbertSpace::factor("a");
 /// let b = qmb_core::HilbertSpace::factor("b");
-/// let state = Custom::state_tensor_at([(&a, Ket), (&b, Ket)])?;
+/// let space = a.tensor_product(&b)?;
+/// let state = Custom::product_state(&space, [Ket, Ket])?;
 /// let operator = Custom::try_operator_sum([Custom::operator_product_at([(&a, Op)])])?;
 /// let delayed = state.act(&operator)?;
 /// # Ok::<(), qmb_core::ExpressionError>(())
@@ -57,60 +58,43 @@ pub trait QuantumSystem: Sized {
         LocalOperator::primitive(primitive)
     }
 
-    /// Places primitives on leaves and tensors them in input order.
-    ///
-    /// Repeated indices are rejected; empty input gives the unit state.
-    /// The first placement error takes precedence over duplicate indices.
-    /// Each target must be a leaf; tensors are not expanded automatically.
-    fn state_tensor_at<'a, I: Eq + 'a>(
-        assignments: impl IntoIterator<Item = (&'a HilbertSpace<I>, Self::State)>,
+    /// Tensors placed states on an existing space without creating a new space.
+    fn tensor_in<I: Eq>(
+        space: &HilbertSpace<I>,
+        states: impl IntoIterator<Item = StateOf<Self, I>>,
     ) -> Result<StateOf<Self, I>, ExpressionError> {
-        Self::state_tensor_at_with_kind(crate::TensorKind::Ordinary, assignments)
+        State::tensor_in(space, states)
     }
 
-    /// Places primitives and tensors them using an explicit rule.
-    fn state_tensor_at_with_kind<'a, I: Eq + 'a>(
-        kind: crate::TensorKind,
-        assignments: impl IntoIterator<Item = (&'a HilbertSpace<I>, Self::State)>,
-    ) -> Result<StateOf<Self, I>, ExpressionError> {
-        Self::try_state_tensor_with_kind(
-            kind,
-            assignments
-                .into_iter()
-                .map(|(factor, primitive)| Self::state(primitive).at(factor)),
-        )
-    }
-    /// Places primitives and forms a graded tensor.
-    fn state_tensor_g_at<'a, I: Eq + 'a>(
-        assignments: impl IntoIterator<Item = (&'a HilbertSpace<I>, Self::State)>,
-    ) -> Result<StateOf<Self, I>, ExpressionError> {
-        Self::state_tensor_at_with_kind(crate::TensorKind::Graded, assignments)
-    }
-    /// Forms a tensor state using the specified rule.
-    fn state_tensor_with_kind<I: Eq>(
-        kind: crate::TensorKind,
-        states: impl IntoIterator<Item = StateOf<Self, I>>,
-    ) -> Result<StateOf<Self, I>, ExpressionError> {
-        State::tensor_with_kind(kind, states)
-    }
-    /// Forms a graded tensor state.
-    fn state_tensor_g<I: Eq>(
-        states: impl IntoIterator<Item = StateOf<Self, I>>,
-    ) -> Result<StateOf<Self, I>, ExpressionError> {
-        Self::state_tensor_with_kind(crate::TensorKind::Graded, states)
-    }
-    /// Collects fallible tensor operands before validating composition.
-    fn try_state_tensor_with_kind<I: Eq>(
-        kind: crate::TensorKind,
+    /// Collects fallible states before validating their explicit target space.
+    fn try_tensor_in<I: Eq>(
+        space: &HilbertSpace<I>,
         states: impl IntoIterator<Item = Result<StateOf<Self, I>, ExpressionError>>,
     ) -> Result<StateOf<Self, I>, ExpressionError> {
-        State::try_tensor_with_kind(kind, states)
+        State::try_tensor_in(space, states)
     }
-    /// Collects fallible graded tensor operands, stopping at the first error.
-    fn try_state_tensor_g<I: Eq>(
-        states: impl IntoIterator<Item = Result<StateOf<Self, I>, ExpressionError>>,
+
+    /// Places one primitive per leaf in the space's order and forms a product state.
+    /// Too few or too many primitives return `IncompatibleSpaces`.
+    /// No coefficient arithmetic, evaluation or primitive cloning is required.
+    fn product_state<I: Eq>(
+        space: &HilbertSpace<I>,
+        primitives: impl IntoIterator<Item = Self::State>,
     ) -> Result<StateOf<Self, I>, ExpressionError> {
-        Self::try_state_tensor_with_kind(crate::TensorKind::Graded, states)
+        let mut primitives = primitives.into_iter();
+        let state = Self::try_tensor_in(
+            space,
+            space.leaves().map(|factor| {
+                let primitive = primitives
+                    .next()
+                    .ok_or(ExpressionError::IncompatibleSpaces)?;
+                Self::state(primitive).at(factor)
+            }),
+        )?;
+        if primitives.next().is_some() {
+            return Err(ExpressionError::IncompatibleSpaces);
+        }
+        Ok(state)
     }
 
     /// Places primitives on leaves and multiplies them in input order.
@@ -143,22 +127,6 @@ pub trait QuantumSystem: Sized {
         states: impl IntoIterator<Item = Result<StateOf<Self, I>, ExpressionError>>,
     ) -> Result<StateOf<Self, I>, ExpressionError> {
         State::try_sum(space, states)
-    }
-
-    /// Tensors placed states in input order, rejecting repeated indices.
-    /// Empty input gives the unit state.
-    fn state_tensor<I: Eq>(
-        states: impl IntoIterator<Item = StateOf<Self, I>>,
-    ) -> Result<StateOf<Self, I>, ExpressionError> {
-        State::tensor(states)
-    }
-
-    /// Collects fallible states before tensoring, with input errors taking priority.
-    /// The first input error stops iteration. Empty input gives the unit state.
-    fn try_state_tensor<I: Eq>(
-        states: impl IntoIterator<Item = Result<StateOf<Self, I>, ExpressionError>>,
-    ) -> Result<StateOf<Self, I>, ExpressionError> {
-        State::try_tensor(states)
     }
 
     /// Sums operators, validating bindings only if every operand is bound.
@@ -206,7 +174,7 @@ pub type LocalOperatorOf<Q> =
     LocalOperator<<Q as QuantumSystem>::Operator, <Q as QuantumSystem>::Coeff>;
 
 /// A composite state type annotation for `Q` and independent index `I`.
-/// Construct it with methods such as [`QuantumSystem::state_tensor_at`].
+/// Construct it with methods such as [`QuantumSystem::product_state`].
 pub type StateOf<Q, I> = State<
     I,
     <Q as QuantumSystem>::State,

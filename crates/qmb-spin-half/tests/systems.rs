@@ -11,11 +11,11 @@ fn local_and_composite_expressions_connect_to_existing_types() {
     let b = H::factor("b");
     let up: qmb_core::LocalStateOf<Spin> = Spin::state(Ket::Up);
     let sz: qmb_core::LocalOperatorOf<Spin> = Spin::operator(Op::Sz);
-    let psi: StateOf<Spin, _> = up
-        .at(&a)
-        .unwrap()
-        .tensor_product(&Spin::state(Ket::Down).at(&b).unwrap())
-        .unwrap();
+    let psi: StateOf<Spin, _> = State::tensor_in(
+        &a.tensor_product(&b).unwrap(),
+        [up.at(&a).unwrap(), Spin::state(Ket::Down).at(&b).unwrap()],
+    )
+    .unwrap();
     let zz: qmb_core::OperatorOf<Spin, _> =
         sz.at(&a).unwrap().product(&sz.at(&b).unwrap()).unwrap();
     assert_eq!(psi.expectation(&zz).unwrap(), Complex::new(-0.25, 0.));
@@ -46,11 +46,14 @@ fn models_accept_multiple_leaves_and_alternate_by_site() {
     let h = Spin::heisenberg(&chain, &sites, 1.0).unwrap();
     let xyz = Spin::xyz(&chain, &sites, 1.0, 1.0, 1.0).unwrap();
     let psi = Spin::neel(&chain, &sites, Ket::Up).unwrap();
-    let expected = State::tensor([
-        Spin::state(Ket::Up).at(&a).unwrap(),
-        Spin::state(Ket::Up).at(&b).unwrap(),
-        Spin::state(Ket::Down).at(&c).unwrap(),
-    ])
+    let expected = State::tensor_in(
+        psi.space(),
+        [
+            Spin::state(Ket::Up).at(&a).unwrap(),
+            Spin::state(Ket::Up).at(&b).unwrap(),
+            Spin::state(Ket::Down).at(&c).unwrap(),
+        ],
+    )
     .unwrap();
     assert_eq!(psi.inner_product(&expected).unwrap(), Complex::new(1., 0.));
     assert_eq!(psi.expectation(&h).unwrap(), Complex::new(0.5, 0.));
@@ -72,15 +75,18 @@ fn models_accept_multiple_leaves_and_alternate_by_site() {
     let reference = qmb_core::OperatorOf::<Spin, _>::sum(terms).unwrap();
     let basis: Vec<_> = (0..8)
         .map(|bits| {
-            State::tensor([&a, &b, &c].into_iter().enumerate().map(|(i, leaf)| {
-                Spin::state(if bits >> (2 - i) & 1 == 0 {
-                    Ket::Up
-                } else {
-                    Ket::Down
-                })
-                .at(leaf)
-                .unwrap()
-            }))
+            State::tensor_in(
+                psi.space(),
+                [&a, &b, &c].into_iter().enumerate().map(|(i, leaf)| {
+                    Spin::state(if bits >> (2 - i) & 1 == 0 {
+                        Ket::Up
+                    } else {
+                        Ket::Down
+                    })
+                    .at(leaf)
+                    .unwrap()
+                }),
+            )
             .unwrap()
         })
         .collect();
@@ -108,11 +114,14 @@ fn empty_sites_keep_edges_and_parity_and_all_empty_inputs_give_units() {
     let sites = [H::factor(0), H::unit(), H::factor(1)];
     let chain = Chain::new(3, Boundary::Open);
     let psi = Spin::neel(&chain, &sites, Ket::Up).unwrap();
-    let expected = Spin::state(Ket::Up)
-        .at(&sites[0])
-        .unwrap()
-        .tensor_product(&Spin::state(Ket::Up).at(&sites[2]).unwrap())
-        .unwrap();
+    let expected = State::tensor_in(
+        psi.space(),
+        [
+            Spin::state(Ket::Up).at(&sites[0]).unwrap(),
+            Spin::state(Ket::Up).at(&sites[2]).unwrap(),
+        ],
+    )
+    .unwrap();
     assert_eq!(psi.inner_product(&expected).unwrap(), Complex::new(1., 0.));
     assert_eq!(
         psi.expectation(&Spin::heisenberg(&chain, &sites, 1.0).unwrap())
@@ -266,15 +275,24 @@ macro_rules! construction_precision {
             let a = H::factor(0u8);
             let b = H::factor(1);
             let space = a.tensor_product(&b).unwrap();
-            let state = Q::state_tensor_at([(&a, Ket::Up), (&b, Ket::Down)]).unwrap();
-            let explicit = Q::state_tensor([
-                Q::state(Ket::Up).at(&a).unwrap(),
-                Q::state(Ket::Down).at(&b).unwrap(),
-            ])
+            let state = Q::product_state(
+                &qmb_core::HilbertSpace::tensor([(a).clone(), (b).clone()]).unwrap(),
+                [Ket::Up, Ket::Down],
+            )
             .unwrap();
-            let fallible =
-                Q::try_state_tensor([Q::state(Ket::Up).at(&a), Q::state(Ket::Down).at(&b)])
-                    .unwrap();
+            let explicit = Q::tensor_in(
+                &space,
+                [
+                    Q::state(Ket::Up).at(&a).unwrap(),
+                    Q::state(Ket::Down).at(&b).unwrap(),
+                ],
+            )
+            .unwrap();
+            let fallible = Q::try_tensor_in(
+                &space,
+                [Q::state(Ket::Up).at(&a), Q::state(Ket::Down).at(&b)],
+            )
+            .unwrap();
             assert_eq!(
                 state.inner_product(&explicit).unwrap(),
                 Complex::new(1., 0.)
@@ -335,9 +353,9 @@ macro_rules! construction_precision {
                 up.expectation(&xy).unwrap()
             );
             for unit in [
-                Q::state_tensor::<u8>([]),
-                Q::try_state_tensor::<u8>([]),
-                Q::state_tensor_at::<u8>([]),
+                Q::tensor_in(&H::<u8>::unit(), []),
+                Q::try_tensor_in(&H::<u8>::unit(), []),
+                Q::product_state(&H::<u8>::unit(), []),
             ] {
                 let unit = unit.unwrap();
                 assert_eq!(unit.inner_product(&unit).unwrap(), Complex::new(1., 0.));

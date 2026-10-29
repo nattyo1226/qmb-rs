@@ -1040,7 +1040,7 @@ Fermion などについて本文書で定める合成・評価・検証規約は
 
 ### 11.1. 構築・集約の共通入口（2026-10-28）
 
-QuantumSystem は state_tensor_at・operator_product_at、state_sum・operator_sum・state_tensor・operator_product と各集約の try_ 版を既定メソッドとして提供する。構築は選択した Q から、構築後の操作・評価は式から行う。_at は葉と primitive の組を受け取って配置・合成する入口とし、裸の基本名は構築済みの式を集約する。既存の core constructor は維持する。
+QuantumSystem は product_state・operator_product_at、state_sum・operator_sum・tensor_in・operator_product と各集約の try_ 版を既定メソッドとして提供する。構築は選択した Q から、構築後の操作・評価は式から行う。_at は葉と primitive の組を受け取って配置・合成する入口とし、裸の基本名は構築済みの式を集約する。状態のテンソル構築には既存空間を明示し、状態側の旧 tensor constructor は撤去する。種類は HilbertSpace に集約し、状態の Tensor 節点には重複保持しない。product_state は葉の順序に対応する状態 primitive の列を受け取る。
 
 scaled は4式型と LinearCombination で `impl Into<C>` を受け取り、入口で一度だけ変換する。式の保持に数値能力・Clone を追加せず、LinearCombination の既存の乗算用制約は維持する。選択済みの精度を変更しない。型推論の完全互換は要求せず、構築入口の型注釈や不要な into() の除去で移行する。
 

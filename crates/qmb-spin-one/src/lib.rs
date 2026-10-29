@@ -62,7 +62,8 @@ pub use state::SpinOneState;
 /// type Spin = SpinOne<Complex<f32>>;
 /// let a = HilbertSpace::factor("a");
 /// let b = HilbertSpace::factor("b");
-/// let psi = Spin::state_tensor_at([(&a, Ket::Plus), (&b, Ket::Minus)])?;
+/// let space = a.tensor_product(&b)?;
+/// let psi = Spin::product_state(&space, [Ket::Plus, Ket::Minus])?;
 /// let zz = Spin::operator_product_at([(&a, Op::Sz), (&b, Op::Sz)])?;
 /// assert_eq!(psi.expectation(&zz)?, Complex::new(-1.0, 0.0));
 /// # Ok::<(), qmb_core::ExpressionError>(())

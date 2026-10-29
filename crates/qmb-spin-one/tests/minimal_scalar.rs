@@ -252,7 +252,15 @@ fn storage_identity_placement_and_delayed_operations_need_no_numbers() {
     let _ = qmb_core::LocalOperator::<O, Opaque>::identity();
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let psi = Spin::state_tensor_at([(&a, S::Plus), (&b, S::Minus)]).unwrap();
+    let psi = Spin::product_state(
+        &qmb_core::HilbertSpace::tensor([(a).clone(), (b).clone()]).unwrap(),
+        [S::Plus, S::Minus],
+    )
+    .unwrap();
     let _ = psi.act(&op.at(&a).unwrap()).unwrap();
-    let _ = Spin::state_tensor_g_at([(&a, S::Zero), (&b, S::Minus)]).unwrap();
+    let _ = Spin::product_state(
+        &qmb_core::HilbertSpace::tensor_g([(a).clone(), (b).clone()]).unwrap(),
+        [S::Zero, S::Minus],
+    )
+    .unwrap();
 }

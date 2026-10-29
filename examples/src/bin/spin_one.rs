@@ -45,7 +45,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The same primitives work on independently identified tensor factors.
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let state = Spin::state_tensor_at([(&a, Ket::Plus), (&b, Ket::Minus)])?;
+    let space = a.tensor_product(&b)?;
+    let state = Spin::product_state(&space, [Ket::Plus, Ket::Minus])?;
     let zz = Spin::operator_product_at([(&a, Op::Sz), (&b, Op::Sz)])?;
     assert_eq!(state.space().dimension::<Ket>()?, 9);
     assert_eq!(state.expectation(&zz)?, Complex::new(-1.0, 0.0));

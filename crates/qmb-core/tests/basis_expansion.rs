@@ -116,13 +116,15 @@ fn check_three_level<T: Real>(kind: qmb_core::TensorKind) {
     .unwrap();
     let a = Ls::<T>::primitive(Ket::Phase).at(&f).unwrap();
     let b = Ls::<T>::primitive(Ket::Sum).at(&g).unwrap();
-    let other = Ls::<T>::primitive(Ket::Unit(Axis::B))
-        .at(&f)
-        .unwrap()
-        .tensor_product_with_kind(kind, &Ls::primitive(Ket::Unit(Axis::C)).at(&g).unwrap())
-        .unwrap();
-    let state = a
-        .tensor_product_with_kind(kind, &b)
+    let other = qmb_core::State::tensor_in(
+        &space,
+        [
+            Ls::<T>::primitive(Ket::Unit(Axis::B)).at(&f).unwrap(),
+            Ls::primitive(Ket::Unit(Axis::C)).at(&g).unwrap(),
+        ],
+    )
+    .unwrap();
+    let state = qmb_core::State::tensor_in(&space, [a, b])
         .unwrap()
         .scaled(c(0.3, -0.7))
         .add(&other.scaled(c(-0.2, 0.6)))
@@ -263,9 +265,14 @@ fn malformed_expansion_and_enumeration_are_errors_even_under_zero_scale() {
 fn zero_state_factor_does_not_hide_invalid_basis_expansion_in_another_factor() {
     let a = HilbertSpace::factor(0u8);
     let b = HilbertSpace::factor(1u8);
-    let state = qmb_core::State::<_, Ket, Operator, Complex<f64>>::zero(&a)
-        .tensor_product(&Ls::<f64>::primitive(Ket::Phase).at(&b).unwrap())
-        .unwrap();
+    let state = qmb_core::State::tensor_in(
+        &a.tensor_product(&b).unwrap(),
+        [
+            qmb_core::State::<_, Ket, Operator, Complex<f64>>::zero(&a),
+            Ls::<f64>::primitive(Ket::Phase).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
     assert!(matches!(
         state.coordinates_in(&BrokenBasis(0)),
         Err(BasisError::NonBasisElement)

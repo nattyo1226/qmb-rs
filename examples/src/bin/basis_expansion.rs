@@ -10,9 +10,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     type Spin = SpinHalf<Complex<f64>>;
     let a = HilbertSpace::factor("a");
     let b = HilbertSpace::factor("b");
-    let up_down = Spin::state_tensor_at([(&a, Ket::Up), (&b, Ket::Down)])?;
-    let down_up = Spin::state_tensor_at([(&a, Ket::Down), (&b, Ket::Up)])?;
     let space = a.tensor_product(&b)?;
+    let up_down = Spin::product_state(&space, [Ket::Up, Ket::Down])?;
+    let down_up = Spin::product_state(&space, [Ket::Down, Ket::Up])?;
     let state = Spin::state_sum(
         &space,
         [

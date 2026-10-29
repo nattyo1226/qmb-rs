@@ -63,11 +63,14 @@ fn bounded<R>(f: impl FnOnce() -> R) -> R {
 fn sparse_exports_need_no_dense_intermediate_and_dense_allocation_failure_is_reported() {
     let basis = SzBasis;
     let space = HilbertSpace::tensor((0..40u8).map(HilbertSpace::factor)).unwrap();
-    let state = State::tensor(space.indices().map(|&i| {
-        LocalState::<S, O, Complex<f64>>::primitive(S::Up)
-            .at(&HilbertSpace::factor(i))
-            .unwrap()
-    }))
+    let state = State::tensor_in(
+        &space,
+        space.indices().map(|&i| {
+            LocalState::<S, O, Complex<f64>>::primitive(S::Up)
+                .at(&HilbertSpace::factor(i))
+                .unwrap()
+        }),
+    )
     .unwrap();
     let sparse: Exported<qmb_export::sprs::CsVec<_>, VectorMetadata<'_, _, _, S>> =
         bounded(|| (&state).export(&basis)).unwrap();
