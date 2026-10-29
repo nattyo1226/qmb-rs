@@ -82,3 +82,30 @@ pub trait Dimension {
     /// Returns the positive dimension, or an error if it does not fit in usize.
     fn dim() -> Result<NonZeroUsize, DimensionOverflow>;
 }
+
+/// Parity of a homogeneous primitive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Parity {
+    /// Even sector.
+    Even,
+    /// Odd sector.
+    Odd,
+}
+
+/// A primitive belonging wholly to one Z₂ parity sector.
+///
+/// Identity and parity operators are even. Adjoint preserves parity; nonzero
+/// products and actions add parity modulo two. Opposite state sectors are
+/// orthogonal. Mixed parity is represented by sums of primitives.
+pub trait HomogeneousParity {
+    /// Returns this primitive's parity.
+    fn parity(&self) -> Parity;
+}
+
+/// Construction of the local parity operator P, independent of coefficients.
+///
+/// Implementations obey P†=P, P²=I, Pψ=(-1)^p(ψ)ψ, and POP=(-1)^p(O)O.
+pub trait ParityOperator: Sized {
+    /// Returns the parity operator, which need not belong to the chosen basis.
+    fn parity_operator() -> Self;
+}

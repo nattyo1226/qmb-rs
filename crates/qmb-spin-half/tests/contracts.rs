@@ -1099,3 +1099,33 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
         c(1.0, 0.0)
     );
 }
+
+#[test]
+fn spin_half_has_trivial_grading_in_both_tensor_kinds() {
+    use qmb_core::{HilbertSpace, HomogeneousParity, Parity, ParityOperator, QuantumSystem};
+    use qmb_spin_half::SpinHalf;
+    for op in OPS {
+        assert_eq!(op.parity(), Parity::Even);
+    }
+    for state in STATES {
+        assert_eq!(state.parity(), Parity::Even);
+    }
+    assert_eq!(Op::parity_operator(), I);
+    let a = HilbertSpace::factor(0);
+    let b = HilbertSpace::factor(1);
+    let ordinary = SpinHalf::<Complex<f64>>::state_tensor_at([(&a, Up), (&b, Down)]).unwrap();
+    let graded = SpinHalf::<Complex<f64>>::state_tensor_g_at([(&a, Up), (&b, Down)]).unwrap();
+    for primitive in OPS {
+        let op = SpinHalf::operator(primitive).at(&b).unwrap();
+        let left = ordinary.act(&op).unwrap().coordinates_in(&SzBasis).unwrap();
+        let right = graded.act(&op).unwrap().coordinates_in(&SzBasis).unwrap();
+        assert_eq!(
+            left.into_entries().collect::<Vec<_>>(),
+            right.into_entries().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            op.trace_in(ordinary.space()).unwrap(),
+            op.trace_in(graded.space()).unwrap()
+        );
+    }
+}

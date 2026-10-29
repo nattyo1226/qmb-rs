@@ -9,7 +9,22 @@ use std::num::NonZeroUsize;
 
 // These primitives deliberately lack Clone/Eq, and the operator lacks Product/Identity.
 struct Ket(u8);
-struct Op;
+enum Op {
+    Flip,
+    Parity,
+}
+#[allow(non_upper_case_globals)]
+const Op: Op = Op::Flip;
+impl qmb_core::HomogeneousParity for Op {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Op {
+    fn parity_operator() -> Self {
+        Self::Parity
+    }
+}
 struct Ordered;
 impl Dimension for Ket {
     fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
@@ -19,14 +34,21 @@ impl Dimension for Ket {
 impl Act<f64> for Ket {
     type Operator = Op;
     type Term = Self;
-    fn act(&self, _: &Op) -> LinearCombination<Self, f64> {
-        LinearCombination::primitive(Ket(1 - self.0))
+    fn act(&self, op: &Op) -> LinearCombination<Self, f64> {
+        LinearCombination::primitive(Ket(if matches!(op, Op::Parity) {
+            self.0
+        } else {
+            1 - self.0
+        }))
     }
 }
 impl Adjoint<f64> for Op {
     type Term = Self;
     fn adjoint(&self) -> LinearCombination<Self, f64> {
-        LinearCombination::primitive(Op)
+        LinearCombination::primitive(match self {
+            Self::Flip => Self::Flip,
+            Self::Parity => Self::Parity,
+        })
     }
 }
 impl Basis<Ket, f64> for Ordered {

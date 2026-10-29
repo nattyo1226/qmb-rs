@@ -353,3 +353,19 @@ impl Dimension for Operator {
         Ok(NonZeroUsize::new(9).unwrap())
     }
 }
+
+impl qmb_core::HomogeneousParity for Ket {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::HomogeneousParity for Operator {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Operator {
+    fn parity_operator() -> Self {
+        Self::identity()
+    }
+}

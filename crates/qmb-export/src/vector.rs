@@ -77,7 +77,7 @@ impl<'b, I: Eq, S, O, C, B, D> Export<Exported<D, VectorMetadata<'b, B, HilbertS
 where
     C: Clone + Zero + One + Conjugate<Output = C>,
     S: Dimension + Act<C, Operator = O, Term = S>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
     B: Basis<S, C>,
     D: VectorStorage<C>,
 {

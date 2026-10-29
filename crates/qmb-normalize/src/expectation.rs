@@ -52,7 +52,7 @@ impl<I: Eq, S, O, C> NormalizedExpectation<Operator<I, O, C>> for State<I, S, O,
 where
     C: Clone + Zero + One + Conjugate<Output = C> + Divide<Output = C>,
     S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
 {
     type Output = C;
     fn normalized_expectation(
@@ -71,7 +71,7 @@ impl<I: Eq, S, O, C> NormalizedExpectationIn<Operator<I, O, C>, HilbertSpace<I>>
 where
     C: Clone + Zero + One + Conjugate<Output = C> + Divide<Output = C>,
     S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
 {
     type Output = C;
     fn normalized_expectation_in(

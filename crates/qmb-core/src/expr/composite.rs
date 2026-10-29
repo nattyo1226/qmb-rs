@@ -1,8 +1,8 @@
-//! Placed states and operators on ordinary tensor spaces.
+//! Placed states and operators on ordinary and graded tensor spaces.
 
 use alloc::{sync::Arc, vec::Vec};
 
-use super::parts::{ActExpr, AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
+use super::parts::{AdjointExpr, ProductExpr, ScaleExpr, SumExpr};
 use crate::{HilbertSpace, Identity, LocalOperator, LocalState, SpaceError};
 
 /// Errors connecting, placing or evaluating composite expressions.
@@ -94,14 +94,18 @@ pub(crate) struct OpExpr<I, O, C> {
     root: Option<Arc<OpNode<I, O, C>>>,
 }
 
-type StateAction<I, S, O, C> = ActExpr<StateExpr<I, S, O, C>, OpExpr<I, O, C>>;
+pub(crate) struct StateAction<I, S, O, C> {
+    pub(crate) state: StateExpr<I, S, O, C>,
+    pub(crate) operator: OpExpr<I, O, C>,
+    pub(crate) space: HilbertSpace<I>,
+}
 
 pub(crate) enum StateNode<I, S, O, C> {
     Local(HilbertSpace<I>, LocalState<S, O, C>),
     Unit,
     Scale(ScaleExpr<StateExpr<I, S, O, C>, C>),
     Sum(SumExpr<StateExpr<I, S, O, C>>),
-    Tensor(SumExpr<StateExpr<I, S, O, C>>),
+    Tensor(crate::TensorKind, SumExpr<StateExpr<I, S, O, C>>),
     Act(StateAction<I, S, O, C>),
 }
 pub(crate) enum OpNode<I, O, C> {
@@ -151,7 +155,7 @@ impl<I, S, O, C> StateExpr<I, S, O, C> {
             StateNode::Local(_, local) => local.has_pending_action(),
             StateNode::Unit => false,
             StateNode::Scale(s) => s.operand.pending_action,
-            StateNode::Sum(s) | StateNode::Tensor(s) => s.iter().any(|c| c.pending_action),
+            StateNode::Sum(s) | StateNode::Tensor(_, s) => s.iter().any(|c| c.pending_action),
             StateNode::Act(_) => true,
         };
         Self {
@@ -299,7 +303,7 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     }
     /// Forms a tensor product in input order. Empty input is the unit state.
     pub fn tensor(states: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
-        Self::tensor_collected(states.into_iter().collect())
+        Self::tensor_with_kind(crate::TensorKind::Ordinary, states)
     }
     /// Collects fallible states before forming their ordered tensor product.
     /// The first input error takes precedence over duplicate-index errors.
@@ -307,20 +311,59 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
     pub fn try_tensor(
         states: impl IntoIterator<Item = Result<Self, ExpressionError>>,
     ) -> Result<Self, ExpressionError> {
-        Self::tensor_collected(states.into_iter().collect::<Result<_, _>>()?)
+        Self::try_tensor_with_kind(crate::TensorKind::Ordinary, states)
     }
-    fn tensor_collected(states: SumExpr<Self>) -> Result<Self, ExpressionError> {
-        let space = HilbertSpace::tensor(states.iter().map(|s| s.space.clone()))?;
+    /// Constructs a graded tensor state.
+    pub fn tensor_g(states: impl IntoIterator<Item = Self>) -> Result<Self, ExpressionError> {
+        Self::tensor_with_kind(crate::TensorKind::Graded, states)
+    }
+    /// Constructs a tensor state with an explicit rule.
+    pub fn tensor_with_kind(
+        kind: crate::TensorKind,
+        states: impl IntoIterator<Item = Self>,
+    ) -> Result<Self, ExpressionError> {
+        Self::tensor_collected(kind, states.into_iter().collect())
+    }
+    /// Collects fallible graded tensor operands, stopping at the first error.
+    pub fn try_tensor_g(
+        states: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        Self::try_tensor_with_kind(crate::TensorKind::Graded, states)
+    }
+    /// Collects all successful operands before validating tensor composition.
+    pub fn try_tensor_with_kind(
+        kind: crate::TensorKind,
+        states: impl IntoIterator<Item = Result<Self, ExpressionError>>,
+    ) -> Result<Self, ExpressionError> {
+        Self::tensor_collected(kind, states.into_iter().collect::<Result<_, _>>()?)
+    }
+    fn tensor_collected(
+        kind: crate::TensorKind,
+        states: SumExpr<Self>,
+    ) -> Result<Self, ExpressionError> {
+        let space = HilbertSpace::tensor_with_kind(kind, states.iter().map(|s| s.space.clone()))?;
         let parts: SumExpr<_> = states.into_iter().map(|s| s.expression).collect();
         let expression = match parts {
             SumExpr::Empty => StateExpr::new(StateNode::Unit),
-            parts => StateExpr::new(StateNode::Tensor(parts)),
+            parts => StateExpr::new(StateNode::Tensor(kind, parts)),
         };
         Ok(Self { space, expression })
     }
     /// Tensors this state with `rhs`, rejecting repeated factors.
     pub fn tensor_product(&self, rhs: &Self) -> Result<Self, ExpressionError> {
-        Self::tensor([self.clone(), rhs.clone()])
+        self.tensor_product_with_kind(crate::TensorKind::Ordinary, rhs)
+    }
+    /// Forms a binary graded tensor state.
+    pub fn tensor_product_g(&self, rhs: &Self) -> Result<Self, ExpressionError> {
+        self.tensor_product_with_kind(crate::TensorKind::Graded, rhs)
+    }
+    /// Forms a binary tensor state with an explicit rule.
+    pub fn tensor_product_with_kind(
+        &self,
+        kind: crate::TensorKind,
+        rhs: &Self,
+    ) -> Result<Self, ExpressionError> {
+        Self::tensor_with_kind(kind, [self.clone(), rhs.clone()])
     }
     /// Constructs a delayed action using a binding or this state's space.
     pub fn act(&self, operator: &Operator<I, O, C>) -> Result<Self, ExpressionError> {
@@ -345,7 +388,8 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
         }
         Ok(Self {
             space: space.clone(),
-            expression: StateExpr::new(StateNode::Act(ActExpr {
+            expression: StateExpr::new(StateNode::Act(StateAction {
+                space: space.clone(),
                 state: self.expression.clone(),
                 operator: operator.expression.clone(),
             })),
@@ -358,7 +402,8 @@ impl<I: Eq, S, O, C> State<I, S, O, C> {
         }
         Ok(Self {
             space: space.clone(),
-            expression: StateExpr::new(StateNode::Act(ActExpr {
+            expression: StateExpr::new(StateNode::Act(StateAction {
+                space: space.clone(),
                 state: self.expression,
                 operator: operator.expression,
             })),
@@ -589,7 +634,7 @@ impl<I, S, O, C> Drop for StateExpr<I, S, O, C> {
                 match node {
                     StateNode::Local(_, _) | StateNode::Unit => {}
                     StateNode::Scale(s) => push(s.operand),
-                    StateNode::Sum(s) | StateNode::Tensor(s) => {
+                    StateNode::Sum(s) | StateNode::Tensor(_, s) => {
                         for child in s {
                             push(child);
                         }

@@ -139,6 +139,16 @@ fn local_identity_uses_primitive_rules_without_dimension_queries() {
     static ADJOINTS: AtomicUsize = AtomicUsize::new(0);
     struct UnitState;
     struct UnitOperator;
+    impl qmb_core::HomogeneousParity for UnitOperator {
+        fn parity(&self) -> qmb_core::Parity {
+            qmb_core::Parity::Even
+        }
+    }
+    impl qmb_core::ParityOperator for UnitOperator {
+        fn parity_operator() -> Self {
+            Self
+        }
+    }
     impl Identity for UnitOperator {
         fn identity() -> Self {
             Self

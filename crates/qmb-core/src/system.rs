@@ -2,7 +2,7 @@
 
 use crate::{ExpressionError, HilbertSpace, LocalOperator, LocalState, Operator, State};
 
-/// Selects primitive types and coefficients for constructing ordinary expressions.
+/// Selects primitive types and coefficients for constructing local and composite expressions.
 ///
 /// No evaluation, numeric or cloning capabilities are required. Those bounds
 /// belong to the operations on the returned expressions. Systems do not own
@@ -65,11 +65,52 @@ pub trait QuantumSystem: Sized {
     fn state_tensor_at<'a, I: Eq + 'a>(
         assignments: impl IntoIterator<Item = (&'a HilbertSpace<I>, Self::State)>,
     ) -> Result<StateOf<Self, I>, ExpressionError> {
-        Self::try_state_tensor(
+        Self::state_tensor_at_with_kind(crate::TensorKind::Ordinary, assignments)
+    }
+
+    /// Places primitives and tensors them using an explicit rule.
+    fn state_tensor_at_with_kind<'a, I: Eq + 'a>(
+        kind: crate::TensorKind,
+        assignments: impl IntoIterator<Item = (&'a HilbertSpace<I>, Self::State)>,
+    ) -> Result<StateOf<Self, I>, ExpressionError> {
+        Self::try_state_tensor_with_kind(
+            kind,
             assignments
                 .into_iter()
                 .map(|(factor, primitive)| Self::state(primitive).at(factor)),
         )
+    }
+    /// Places primitives and forms a graded tensor.
+    fn state_tensor_g_at<'a, I: Eq + 'a>(
+        assignments: impl IntoIterator<Item = (&'a HilbertSpace<I>, Self::State)>,
+    ) -> Result<StateOf<Self, I>, ExpressionError> {
+        Self::state_tensor_at_with_kind(crate::TensorKind::Graded, assignments)
+    }
+    /// Forms a tensor state using the specified rule.
+    fn state_tensor_with_kind<I: Eq>(
+        kind: crate::TensorKind,
+        states: impl IntoIterator<Item = StateOf<Self, I>>,
+    ) -> Result<StateOf<Self, I>, ExpressionError> {
+        State::tensor_with_kind(kind, states)
+    }
+    /// Forms a graded tensor state.
+    fn state_tensor_g<I: Eq>(
+        states: impl IntoIterator<Item = StateOf<Self, I>>,
+    ) -> Result<StateOf<Self, I>, ExpressionError> {
+        Self::state_tensor_with_kind(crate::TensorKind::Graded, states)
+    }
+    /// Collects fallible tensor operands before validating composition.
+    fn try_state_tensor_with_kind<I: Eq>(
+        kind: crate::TensorKind,
+        states: impl IntoIterator<Item = Result<StateOf<Self, I>, ExpressionError>>,
+    ) -> Result<StateOf<Self, I>, ExpressionError> {
+        State::try_tensor_with_kind(kind, states)
+    }
+    /// Collects fallible graded tensor operands, stopping at the first error.
+    fn try_state_tensor_g<I: Eq>(
+        states: impl IntoIterator<Item = Result<StateOf<Self, I>, ExpressionError>>,
+    ) -> Result<StateOf<Self, I>, ExpressionError> {
+        Self::try_state_tensor_with_kind(crate::TensorKind::Graded, states)
     }
 
     /// Places primitives on leaves and multiplies them in input order.

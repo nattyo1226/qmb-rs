@@ -57,3 +57,9 @@ impl Dimension for SpinHalfState {
         Ok(core::num::NonZeroUsize::new(2).unwrap())
     }
 }
+
+impl qmb_core::HomogeneousParity for SpinHalfState {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}

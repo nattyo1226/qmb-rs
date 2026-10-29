@@ -4,7 +4,7 @@ use crate::{
     Adjoint, Conjugate, ExpressionError, HilbertSpace, Identity, LocalOperator, Operator, Product,
     Trace,
     coefficient::{add, multiply, zero},
-    expr::traversal::{LinearTerms, OpTerms, operator_view},
+    expr::traversal::{LinearTerms, OrdinaryOpTerms, operator_view},
 };
 use core::ops::Mul;
 use num_traits::{One, Zero};
@@ -49,7 +49,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     pub fn trace(&self) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Identity,
+        O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         let ambient = self.select_space(None, None)?;
@@ -60,7 +60,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     pub fn trace_in(&self, ambient: &HilbertSpace<I>) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Identity,
+        O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         let ambient = self.select_space(Some(ambient), None)?;
@@ -70,11 +70,11 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     fn trace_on(&self, ambient: &HilbertSpace<I>) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Identity,
+        O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         let mut result = zero();
-        for (coefficient, factors) in OpTerms::new(&self.expression) {
+        for (coefficient, factors) in OrdinaryOpTerms::new(&self.expression, ambient) {
             let mut value = one();
             for index in ambient.indices() {
                 let local_trace = match factors
@@ -98,7 +98,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     pub fn hilbert_schmidt_inner_product(&self, rhs: &Self) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Identity,
+        O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         self.adjoint().product(rhs)?.trace()
@@ -112,7 +112,7 @@ impl<I: Eq, O, C> Operator<I, O, C> {
     ) -> Result<C, ExpressionError>
     where
         C: Clone + Zero + One + Conjugate<Output = C>,
-        O: Identity,
+        O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
         self.bind(ambient)?

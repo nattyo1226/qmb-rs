@@ -8,6 +8,16 @@ use qmb_core::{
 };
 
 struct Primitive;
+impl qmb_core::HomogeneousParity for Primitive {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Primitive {
+    fn parity_operator() -> Self {
+        Self
+    }
+}
 
 impl<C: One> Act<C> for Primitive {
     type Operator = Self;

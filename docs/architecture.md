@@ -54,7 +54,7 @@ qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs �
 
 ## 3. Index・自由度・局所構造・空間
 
-Index は識別子のみを表し、局所構造や次元を持たない。局所構造は、局所 Hilbert 空間と、その上で実現される代数・表現を定める。基本自由度は Index と局所構造を持つ `HilbertSpace` の葉（Factor）として表し、独立した `Dof` 型は設けない。葉も複合空間も同じ空間型で保持・合成する。同じ局所構造を持つ複数の因子を Index で区別する。
+Index は識別子のみを表し、局所構造や次元を持たない。局所構造は、局所 Hilbert 空間と、その上で実現される代数・表現を定める。基本自由度は Index を持つ `HilbertSpace` の葉（Factor）として表し、独立した `Dof` 型は設けない。葉も複合空間も同じ空間型で保持・合成する。同じ局所構造を持つ複数の因子を Index で区別する。
 
 初期版では一つの系の全基本因子を同じ primitive 型 S・O で表す一種類の局所代数に揃える。異種局所構造の混在・合成は後続へ延期し、そのための型消去を初期版の要件にしない。ユーザ定義の局所構造は、別の系で単独利用できる。同種因子の入れ子や一つの Site への複数自由度の配置は維持する。
 
@@ -62,13 +62,13 @@ Index は識別子のみを表し、局所構造や次元を持たない。局�
 
 局所 primitive の意味・能力と数学的な整合性は、[局所 primitive の設計](design/local-structure.md)に定める。S・O の型と能力実装で定義を表し、追加の定義ラベル・定義 ID は導入しない。異なる規則や表現は primitive の型と実装に反映する。型消去による異種代数の合成と実行時パラメータは後続へ延期する。
 
-Hilbert 空間自体を、基本自由度の Index と局所構造を持つ Factor、および ordinary / graded の種類と順序付きの子 Hilbert 空間を持つ Tensor の再帰構造として表す。Tensor の子に Tensor を含められる。Factor と Tensor は概念上の名前とする。基本因子の順序は子を左からたどった葉の Index 列で表し、Index の値の大小から決めない。基底は空間とは別に選ぶ。
+Hilbert 空間自体を、基本自由度の Index を持つ Factor、および ordinary / graded の種類と順序付きの子 Hilbert 空間を持つ Tensor の再帰構造として表す。Tensor の子に Tensor を含められる。Factor と Tensor は概念上の名前とする。基本因子の順序は子を左からたどった葉の Index 列で表し、Index の値の大小から決めない。基底は空間とは別に選ぶ。
 
 Grouping は空間の木の括り方で表し、そのための独立した Group 型は追加しない。Chain はサイト数と境界条件だけを保持し、Site 順の局所空間列と grouping は利用側が管理する。Site 順序と別途存在する全空間の因子順序を区別し、既存状態・行列を暗黙に並べ替えない。内部ラベルは初期版では導入しない。局所複合代数の数学的能力は、子の局所規則と共通の合成・評価機構から処理する。
 
 空間の互換性は、基本因子の Index・順序・局所構造と、空・単因子 tensor product の同一視および同種の積の結合則を適用した後の tensor 構造に基づく。保持する木構造と数学的な互換性を分け、括り方だけの違いでは互換性を変えない。構築時の平坦化は要求せず、不変な子空間を共有できるようにする。
 
-部分系判定は、基本因子の Index の包含、対応する局所構造の一致、相対順序の保存、および積の種類の整合性に基づく。木の部分木や連続した因子列であることは要求しない。任意の因子集合を指定した部分系の取得と Regrouping の操作は提供しない。Tensor の直下の子空間と、全葉の Index は共有借用を基本として順序を保って列挙し、既存の構成を読み取る。空間は `Arc` で共有し、ordinary な互換性・部分系判定には反復的な葉列の照合を用いる。深い空間の走査・破棄も反復的に行う。総次元の `usize` overflow は次元取得時に検出し、空間構築の拒否理由にしない。詳細は [Hilbert 空間の再帰構造](design/hilbert-space.md)に定める。
+部分系判定は、基本因子の Index の包含、対応する局所構造の一致、相対順序の保存、および積の種類の整合性に基づく。木の部分木や連続した因子列であることは要求しない。任意の因子集合を指定した部分系の取得と Regrouping の操作は提供しない。Tensor の直下の子空間と、全葉の Index は共有借用を基本として順序を保って列挙し、既存の構成を読み取る。空間は `Arc` で共有し、互換性・部分系判定には有効な積の種類と反復的な葉列の照合を用いる。深い空間の走査・破棄も反復的に行う。総次元の `usize` overflow は次元取得時に検出し、空間構築の拒否理由にしない。詳細は [Hilbert 空間の再帰構造](design/hilbert-space.md)に定める。
 
 ## 4. Index の契約
 
@@ -124,7 +124,7 @@ Core の共通機構が展開を線型に式全体へ拡張し、順序番号か
 
 同じ合成則を入れ子にも適用し、同種の積の括り方と空・単因子の同一視に対して数学的結果を一致させる。Graded では積・作用・tensor の随伴に符号規則を適用し、通常の正定値な内積と非正規化 trace を維持する。Partial trace は future work とし、埋め込み後の通常の作用を縮約して残存空間を保持する数学的契約のみを将来の実装向けに残す。
 
-局所契約を満たすことは局所構造の提供者、契約を保存する合成則は共通機構の責任とする。操作時には適用の前提を検証し、数学的法則を任意の実装について実行時に自動証明することは要求しない。能力一覧・数式・検証対象の詳細は [埋め込み・複合空間の式と数学的能力](design/composite-expression.md)に定める。初期版は ordinary な演算を提供し、graded な演算の実装は後続へ回す。
+局所契約を満たすことは局所構造の提供者、契約を保存する合成則は共通機構の責任とする。操作時には適用の前提を検証し、数学的法則を任意の実装について実行時に自動証明することは要求しない。能力一覧・数式・検証対象の詳細は [埋め込み・複合空間の式と数学的能力](design/composite-expression.md)に定める。Ordinary / graded の共通評価を実装済み。空間が積の種類、primitive が parity / P、core が符号を処理する。
 
 Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 `Operator` は一つの型で未束縛・束縛済みを扱う。束縛情報は外側のハンドルに集約し、明示空間・既存束縛・未束縛の作用時の状態空間の順に選択する。検証が必要な複合操作とその演算子構文は `Result` を返し、空間不整合を早期に検出して局所規則の実行を遅延させる。評価は作用・内積・full trace の経路を分担し、全大域演算子の完全展開を必須にしない。採用方針と公開 API は[複合式の設計](design/composite-expression.md)に記録する。
 
@@ -152,7 +152,7 @@ Index は引き続き Eq だけで照合し、共有に Clone・再発行を要�
 
 2026-10-27に、partial trace と写像の表現行列・表現係数を future work とし、Step 5 の担当範囲と初期版の必須機能・検証項目から外した。基底処理と数値接続の実装は、これらの機能を前提条件にしない。
 
-標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、Graded・fermion、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
+標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。異種局所構造の混在・合成、fermion の製品実装、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は後続へ延期する。
 
 完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として実装済みである。後続へ延期した機能は[今後の課題](future-work.md)にまとめる。
 
@@ -165,10 +165,10 @@ State・Operator・Structure・Space の管理方法は、将来必ず再検討�
 1. **core の係数型・数値能力の整理（実装移行完了）**：`qmb-core` に `num-complex`・`num-traits` を含め、係数型には必要な操作で必要な trait bound を課す。零・単位元には `num_traits::Zero`・`One` をそのまま使い、付随する能力も受け入れる。不足する能力 trait は core で定義し、`Complex<f32>`・`Complex<f64>` に直接実装できる構成にする。保持・構築へ不要な数値能力を要求せず、係数表現・演算・norm・正規化の責任を整理する。
 2. **LocalStructure の必要性（実装移行完了）**：primitive 型 S・O を式へ直接指定し、次元と恒等元を primitive 側へ移す。追加の定義ラベルは設けず、意味・規則は S・O と各能力の実装で定める。
 3. **Operator と State の整理（初期版実装後）**：操作的量子論の枠組みで、Operator と State をいずれも一般の演算子の特別な形として整理できるかを議論し、解決する。その整理が数学的意味と API にどう対応するかを検討し、結論と根拠を記録する。2026-10-26に、検討事項が多いため初期版実装後へ延期した。初期版では現行の分離を維持し、この整理の結論を実装の前提条件にしない。
-4. **HilbertSpace の最小構成（初期版の範囲は完了）**：LocalStructure 廃止により、Index と順序付き Tensor の構造だけを保持する構成へ移行した。primitive 型・次元・局所規則は式・取得時の入力・個別能力が担う。Grading の具体的な保持方法・API は、2026-10-26の判断により、fermion 系の実装時に具体化する。
+4. **HilbertSpace の最小構成（初期版の範囲は完了）**：LocalStructure 廃止により、Index と順序付き Tensor の構造だけを保持する構成へ移行した。primitive 型・次元・局所規則は式・取得時の入力・個別能力が担う。Grading の具体的な保持方法・API は 2026-10-29 に実装済み。第10.2節を参照。
 5. **Chain の内部表現（実装移行済み）**：サイト数と境界条件だけを保持し、Index・Geometry 構造体・HilbertSpace の保持を廃止する。空間の構築・保持・grouping・全体の因子順序・配置と束縛は利用側へ移す。理由と契約は[Chain の設計](design/geometry.md)に記録する。Grading の設計完了を前提にしない。
 
-初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。未検証事項は[今後の課題](future-work.md#3-未実施の検証と性能)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持・ToSpace への2026-10-27の移行を経て、2026-10-28に純粋な Chain と外部局所空間列・SpinHalf<C> の関連関数へ移行した。Operator と State の統合、Grading の具体的な保持方法・API はそれぞれ初期版実装後・fermion 系の実装時に検討する。
+初項は、2026-10-25 の方針変更により、数値ライブラリ依存の解消から、`num-complex` を含めた最小限の能力契約の設計・実装へ変更し、2026-10-26 に完了を確認した。未検証事項は[今後の課題](future-work.md#3-未実施の検証と性能)に記録する。LocalStructure は同日に廃止し、ordinary な空間の責任分離も実装済みである。Chain の Index 列保持・ToSpace への2026-10-27の移行を経て、2026-10-28に純粋な Chain と外部局所空間列・SpinHalf<C> の関連関数へ移行した。Operator と State の統合、Grading の具体的な保持方法・API のうち後者は実装済みであり、前者の Operator / State 統合は引き続き後続課題とする。
 
 係数型については、成分型 T から係数全体 C への移行と、共役・実数値取得・実係数の埋め込み・純虚係数の生成を個別の能力として扱う方針を採用した。norm・normalized・正規化期待値と NormalizationError は std を利用する qmb-normalize へ移し、Float は平方根を使う実数型 R に要求する。内積・期待値・norm squared・スカラー除算は core に残し、provider は導入しない。標準 Complex の左スカラー倍は個別実装、任意の C は scaled(c) を基本とする。正規化期待値の純実分母を不要に二乗しない処理も維持する。これらの実装移行は完了し、追加能力は Conjugate・RealPart・ImaginaryUnit・Divide、実係数の埋め込みは From<R> で提供する。拡張 trait は qmb_normalize::{Norm, Normalize, NormalizedExpectation, NormalizedExpectationIn} とする。core に正規化専用 module・エラーは置かない。詳細は[正規化 API の契約](design/primitive-expression.md#41-norm正規化の-api-と-feature)に記録する。
 
@@ -193,8 +193,6 @@ LocalStructure 廃止後は、演算子式に O・C、状態式に S・O・C を
 
 ### 10.2. Grading の情報保持と API
 
-2026-10-26の判断に従い、後続の fermion 系の実装に合わせて具体化する。
+2026-10-29 に共通機構を実装した。`HilbertSpace<I>` が `TensorKind` と順序を保持し、primitive が `HomogeneousParity` / `ParityOperator` を提供する。共通の作用評価では Act ごとの選択済み空間に従って P を挿入する。演算子の intrinsic な基底展開と通常表現による trace は private な走査型を分ける。export / normalize は core の共通 API に接続する。
 
-Tensor の積の種類と状態・演算子成分の parity を区別し、どの情報を空間・primitive・合成則が担うかを、既存の graded 演算の数学的契約と具体的な実装要件を踏まえて決める。空間構築・幾何接続で Grading に必要な情報を渡す方法も、この時点で具体化する。
-
-検討時は[Hilbert 空間の設計](design/hilbert-space.md)、[複合式の数学的契約](design/composite-expression.md)、[空間と Index の契約](design/geometry.md#3-空間と-index)に従う。
+空・単因子の同一視後にも残る異種 tensor kind の混在は拒否する。幾何・Index に grading の責任は追加しない。構築 API・最小能力と breaking change は [複合式の共通評価と移行](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。Fermion / spin-one の製品実装や Operator / State 統合の完了を意味しない。

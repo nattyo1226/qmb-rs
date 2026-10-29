@@ -15,6 +15,16 @@ use std::{
 // operator implements Adjoint but deliberately has no Product or Identity.
 struct Ket(bool);
 struct Action;
+impl qmb_core::HomogeneousParity for Action {
+    fn parity(&self) -> qmb_core::Parity {
+        qmb_core::Parity::Even
+    }
+}
+impl qmb_core::ParityOperator for Action {
+    fn parity_operator() -> Self {
+        Self
+    }
+}
 impl Dimension for Ket {
     fn dim() -> Result<NonZeroUsize, DimensionOverflow> {
         Ok(NonZeroUsize::new(2).unwrap())

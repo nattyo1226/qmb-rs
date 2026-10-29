@@ -965,7 +965,7 @@ H = -J \sum_{\langle i,j\rangle}
 - 積和から和積への因数分解
 - 特定の簡約ルールのみを選択して適用する独立した式変形操作
 - source の自動保持、式の構造比較、および式表示 API
-- Graded tensor product・fermion の実装。対応する数学的契約は保持する
+- Fermion の製品実装。Ordinary / graded の共通機構は実装済みであり、[複合式の共通評価](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)に記録する
 - 保存・復元、評価結果のキャッシュ、並列評価・スレッド間共有
 - Spin-1/2 以外の builtin algebra、1D Chain 以外の Geometry、ML・tensor network などへの追加接続
 

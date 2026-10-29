@@ -57,7 +57,7 @@ where
     C: Clone + Zero + One + Conjugate<Output = C> + RealPart,
     C::Real: Float,
     S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
 {
     type Output = Result<C::Real, ExpressionError>;
     fn norm(&self) -> Self::Output {
@@ -70,7 +70,7 @@ where
     C: Clone + Zero + One + Conjugate<Output = C> + RealPart + From<C::Real>,
     C::Real: Float,
     S: Act<C, Operator = O, Term = S> + InnerProduct<C>,
-    O: Adjoint<C, Term = O>,
+    O: Adjoint<C, Term = O> + qmb_core::HomogeneousParity + qmb_core::ParityOperator,
 {
     fn normalized(&self) -> Result<Self, NormalizationError> {
         let denominator = self.inner_product(self)?;
