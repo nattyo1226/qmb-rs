@@ -181,6 +181,8 @@ Step 2 では、spin-half の `SzBasis` が状態 primitive の線型結合、`C
 
 `qmb-core` の root から Basis・BasisError・Coordinates を公開する。利用例は [basis_expansion.rs](../../examples/src/bin/basis_expansion.rs) に置く。検証の概要は第7節に記録する。
 
-## Graded 基底の実装（2026-10-29）
+## 9. Graded 基底の実装（2026-10-29）
 
-状態基底の tensor 自体には符号を加えず、元空間の kind を列挙・展開・座標へ保持する。演算子基底は因子順の配置積とし、`expand_in` / `coordinates_in` と明示空間版は intrinsic な整列項を使う。P string を含む通常行列を演算子基底の座標として返さない。展開結果は元の空間へ束縛した配置積として再構築し、再展開でも作用と座標を保つ。詳細は [0.2.0 移行案内](../plans/v2/tensor-products-migration.md)。
+状態基底の tensor 自体には符号を加えず、元空間の kind を列挙・展開・座標へ保持する。演算子基底は因子順の配置積とし、`expand_in` / `coordinates_in` と明示空間版は intrinsic な整列項を使う。P string を含む通常行列を演算子基底の座標として返さない。展開結果は元の空間へ束縛した配置積として再構築し、再展開でも作用と座標を保つ。例えば第二因子の消滅演算子 `c_1` は、intrinsic な基底 `I ⊗g a` の係数が1となり、状態基底上の通常行列は `P ⊗ a` となる。通常表現の配置積 `P_0 a_1` として再構築すると P を二重に含むため、演算子の座標には用いない。`basis_operators` は因子順の配置積を列挙し、局所 Product の評価や全行列を必要としない。
+
+空の基底 `{1}`、右端が最速の mixed-radix、非正規直交な状態基底の既存契約を維持する。追加の trait bound は[共通評価と移行](composite-expression.md#122-共通-api-と最小能力)、intrinsic / 通常表現の区別は[内部表現](composite-expression.md#124-intrinsic-な項と通常表現)を参照。

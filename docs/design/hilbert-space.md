@@ -1,6 +1,6 @@
 # Hilbert 空間の再帰構造
 
-更新日: 2026-10-28
+更新日: 2026-10-29
 
 ## 1. 対象と合意した契約
 
@@ -167,15 +167,29 @@ Chain と、利用側が保持する Site 順の局所空間列・基本自由�
 | API | 結果・制約 |
 | --- | --- |
 | `HilbertSpace::factor(index)`・`unit()` | 既存 Index の Factor・空 Tensor を構築する。Index の Clone・Default は不要 |
-| `HilbertSpace::tensor(children)`・`tensor_product(&rhs)` | `I: Eq` で重複を検査し、`Result<Self, SpaceError>` を返す |
+| `tensor_with_kind(kind, children)`・`tensor(children)`・`tensor_g(children)` | 種類指定・ordinary・graded の構築。`I: Eq` で重複と混在を検査し、`Result<Self, SpaceError>` を返す |
+| `tensor_product_with_kind(kind, &rhs)`・`tensor_product(&rhs)`・`tensor_product_g(&rhs)` | 同じ三種類の二項版。因子順序は左、右の順 |
+| `kind()`・`effective_kind()` | 保持する Tensor 節点と、空・単因子の同一視後の `Option<TensorKind>` を返す |
 | `factor_index()`・`children()`・`indices()` | Factor の `Option<&I>`・直下の子・全葉の Index を借用する |
-| `is_compatible_with(&rhs)`・`is_subsystem_of(&ambient)` | `I: Eq` で葉の順序付き列を照合する |
+| `is_compatible_with(&rhs)`・`is_subsystem_of(&ambient)` | `I: Eq` で葉順・相対順序と有効な積の種類を照合する |
 | `dimension::<P>()` | `P: Dimension` の次元を因子ごとに適用し、`Result<usize, DimensionOverflow>` を返す |
 | `dimension_with(local_dimension)` | `NonZeroUsize` の局所次元を明示し、同じ Result を返す |
 | `clone()`・`shares_node_with(&rhs)` | Index を複製せず共有ハンドルを複製・比較する |
 
 `dimension::<S>()` は状態空間、`dimension::<O>()` は演算子空間の次元を返す。Operator は S を保持しないため、その作用先の次元 d が必要なら `dimension_with` に局所次元を指定する。空 Tensor の次元は1とし、P の局所次元が overflow する場合も空 Tensor の取得は成功する。空間比較・配置・束縛には primitive 型を登録せず、異なる primitive 型の式が同じ空間構造を利用できる。
 
-## Ordinary / graded の実装 API（2026-10-29）
+`TensorKind::{Ordinary, Graded}` は構築時に明示する。`tensor` / `tensor_product` は ordinary、`tensor_g` / `tensor_product_g` は graded の短縮形で、共通の種類指定 constructor へ委譲する。子や primitive から種類を推測せず、既存空間の kind を書き換える変換は提供しない。`kind()` は Factor なら `None`、Tensor なら空・単因子 wrapper も含めた保持値を返す。`unit()` は ordinary の空 Tensor として保持し、`tensor_g([])` と数学的に互換である。
 
-`tensor_with_kind` / `tensor` / `tensor_g` と同じ三種類の二項版を実装した。`kind()` は保持する節点、`effective_kind()` は単位・単因子の同一視後の種類を返す。各ハンドルの構造 metadata は葉数の区分と有効な種類だけを保持し、singleton wrapper は定数時間で継承する。親に非空の子が二つ以上あればその有効な子の種類を親と照合し、混在を `SpaceError::MixedTensorKinds` とする。保持する木を平坦化せず、互換性・複数葉の部分系判定でも有効な種類を照合する。API 一覧と移行は [0.2.0 移行案内](../plans/v2/tensor-products-migration.md)を参照。
+### 10.1. 有効な種類と混在の検証
+
+各ハンドルは葉数の区分（0 / 1 / 複数）と有効な種類だけを構造 metadata として保持する。局所次元・全基底・評価結果のキャッシュではない。空の子を意味上除いた個数を `m` とすると、次のように判定する。
+
+1. `m = 0` は単位空間で、有効な種類は `None`。
+2. `m = 1` は唯一の非空の子の有効な種類を継承する。外側の kind は互換性を変えない。
+3. `m >= 2` は親の kind が有効な種類となり、有効な種類を持つ子はすべて親と一致する必要がある。
+
+このため `T_o(E,T_g(a,b))` は許可し、`T_o(a,T_g(b,c))` は `SpaceError::MixedTensorKinds` で拒否する。0・1葉の有効な種類はなく、両規則の評価は一致する。複数葉の互換性・部分系判定と評価経路の選択には `effective_kind()` を用いる。
+
+木と子の grouping は保持し、単因子 wrapper は子の metadata を定数時間で継承する。単因子 wrapper の構築のたびに全子孫を走査せず、重複検証にも `I: Eq` 以外の Hash・Ord・Clone を追加要求しない。走査・破棄は反復処理を維持する。
+
+`SpaceError::MixedTensorKinds` の追加により、0.2.0 への移行時には外部の網羅的 match を更新する必要がある。複合式・基底・export は既存の `ExpressionError::Space`・`BasisError::Expression`・`ExportError` の経路でエラーを伝播する。

@@ -11,15 +11,14 @@
 
 | 機能 | 内容 |
 | --- | --- |
-| Graded tensor product | 共通機構を実装済み。API と breaking change は [移行案内](tensor-products-migration.md)を参照 |
+| Graded tensor product | 共通機構を実装済み。[共通評価と移行](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照 |
 | Fermion | Fermion の局所代数、反交換関係・符号規則への対応 |
 | Spin-one | Spin-1 の局所代数の提供 |
 
-各機能の詳細仕様、公開 API、crate 構成、および3機能間の実装順序は今後決定する。
+Fermion / spin-one の詳細仕様・公開 API・crate 構成と実装順序は、以下の実装案で検討する。Graded tensor product の実装済み契約は設計文書に記録する。
 
 ## 詳細検討
 
-- [Ordinary / graded tensor product の実装修正案](tensor-products.md)：現行実装との差分、情報の保持、評価・基底・export の変更、移行方針と受入条件。
 - [Fermion の局所 primitive 実装案](fermion-primitives.md)：単一 mode の局所規則・parity・基底・係数要件と、spinful への接続範囲。
 - [Spin-one の局所 primitive 実装案](spin-one-primitives.md)：三状態・全九次元演算子空間の表現、局所規則・完全基底・√2 の係数能力。
 

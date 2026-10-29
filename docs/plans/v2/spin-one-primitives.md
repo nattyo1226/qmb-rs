@@ -6,7 +6,7 @@
 
 ## 1. 対象と参照した実装
 
-spin-1 の三状態、全九次元演算子空間、局所規則と完全な基底を提供する案を記録する。現在の ordinary な core の契約で実装でき、graded tensor の追加を前提にしない。tensor 合成そのものは [別の計画](tensor-products.md)に委ねる。
+spin-1 の三状態、全九次元演算子空間、局所規則と完全な基底を提供する案を記録する。局所規則は core の既存契約で実装できる。Tensor 合成には[実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)を使う。
 
 | 参照 | 本案に適用する内容 |
 | --- | --- |
@@ -173,7 +173,7 @@ E の9要素は Hilbert–Schmidt 内積で正規直交であり、完全性は�
 
 既存 `LocalState` / `LocalOperator` の評価・期待値・随伴・trace・展開・座標取得・正規化を利用する。演算子の九つの基底係数と、状態基底に対する3×3作用行列を区別する。作用行列は既存 export の列ごとの作用で生成し、primitive 側に backend 固有の行列化を実装しない。
 
-ordinary な複合系では既存の状態・演算子型にそのまま配置できる。tensor 計画の統一された複合評価 API に接続するときは、全状態・演算子を even、P=I という trivial grading を明示実装し、磁気量子数 m の整数としての偶奇を fermion parity と解釈しない。spin-half・fermion と混在する型消去や一般 spin-S は本書の対象にしない。
+既存の状態・演算子型に配置し、ordinary / graded 共通の複合評価 API に接続する。Core の `HomogeneousParity`・`ParityOperator` として、全状態・演算子を even、P=I という trivial grading を明示実装し、磁気量子数 m の整数としての偶奇を fermion parity と解釈しない。spin-half・fermion と混在する型消去や一般 spin-S は本書の対象にしない。
 
 ## 7. Crate 構成と実装順序
 
@@ -184,7 +184,7 @@ ordinary な複合系では既存の状態・演算子型にそのまま配置�
 3. Product・Act・InnerProduct・Adjoint・Trace、状態 / 演算子の完全基底を実装する。
 4. 局所式・ordinary な複合式・既存 export / normalize の接続を検証し、利用例と公開 API 文書を追加する。
 
-標準の spin-half の型・数値 bound を変更しない。core の新しい grading trait の完成をこの順序に挟まない。専用 Heisenberg / bilinear-biquadratic モデル utility は primitive の動作確認例とは分けて設計する。
+標準の spin-half の型・数値 bound を変更しない。Grading trait は core の実装済み契約へ接続し、共通機構を再実装しない。専用 Heisenberg / bilinear-biquadratic モデル utility は primitive の動作確認例とは分けて設計する。
 
 ## 8. 受入条件と検証計画
 

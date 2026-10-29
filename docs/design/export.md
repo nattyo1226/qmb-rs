@@ -192,8 +192,8 @@ workspace と qmb-export の Cargo.toml に採用指定を反映し、依存を�
 
 実装は data・vector・matrix・error と backend ごとの非公開 module に分けた。内部の格納処理で密・疎の列生成を共有し、ndarray の直接・段階的な変換は共通の Vec 構築・配列変換を使う。qmb-core の実装や通常依存は変更していない。
 
-Partial trace、汎用的な写像の表現行列・表現係数、異なる入出力基底を扱う汎用機構、Graded・異種局所代数・追加 backend は既存の初期版の範囲に従って延期する。通常の状態・演算子の数値 export は、これらを前提条件にしない。
+Partial trace、汎用的な写像の表現行列・表現係数、異なる入出力基底を扱う汎用機構、異種局所代数・追加 backend は既存の初期版の範囲に従って延期する。Graded な入力への対応は第9節に記録する。通常の状態・演算子の数値 export は、これらを前提条件にしない。
 
-## Graded な入力（2026-10-29）
+## 9. Graded な入力（2026-10-29）
 
-共通の `Export` から ordinary / graded の両方を扱う。列ごとの core の作用・状態座標が符号を処理し、Vec / ndarray / sprs の storage には graded 専用処理を加えない。metadata が保持する HilbertSpace は kind・因子順を保存する。複合評価に必要な追加 bound は [0.2.0 移行案内](../plans/v2/tensor-products-migration.md)を参照。
+共通の `Export` から ordinary / graded の両方を扱う。列ごとの core の作用・状態座標が符号を処理し、Vec / ndarray / sprs の storage には graded 専用処理を加えない。metadata が保持する HilbertSpace は kind・因子順を保存する。複合状態・演算子の出力では O の `HomogeneousParity + ParityOperator` を従来の bound に追加し、局所式の出力には追加しない。vector 出力も共通の作用評価を使い、shape・格納順序は変えない。`qmb-normalize` も共通の内積・期待値を呼び、平方根・除算・零 norm の処理を共有する。能力の一覧と移行は[共通評価と移行](composite-expression.md#122-共通-api-と最小能力)、実装時の検証記録は[受入確認](composite-expression.md#13-ordinary--graded-の受入確認2026-10-29)を参照。

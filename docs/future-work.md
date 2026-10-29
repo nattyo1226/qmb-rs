@@ -11,7 +11,8 @@
 State・Operator・Structure・Space の管理方法は、所有・共有・関連付け、および Geometry と空間の依存関係を含めて再検討し、より適切な設計へリファクタリングする。具体的な設計と実施時期は未定である。[アーキテクチャの将来の必須課題](architecture.md#10-将来の必須課題)に経緯を記録する。
 
 - **Operator と State の整理**：操作的量子論の枠組みで両者を一般の演算子の特別な形として整理できるかを検討し、数学的対象と API の対応、共通化する範囲と別に維持する範囲を理由とともに記録する。公開型や評価器を統合するかどうかも検討対象とする。論点と完了条件は[アーキテクチャ第10.1節](architecture.md#101-operator-と-state-の整理)に定める。
-Grading の情報保持と共通評価 API は実装済み。空間が kind、primitive が parity / P、core が符号を担う。API と移行は [0.2.0 の移行案内](plans/v2/tensor-products-migration.md)に記録する。
+
+Grading の情報保持と共通評価 API は実装済み。空間が kind、primitive が parity / P、core が符号を担う。API と移行は[複合式の共通評価](design/composite-expression.md#12-ordinary--graded-の共通評価と移行)、局所契約は[grading 能力](design/local-structure.md#8-grading-の局所能力と移行)に記録する。
 
 係数型・数値能力の整理、LocalStructure の廃止、ordinary な HilbertSpace の責任分離、および純粋な Chain と外部局所空間列への移行、QuantumSystem と SpinHalf<C> の構築 API は実装済みである。
 

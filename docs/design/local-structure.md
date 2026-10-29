@@ -1,6 +1,6 @@
 # 局所 primitive の設計
 
-更新日: 2026-10-28
+更新日: 2026-10-29
 
 ## 1. 対象と検討状況
 
@@ -67,10 +67,46 @@ Index・Site・表示名・選択基底とその列挙順序・メモリ上の o
 
 ## 6. 後続事項
 
-一般の U→V の写像と State／Operator の型の統合は初期版実装後、Grading の情報保持・API は fermion 系の実装時に検討する。ordinary な空間の責任分離は実装済みである。Chain はサイト数と境界条件だけを保持し、外部の局所空間列を借用する構成へ2026-10-28に移行した。契約は[Chain の設計](geometry.md)に従う。異種代数の型消去や実行時の表現パラメータを今回の移行には追加しない。
+一般の U→V の写像と State／Operator の型の統合は後続課題とする。Grading の情報保持・API は実装済みであり、局所契約を第8節、共通評価を[複合式の設計](composite-expression.md#12-ordinary--graded-の共通評価と移行)に記録する。ordinary な空間の責任分離は実装済みである。Chain はサイト数と境界条件だけを保持し、外部の局所空間列を借用する構成へ2026-10-28に移行した。契約は[Chain の設計](geometry.md)に従う。異種代数の型消去や実行時の表現パラメータを今回の移行には追加しない。
 
 ## 7. LocalStructure 廃止の採用方針（2026-10-26）
 
 S・O の直接指定、primitive の span の次元と恒等元、追加の定義ラベルを設けない方針を採用し、実装へ反映した。API は第1〜2節、型と Index の責任分担は第4〜5節を現在の契約とする。旧 LocalStructure・Identity<C> と SpinHalf の定義用 marker は公開しない。
 
 局所規則は S・O・C と個別の能力実装で決まり、定義用の L は規則を切り替える引数ではなかった。次元と恒等元を primitive 側へ移したため、型の組だけを保持する LocalStructure や空間側の定義ラベルは不要とした。Act の関連型から保持型の O を導く構成は、保持・遅延構築に評価能力を要求するため採用しない。全能力をまとめた StatePrimitive・OperatorPrimitive trait、必須の FactorLayout 層、実行時の Definition／provider も導入しない。
+
+## 8. Grading の局所能力と移行
+
+`qmb_core::ops` と crate root から、係数型に依存しない次の能力を公開する。
+
+```rust,ignore
+enum Parity { Even, Odd }
+trait HomogeneousParity {
+    fn parity(&self) -> Parity;
+}
+trait ParityOperator: Sized {
+    fn parity_operator() -> Self;
+}
+```
+
+Graded な局所代数の S・O は homogeneous な primitive とし、両方が `HomogeneousParity` を提供する。混合 parity は `LocalState` / `LocalOperator` の和で表し、混合した式に単一の parity を割り当てない。未対応を暗黙に even とする blanket impl は提供しない。
+
+O は `ParityOperator` で局所 parity 演算子 P 自身を primitive の値として返す。Identity と同様に選択基底の要素である必要はなく、例えば基底展開で `P = I - 2n` と表せる。線型従属な P の値を追加しても span の次元は変わらない。
+
+契約は `P† = P`、`P² = I`、`Pψ = (-1)^p(ψ) ψ`、`POP = (-1)^p(O) O` とする。Identity と P は even、随伴は parity を保存し、局所 Product / Act の非零な出力項の parity は入力の和 modulo 2 と一致する。状態の even・odd 部分は内積で直交する。局所基底の primitive も同じ契約に従う。これらの法則は具体的代数の実装・テストで保証し、core は任意の実装について実行時に自動証明しない。
+
+Ordinary 専用の独自代数も、複合評価の共通 API を利用する場合は必要な grading trait を明示実装する。自明な grading を採る代数では全状態・演算子を even、P を I とする。
+
+```rust,ignore
+impl HomogeneousParity for MyState {
+    fn parity(&self) -> Parity { Parity::Even }
+}
+impl HomogeneousParity for MyOperator {
+    fn parity(&self) -> Parity { Parity::Even }
+}
+impl ParityOperator for MyOperator {
+    fn parity_operator() -> Self { Self::identity() }
+}
+```
+
+Spin-half はこの自明な grading を明示実装する。既存モデルの空間は ordinary を維持し、graded 空間でも同じ数値結果となる。局所だけで完結する評価や、構築・配置・束縛には grading 能力を一律に要求しない。具体的な操作の bound は[複合式の設計](composite-expression.md#12-ordinary--graded-の共通評価と移行)を参照。

@@ -6,7 +6,7 @@
 
 ## 1. 対象と既存実装との関係
 
-単一 fermion mode の二次元占有空間、その上の全演算子代数、および局所基底を実装する案を記録する。局所の積・作用・内積・随伴・通常 trace・基底展開は、現在の `qmb-core` の能力だけで実装・検証できる。因子間の符号、空間の種類、Jordan–Wigner string は [tensor product の計画](tensor-products.md)の担当とし、本書の局所規則に埋め込まない。
+単一 fermion mode の二次元占有空間、その上の全演算子代数、および局所基底を実装する案を記録する。局所の積・作用・内積・随伴・通常 trace・基底展開は、現在の `qmb-core` の能力だけで実装・検証できる。因子間の符号、空間の種類、Jordan–Wigner string は [実装済みの共通評価機構](../../design/composite-expression.md#12-ordinary--graded-の共通評価と移行)の担当とし、本書の局所規則に埋め込まない。
 
 spinful fermion は [要件 2.4 節](../../requirements.md)に従い二つの基本 mode の局所複合系とする。単一 mode の primitive を四状態の別 primitive へ置き換えることは、本案の前提にしない。単一 mode の完成と、graded 合成を使った spinful / 多 mode 系の完成を分けて判定する。
 
@@ -21,7 +21,7 @@ spinful fermion は [要件 2.4 節](../../requirements.md)に従い二つの基
 | [spin-half の lib.rs](../../../crates/qmb-spin-half/src/lib.rs)・[system.rs](../../../crates/qmb-core/src/system.rs) | `QuantumSystem` による係数型の選択、共通の局所式を返す入口 |
 | [要件](../../requirements.md) 2.4、5.5 節 | 単一 mode の CAR、homogeneous な primitive、P の規約、spinful の位相 |
 
-調査時点の workspace に fermion crate と core の parity trait は存在しない。spin-half は通常のスピン行列を提供するが、別因子の反交換関係を持つ fermion と同一の型にはしない。
+Workspace に fermion crate はまだ存在しない。Core の `Parity`・`HomogeneousParity`・`ParityOperator` は実装済みであり、[局所契約](../../design/local-structure.md#8-grading-の局所能力と移行)に従って接続する。spin-half は通常のスピン行列を提供するが、別因子の反交換関係を持つ fermion と同一の型にはしない。
 
 ## 2. 提案する crate と公開型
 
@@ -139,7 +139,7 @@ P を使う表現のために、第二の完全基底 `ParityBasis = [I, Parity,
 
 ## 7. Tensor 実装から独立した接続方針
 
-局所 primitive には係数に依存しない `is_odd() -> bool` を用意できる。core の parity trait が確定した段階で、この値に対応する trait を具体的代数側で実装する。係数型に依存しない P の取得能力には `FermionOperator::Parity` 自身を返す。仮称の core trait を本書の局所実装の前提にせず、同じ数学的契約を重複定義しない。
+局所 primitive の S・O は core の `HomogeneousParity` を実装する。O は `ParityOperator` も実装し、係数型に依存せず `FermionOperator::Parity` 自身を返す。局所の parity と P の契約は[局所能力](../../design/local-structure.md#8-grading-の局所能力と移行)を参照し、重複定義しない。
 
 多 mode の順序・交換符号・先行区間の P は core の合成機構に委ねる。`FermionOperator` に Index・Site・mode 番号・parity string・global ordering を保持しない。既存 ordinary tensor へ複数の a を配置するだけでは fermion の異なる mode の CAR は得られないため、その構成を fermion 多体系の利用例として案内しない。
 
@@ -150,7 +150,7 @@ spinful の内部順序は `(up,down)`、二重占有の位相は `|up down>=f_u
 1. 新 crate、enum、Dimension・Identity、型選択 marker と再公開を追加する。
 2. Product・Act・InnerProduct・Adjoint・Trace と二種類の演算子基底を実装する。
 3. core の局所式を通した評価・展開・再展開・座標取得、既存 export / normalize の単一 mode 利用を検証する。
-4. tensor 側の API が確定してから parity trait を接続し、多 mode / spinful の統合検証を別途行う。
+4. 実装済みの core の grading trait と graded 空間の構築 API に接続し、多 mode / spinful の統合検証を別途行う。
 
 局所実装の完成条件は以下とする。これらは実装後の検証計画であり、現時点の Rust テスト結果ではない。
 
@@ -168,7 +168,7 @@ spinful の内部順序は `(up,down)`、二重占有の位相は `|up down>=f_u
 
 推奨案は、a・a†・n・P・I を自然な primitive として保持する。四つの行列単位だけにすると規則は単純になるが、現行 `Identity` に必要な I は別途 primitive の値として追加する必要がある。物理的な名前と P の直接保持を優先し、五つの線型従属な primitive を採る。
 
-型・variant・基底の最終命名、第二基底の提供時期、core の parity trait の具体名は実装前に固定する。局所代数の規約・表・次元は tensor API の決定を待たず確定・検証できる。Hubbard / hopping モデル、spinful の構築 utility、粒子数 sector は本書の primitive 実装と別に計画する。
+型・variant・基底の最終命名と第二基底の提供時期は実装前に固定する。Core の grading trait と tensor API は実装済みであり、その契約に接続する。局所代数の規約・表・次元は多 mode の統合検証と独立に確定・検証できる。Hubbard / hopping モデル、spinful の構築 utility、粒子数 sector は本書の primitive 実装と別に計画する。
 
 ## 10. 本ドキュメント作成時の確認
 
