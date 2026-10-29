@@ -2,7 +2,7 @@
 use core::cell::Cell;
 use qmb_core::{
     ExpressionError as E, HilbertSpace as H, LocalOperator, LocalState, Operator, QuantumSystem,
-    SpaceError, State,
+    State,
 };
 
 struct System;
@@ -55,11 +55,10 @@ fn every_try_collection_stops_at_the_first_input_error() {
             &a,
             failing_at(position, &pulls, || System::state(()).at(&a).unwrap())
         ));
-        check!(State::<_, (), (), ()>::try_tensor(failing_at(
-            position,
-            &pulls,
-            || System::state(()).at(&a).unwrap()
-        )));
+        check!(State::<_, (), (), ()>::try_tensor_in(
+            &a,
+            failing_at(position, &pulls, || System::state(()).at(&a).unwrap())
+        ));
         check!(Operator::<_, (), ()>::try_sum(failing_at(
             position,
             &pulls,
@@ -74,11 +73,10 @@ fn every_try_collection_stops_at_the_first_input_error() {
             &a,
             failing_at(position, &pulls, || System::state(()).at(&a).unwrap())
         ));
-        check!(System::try_state_tensor(failing_at(
-            position,
-            &pulls,
-            || System::state(()).at(&a).unwrap()
-        )));
+        check!(System::try_tensor_in(
+            &a,
+            failing_at(position, &pulls, || System::state(()).at(&a).unwrap())
+        ));
         check!(System::try_operator_sum(failing_at(
             position,
             &pulls,
@@ -102,7 +100,7 @@ fn input_errors_precede_space_and_duplicate_errors() {
         Some(E::MissingIndex)
     );
     assert_eq!(
-        System::try_state_tensor([Ok(state()), Ok(state()), Err(E::MissingIndex)]).err(),
+        System::try_tensor_in(&a, [Ok(state()), Ok(state()), Err(E::MissingIndex)]).err(),
         Some(E::MissingIndex)
     );
     assert_eq!(
@@ -110,8 +108,8 @@ fn input_errors_precede_space_and_duplicate_errors() {
         Some(E::IncompatibleSpaces)
     );
     assert_eq!(
-        System::try_state_tensor([Ok(state()), Ok(state())]).err(),
-        Some(E::Space(SpaceError::DuplicateIndex))
+        System::try_tensor_in(&a, [Ok(state()), Ok(state())]).err(),
+        Some(E::IncompatibleSpaces)
     );
     let left = || Operator::<_, (), ()>::identity().bind(&a).unwrap();
     let right = || Operator::<_, (), ()>::identity().bind(&b).unwrap();

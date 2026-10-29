@@ -93,16 +93,8 @@ fn check_derived_state_operations<T: Real>() {
     let a = CompositeSpace::factor(11);
     let b = CompositeSpace::factor(7);
     let h = a.tensor_product(&b).unwrap();
-    let first = x
-        .at(&a)
-        .unwrap()
-        .tensor_product(&y.at(&b).unwrap())
-        .unwrap();
-    let second = y
-        .at(&a)
-        .unwrap()
-        .tensor_product(&z.at(&b).unwrap())
-        .unwrap();
+    let first = qmb_core::State::tensor_in(&h, [x.at(&a).unwrap(), y.at(&b).unwrap()]).unwrap();
+    let second = qmb_core::State::tensor_in(&h, [y.at(&a).unwrap(), z.at(&b).unwrap()]).unwrap();
     let ci = CompositeOperator::identity().bind(&h).unwrap();
     assert_complex(
         Complex::new(first.norm_squared().unwrap(), T::zero()),

@@ -2,7 +2,7 @@
 
 作成日: 2026-10-30
 更新日: 2026-10-30
-状態: 設計方針・公開 API を採用済み、未実装
+状態: 実装・検証済み
 
 ## 1. 採用する方針
 
@@ -12,13 +12,13 @@ Hilbert 空間を先に構築し、状態のテンソル構築には所属先の
 
 この文書は [関数名整理の N2・L2・L4](api-function-naming.md) に関連する設計変更を記録する。状態・QuantumSystem の tensor 構築については、同文書の旧来の `_g` / `_with` の改名案より本方針を優先する。Hilbert 空間自体の種類指定入口は引き続き必要であり、空間側の `tensor_g` を廃止する決定ではない。
 
-以下の公開 API・単位状態の扱い・エラー分類・移行範囲も採用済みとする（決定日: 2026-10-30）。実装時期は未定とする。
+以下の公開 API・単位状態の扱い・エラー分類・移行範囲も採用済みとする（決定日: 2026-10-30）。採用した範囲で実装・移行した。
 
-## 2. 現在の実装と変更理由
+## 2. 変更前の実装と変更理由
 
-現在の `State::tensor_with_kind` は、入力状態から新しい Hilbert 空間を構築し、式木の Tensor 節点にも同じ種類を保存する。[構築処理](../../../crates/qmb-core/src/expr/composite.rs#L340)と[節点の定義](../../../crates/qmb-core/src/expr/composite.rs#L104)を参照。このため、状態を合成する入口にも ordinary / graded の選択が現れる。
+変更前の `State::tensor_with_kind` は、入力状態から新しい Hilbert 空間を構築し、式木の Tensor 節点にも同じ種類を保存する。[構築処理と節点の定義](../../../crates/qmb-core/src/expr/composite.rs)の変更前の構造を参照。このため、状態を合成する入口にも ordinary / graded の選択が現れる。
 
-一方、演算子の作用評価は、[選択した空間の effective_kind](../../../crates/qmb-core/src/evaluate/composite.rs#L187) から種類を取得している。状態の Tensor 節点の種類は再構築で引き継がれるが、現在の作用の符号判定の情報源ではない。空間の選択を状態構築より前に移すことで、状態構築 API と式木に種類を重複して持たせる必要がなくなる。
+一方、演算子の作用評価は、[選択した空間の effective_kind](../../../crates/qmb-core/src/evaluate/composite.rs) から種類を取得している。変更前は状態の Tensor 節点の種類を再構築で引き継いでいたが、作用の符号判定の情報源ではなかった。空間の選択を状態構築より前に移すことで、状態構築 API と式木に種類を重複して持たせる必要がなくなる。
 
 演算子は既に空間を新設せず、束縛先や作用先の空間を使って解釈される。状態側も既存の所属空間を使って構築・解釈する流れに揃える。ただし未所属の State や、構築済みの状態を任意の空間へ読み替える機構は追加しない。
 
@@ -50,7 +50,7 @@ Hilbert 空間を先に構築し、状態のテンソル構築には所属先の
 
 二項専用の入口は設けず、二項も `State::tensor_in(&space, [left, right])` で構築する。状態側の `tensor_product*` は撤去する。
 
-以下は採用した API による変更後の使用イメージであり、現時点でコンパイルできるコードではない。空間構築と局所式の構築には現行 API を使用する。
+以下は実装済み API による使用イメージである。空間構築と局所式の構築には現行 API を使用する。
 
 ```rust
 use num_complex::Complex;
@@ -113,7 +113,7 @@ let psi = State::tensor_in(&h, [left, right])?;
 
 ## 6. 遅延作用の対象空間を保持する
 
-既存の [StateAction の構築](../../../crates/qmb-core/src/expr/composite.rs#L380) は、選択した対象空間を作用節点に保存する。この仕組みを維持する。
+既存の [StateAction の構築](../../../crates/qmb-core/src/expr/composite.rs) は、選択した対象空間を作用節点に保存する。この仕組みを維持する。
 
 ```rust
 // 採用した API による比較。s_a / s_b はそれぞれ a / b 上の状態。
@@ -144,7 +144,21 @@ HilbertSpace のテンソル構築・種類指定、Operator の束縛と作用�
 - 構築時の各不整合が `ExpressionError::IncompatibleSpaces` となること、および五つの公開入口と旧入口撤去の整合性。
 - 既存の内積・期待値・基底処理・normalize・export・モデル構築・examples の移行。
 
-この文書の追加時点では実装・実行テストは行っていない。既存の設計文書は現行実装の記録として維持し、実装の移行時に更新する。
+状態構築・式木・関連する呼び出しを移行し、設計文書の現行 API 表も更新した。通常演算・空間側の命名、数値能力、依存関係は変更していない。
+
+### 検証結果（2026-10-30）
+
+以下を `direnv exec .` の開発環境で実行し、成功した。
+
+- `cargo test --workspace --all-features --quiet`：既存の workspace テストと rustdoc テスト。
+- `cargo test -p qmb-core --test explicit_state_space --quiet`：追加した7件。五つの入口、共有ハンドル・grouping、各入力不整合、単位・単項・零状態、種類互換性、fallible 入力の停止、非 Clone 型と借用期間からの独立性。
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`。
+- `cargo fmt --all --check`。
+- `cargo check -p qmb-core -p qmb-spin-half -p qmb-fermion --no-default-features`：ホスト上での no-default-features ビルド。
+- `cargo run -p examples --bin tensor_products --quiet`：ordinary / graded の共通入口。
+- `cargo run -p examples --all-features --bin <name> --quiet`：`two_spins`・`basis_expansion`・`hubbard`・`spin_one`・`heisenberg`。符号・期待値・座標・正規化・密疎 export を含む利用例の検証。
+
+旧状態テンソル API と Tensor 節点の種類フィールドが Rust ソースから除去され、HilbertSpace の API と通常演算の名前が維持されていることも確認した。
 
 ## 関連文書
 

@@ -187,8 +187,8 @@ pub fn placed<T: Real>(op: Op, factor: &HilbertSpace<u8>) -> OperatorOf<T> {
     LocalOperator::primitive(op).at(factor).unwrap()
 }
 pub fn ket<T: Real>(bits: usize, factors: &[HilbertSpace<u8>], kind: TensorKind) -> Psi<T> {
-    State::tensor_with_kind(
-        kind,
+    State::tensor_in(
+        &HilbertSpace::tensor_with_kind(kind, factors.iter().cloned()).unwrap(),
         factors.iter().enumerate().map(|(i, f)| {
             LocalState::primitive(Ket(((bits >> (factors.len() - 1 - i)) & 1) as u8))
                 .at(f)

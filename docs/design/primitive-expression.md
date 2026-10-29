@@ -149,7 +149,7 @@ Primitive が線型独立でないため、同じ数学的対象に複数の式�
 
 ## 7. 式構築の入口と係数変換（2026-10-28）
 
-構築・集約の基本の入口は qmb_core::QuantumSystem とし、構築済みの式の操作・計算はインスタンスメソッドで行う。LocalStateOf・LocalOperatorOf・StateOf・OperatorOf は主に型注釈で使う。既存の core constructor は維持し、QuantumSystem の既定メソッドと同じ基礎処理へ委譲する。具体的な配置・合成の契約は[複合式の設計](composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
+構築・集約の基本の入口は qmb_core::QuantumSystem とし、構築済みの式の操作・計算はインスタンスメソッドで行う。LocalStateOf・LocalOperatorOf・StateOf・OperatorOf は主に型注釈で使う。状態のテンソル構築は既存空間を明示する tensor_in・try_tensor_in に移行し、QuantumSystem の同名既定メソッドも基礎 API へ委譲する。primitive の葉順の配置には product_state を使う。具体的な配置・合成の契約は[複合式の設計](composite-expression.md#11-quantumsystem-の構築入口と-fallible-集約2026-10-28)に記録する。
 
 局所・複合の4式型と LinearCombination の scaled は `impl Into<C>` を受け取り、入口で一度だけ C に変換する。式型は係数を保持するだけで数値能力・Clone を要求せず、LinearCombination は従来の `C: Clone + Mul<Output=C>` を維持する。変換元の Clone は不要で、空の LinearCombination でも変換は一度行う。C の精度は維持し、新たなキャストや精度変換は導入しない。Mul・scalar・term の引数は広げない。
 

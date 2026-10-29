@@ -370,10 +370,13 @@ fn composite_coordinates<T: Real>(
         let right = LocalState::primitive(Ket::Unit(AXES[n % 3]))
             .at(&factors[1])
             .unwrap();
-        left.tensor_product(&right)
-            .unwrap()
-            .inner_product(&evaluated)
-            .unwrap()
+        qmb_core::State::tensor_in(
+            &CompositeSpace::tensor(factors.iter().cloned()).unwrap(),
+            [left, right],
+        )
+        .unwrap()
+        .inner_product(&evaluated)
+        .unwrap()
     })
 }
 
@@ -401,12 +404,19 @@ fn check_three_level_composites<T: Real>() {
     );
     let left = local.at(a).unwrap();
     let right = S::primitive(Ket::Sum).at(b).unwrap();
-    let first = left.tensor_product(&right).unwrap();
-    let second = S::primitive(Ket::Unit(Axis::C))
-        .at(a)
-        .unwrap()
-        .tensor_product(&S::primitive(Ket::Phase).at(b).unwrap())
-        .unwrap();
+    let first = qmb_core::State::tensor_in(
+        &CompositeSpace::tensor(factors.iter().cloned()).unwrap(),
+        [left, right],
+    )
+    .unwrap();
+    let second = qmb_core::State::tensor_in(
+        &h,
+        [
+            S::primitive(Ket::Unit(Axis::C)).at(a).unwrap(),
+            S::primitive(Ket::Phase).at(b).unwrap(),
+        ],
+    )
+    .unwrap();
     let state = first.add(&second.scaled(c(-0.2, 0.3))).unwrap();
     let x = tensor_vector(Ket::Phase.coordinates::<T>(), Ket::Sum.coordinates());
     let y = tensor_vector(Ket::Unit(Axis::C).coordinates(), Ket::Phase.coordinates());
@@ -546,16 +556,8 @@ fn check_inner_products_and_squared_norms<T: Real>() {
     let a = CompositeSpace::factor(11);
     let b = CompositeSpace::factor(7);
     let h = a.tensor_product(&b).unwrap();
-    let first = x
-        .at(&a)
-        .unwrap()
-        .tensor_product(&y.at(&b).unwrap())
-        .unwrap();
-    let second = y
-        .at(&a)
-        .unwrap()
-        .tensor_product(&z.at(&b).unwrap())
-        .unwrap();
+    let first = qmb_core::State::tensor_in(&h, [x.at(&a).unwrap(), y.at(&b).unwrap()]).unwrap();
+    let second = qmb_core::State::tensor_in(&h, [y.at(&a).unwrap(), z.at(&b).unwrap()]).unwrap();
     assert_complex(
         Complex::new(first.norm_squared().unwrap(), T::zero()),
         c(4.0, 0.0),

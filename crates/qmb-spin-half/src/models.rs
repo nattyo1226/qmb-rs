@@ -95,7 +95,7 @@ impl<C> SpinHalf<C> {
         factors: &[HilbertSpace<I>],
         first: SpinHalfState,
     ) -> Result<StateOf<Self, I>, UtilityError> {
-        let _space = model_space(chain, factors)?;
+        let space = model_space(chain, factors)?;
         let mut states = Vec::new();
         for (i, site) in factors.iter().enumerate() {
             let orientation = if i % 2 == 0 {
@@ -110,6 +110,6 @@ impl<C> SpinHalf<C> {
                 states.push(Self::state(orientation).at(leaf)?);
             }
         }
-        Ok(State::tensor(states)?)
+        Ok(State::tensor_in(&space, states)?)
     }
 }

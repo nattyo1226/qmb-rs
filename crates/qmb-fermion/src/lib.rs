@@ -33,8 +33,9 @@
 //! type F = Fermion<Complex<f32>>;
 //! let up = HilbertSpace::factor("up");
 //! let down = HilbertSpace::factor("down");
-//! let double = F::state_tensor_g_at([(&up, S::Occupied), (&down, S::Occupied)])?;
-//! let up_only = F::state_tensor_g_at([(&up, S::Occupied), (&down, S::Empty)])?;
+//! let space = HilbertSpace::tensor_g([up.clone(), down.clone()])?;
+//! let double = F::product_state(&space, [S::Occupied, S::Occupied])?;
+//! let up_only = F::product_state(&space, [S::Occupied, S::Empty])?;
 //! let removed = double.act(&F::operator(O::Annihilate).at(&down)?)?;
 //! assert_eq!(up_only.inner_product(&removed)?, Complex::new(-1., 0.));
 //! # Ok::<(), qmb_core::ExpressionError>(())

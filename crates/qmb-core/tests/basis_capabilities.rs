@@ -192,12 +192,16 @@ fn cancellations_stay_sparse_through_tensor_expansion() {
     const FACTORS: usize = 12;
     type S = LocalState<Ket, Action, Counted>;
     let basis = CountingBasis::new();
-    let state = State::tensor((0..FACTORS).map(|index| {
-        let factor = HilbertSpace::factor(index);
-        let zero = S::primitive(Ket(false)).at(&factor).unwrap();
-        let one = S::primitive(Ket(true)).at(&factor).unwrap();
-        State::sum(&factor, [zero.clone(), zero.scaled(Counted(-1.0)), one]).unwrap()
-    }))
+    let space = HilbertSpace::tensor((0..FACTORS).map(HilbertSpace::factor)).unwrap();
+    let state = State::tensor_in(
+        &space,
+        (0..FACTORS).map(|index| {
+            let factor = HilbertSpace::factor(index);
+            let zero = S::primitive(Ket(false)).at(&factor).unwrap();
+            let one = S::primitive(Ket(true)).at(&factor).unwrap();
+            State::sum(&factor, [zero.clone(), zero.scaled(Counted(-1.0)), one]).unwrap()
+        }),
+    )
     .unwrap();
 
     // A generous bound catches exponential work without relying on wall time
@@ -242,12 +246,16 @@ fn underflowed_tensor_coefficients_do_not_keep_expanding() {
     const FACTORS: usize = 12;
     type S = LocalState<Ket, Action, Counted>;
     let basis = CountingBasis::new();
-    let state = State::tensor((0..FACTORS).map(|index| {
-        let factor = HilbertSpace::factor(index);
-        let small = S::primitive(Ket(false)).at(&factor).unwrap();
-        let one = S::primitive(Ket(true)).at(&factor).unwrap();
-        State::sum(&factor, [small.scaled(Counted(1e-200)), one]).unwrap()
-    }))
+    let space = HilbertSpace::tensor((0..FACTORS).map(HilbertSpace::factor)).unwrap();
+    let state = State::tensor_in(
+        &space,
+        (0..FACTORS).map(|index| {
+            let factor = HilbertSpace::factor(index);
+            let small = S::primitive(Ket(false)).at(&factor).unwrap();
+            let one = S::primitive(Ket(true)).at(&factor).unwrap();
+            State::sum(&factor, [small.scaled(Counted(1e-200)), one]).unwrap()
+        }),
+    )
     .unwrap();
     reset_multiplications();
     let coordinates = state.coordinates_in(&basis).unwrap();
@@ -342,11 +350,14 @@ fn placed_expansion_shares_nonclone_indices_and_does_not_enumerate_all_basis_ele
     let basis = CountingBasis::new();
     let a = HilbertSpace::factor(Index(11));
     let b = HilbertSpace::factor(Index(7));
-    let state = S::primitive(Ket(true))
-        .at(&a)
-        .unwrap()
-        .tensor_product(&S::primitive(Ket(false)).at(&b).unwrap())
-        .unwrap();
+    let state = State::tensor_in(
+        &a.tensor_product(&b).unwrap(),
+        [
+            S::primitive(Ket(true)).at(&a).unwrap(),
+            S::primitive(Ket(false)).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
     let op = qmb_core::LocalOperator::primitive(Action).at(&b).unwrap();
     let expanded = state.act(&op).unwrap().expand_in(&basis).unwrap();
     assert!(expanded.space().shares_node_with(state.space()));

@@ -203,16 +203,22 @@ fn check_composite<T: Real>() {
             (0..4).fold(c(0.0, 0.0), |sum, i| sum + expected[i][i]),
         );
     }
-    let ud = Ls::<T>::primitive(Ket::Up)
-        .at(&a)
-        .unwrap()
-        .tensor_product(&Ls::primitive(Ket::Down).at(&b).unwrap())
-        .unwrap();
-    let du = Ls::<T>::primitive(Ket::Down)
-        .at(&a)
-        .unwrap()
-        .tensor_product(&Ls::primitive(Ket::Up).at(&b).unwrap())
-        .unwrap();
+    let ud = State::tensor_in(
+        &h,
+        [
+            Ls::<T>::primitive(Ket::Up).at(&a).unwrap(),
+            Ls::primitive(Ket::Down).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
+    let du = State::tensor_in(
+        &h,
+        [
+            Ls::<T>::primitive(Ket::Down).at(&a).unwrap(),
+            Ls::primitive(Ket::Up).at(&b).unwrap(),
+        ],
+    )
+    .unwrap();
     let psi = ud
         .scaled(c(0.3, 0.7))
         .add(&du.scaled(c(-0.2, 0.6)))
@@ -340,7 +346,9 @@ fn sparse_expansion_survives_global_dimension_and_flat_index_overflow() {
     let factors: Vec<_> = (0..usize::BITS as usize + 1)
         .map(HilbertSpace::factor)
         .collect();
-    let state = State::tensor(
+    let space = HilbertSpace::tensor(factors.iter().cloned()).unwrap();
+    let state = State::tensor_in(
+        &space,
         factors
             .iter()
             .map(|f| Ls::<f64>::primitive(Ket::Down).at(f).unwrap()),
@@ -415,7 +423,7 @@ fn deep_expansion_and_destruction_fit_a_small_stack() {
             let placed = state.at(leaf).unwrap();
             let mut placed = placed;
             for _ in 0..20_000 {
-                placed = State::tensor([placed]).unwrap();
+                placed = State::tensor_in(&space, [State::unit(), placed]).unwrap();
             }
             let expanded = placed.expand_in(&SzBasis).unwrap();
             assert_eq!(expanded.coordinates_in(&SzBasis).unwrap().len(), 1);

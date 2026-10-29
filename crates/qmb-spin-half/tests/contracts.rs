@@ -808,11 +808,14 @@ fn dense_dot(a: &[Complex<f64>], b: &[Complex<f64>]) -> Complex<f64> {
 }
 
 fn global_basis<T: Real>(factors: &[GlobalSpace; 3], n: usize) -> GlobalState<T> {
-    qmb_core::State::tensor(factors.iter().enumerate().map(|(k, factor)| {
-        qmb_core::LocalState::primitive(if (n >> (2 - k)) & 1 == 0 { Up } else { Down })
-            .at(factor)
-            .unwrap()
-    }))
+    qmb_core::State::tensor_in(
+        &GlobalSpace::tensor(factors.iter().cloned()).unwrap(),
+        factors.iter().enumerate().map(|(k, factor)| {
+            qmb_core::LocalState::primitive(if (n >> (2 - k)) & 1 == 0 { Up } else { Down })
+                .at(factor)
+                .unwrap()
+        }),
+    )
     .unwrap()
 }
 fn global_vector<T: Real>(state: &GlobalState<T>, factors: &[GlobalSpace; 3]) -> Vec<Complex<f64>> {
@@ -850,8 +853,23 @@ fn check_composite_expressions<T: Real>() {
     let s0 = local.at(a).unwrap();
     let s1 = LS::primitive(Down).at(b).unwrap();
     let s2 = LS::primitive(Up).at(d).unwrap();
-    let left = s0.tensor_product(&s1).unwrap().tensor_product(&s2).unwrap();
-    let right = s0.tensor_product(&s1.tensor_product(&s2).unwrap()).unwrap();
+    let left = qmb_core::State::tensor_in(
+        &h,
+        [
+            qmb_core::State::tensor_in(&a.tensor_product(b).unwrap(), [s0.clone(), s1.clone()])
+                .unwrap(),
+            s2.clone(),
+        ],
+    )
+    .unwrap();
+    let right = qmb_core::State::tensor_in(
+        &h,
+        [
+            s0,
+            qmb_core::State::tensor_in(&b.tensor_product(d).unwrap(), [s1, s2]).unwrap(),
+        ],
+    )
+    .unwrap();
     assert!(left.space().is_compatible_with(right.space()));
     assert_dense_vector::<T>(
         &global_vector(&left, &factors),
@@ -962,34 +980,53 @@ fn check_subsystem_contractions<T: Real>() {
             .at(&factors[site])
             .unwrap()
     };
-    let ab = ket(0, Up)
-        .tensor_product(&ket(1, Up))
-        .unwrap()
-        .add(
-            &ket(0, Down)
-                .tensor_product(&ket(1, Down))
-                .unwrap()
-                .scaled(c(0.7, 0.2)),
+    let ab = qmb_core::State::tensor_in(
+        &GlobalSpace::tensor([factors[0].clone(), factors[1].clone()]).unwrap(),
+        [ket(0, Up), ket(1, Up)],
+    )
+    .unwrap()
+    .add(
+        &qmb_core::State::tensor_in(
+            &GlobalSpace::tensor([factors[0].clone(), factors[1].clone()]).unwrap(),
+            [ket(0, Down), ket(1, Down)],
         )
-        .unwrap();
+        .unwrap()
+        .scaled(c(0.7, 0.2)),
+    )
+    .unwrap();
     let last = ket(2, Up).add(&ket(2, Down).scaled(c(-0.3, 0.5))).unwrap();
-    let lhs = ab.tensor_product(&last).unwrap();
+    let lhs = qmb_core::State::tensor_in(
+        &GlobalSpace::tensor(factors.iter().cloned()).unwrap(),
+        [ab, last],
+    )
+    .unwrap();
     let first = ket(0, Up).add(&ket(0, Down).scaled(c(0.4, -0.6))).unwrap();
-    let bc = ket(1, Up)
-        .tensor_product(&ket(2, Up))
-        .unwrap()
-        .add(
-            &ket(1, Down)
-                .tensor_product(&ket(2, Down))
-                .unwrap()
-                .scaled(c(-0.2, 0.8)),
+    let bc = qmb_core::State::tensor_in(
+        &GlobalSpace::tensor([factors[1].clone(), factors[2].clone()]).unwrap(),
+        [ket(1, Up), ket(2, Up)],
+    )
+    .unwrap()
+    .add(
+        &qmb_core::State::tensor_in(
+            &GlobalSpace::tensor([factors[1].clone(), factors[2].clone()]).unwrap(),
+            [ket(1, Down), ket(2, Down)],
         )
-        .unwrap();
-    let rhs = qmb_core::State::tensor([
-        qmb_core::State::unit(),
-        first,
-        qmb_core::State::tensor([bc]).unwrap(),
-    ])
+        .unwrap()
+        .scaled(c(-0.2, 0.8)),
+    )
+    .unwrap();
+    let rhs = qmb_core::State::tensor_in(
+        lhs.space(),
+        [
+            qmb_core::State::unit(),
+            first,
+            qmb_core::State::tensor_in(
+                &GlobalSpace::tensor(factors[1..].iter().cloned()).unwrap(),
+                [bc],
+            )
+            .unwrap(),
+        ],
+    )
     .unwrap();
 
     // Literal coordinates independently describe (AB)C and A(BC). Both AB and
@@ -1054,7 +1091,11 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
         .map(qmb_core::HilbertSpace::<_>::factor)
         .collect();
     let space = qmb_core::HilbertSpace::tensor(factors.iter().cloned()).unwrap();
-    let state = Ket::tensor(factors.iter().map(|f| LS::primitive(Up).at(f).unwrap())).unwrap();
+    let state = Ket::tensor_in(
+        &space,
+        factors.iter().map(|f| LS::primitive(Up).at(f).unwrap()),
+    )
+    .unwrap();
     assert!(space.dimension::<State>().is_err());
     assert_eq!(
         identity.trace_in(&space).unwrap(),
@@ -1113,8 +1154,12 @@ fn spin_half_has_trivial_grading_in_both_tensor_kinds() {
     assert_eq!(Op::parity_operator(), I);
     let a = HilbertSpace::factor(0);
     let b = HilbertSpace::factor(1);
-    let ordinary = SpinHalf::<Complex<f64>>::state_tensor_at([(&a, Up), (&b, Down)]).unwrap();
-    let graded = SpinHalf::<Complex<f64>>::state_tensor_g_at([(&a, Up), (&b, Down)]).unwrap();
+    let ordinary =
+        SpinHalf::<Complex<f64>>::product_state(&a.tensor_product(&b).unwrap(), [Up, Down])
+            .unwrap();
+    let graded =
+        SpinHalf::<Complex<f64>>::product_state(&a.tensor_product_g(&b).unwrap(), [Up, Down])
+            .unwrap();
     for primitive in OPS {
         let op = SpinHalf::operator(primitive).at(&b).unwrap();
         let left = ordinary.act(&op).unwrap().coordinates_in(&SzBasis).unwrap();
