@@ -273,7 +273,7 @@ fn check_three_level_expressions<T: Real>() {
             let hs = matmul(a_adjoint, matrix(*b));
             assert_complex(
                 a_expr.hs_inner_product(&O::primitive(*b)),
-                (0..3).fold(c(0.0, 0.0), |sum, i| sum + hs[i][i]),
+                (0..3).fold(c::<T>(0.0, 0.0), |sum, i| sum + hs[i][i]) / c::<T>(3.0, 0.0),
             );
         }
     }
@@ -482,7 +482,7 @@ fn check_three_level_composites<T: Real>() {
             );
             assert_complex(
                 alpha.hs_inner_product_in(&beta, &h).unwrap(),
-                pair_trace(pair_multiply(pair_adjoint(am), bm)),
+                pair_trace(pair_multiply(pair_adjoint(am), bm)) / c(9.0, 0.0),
             );
         }
     }

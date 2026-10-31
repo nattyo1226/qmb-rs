@@ -1,10 +1,7 @@
 //! Occupation states, their inner products, and local operator actions.
 
-use crate::{
-    FermionOperator,
-    coefficient::{half, imaginary},
-};
-use core::ops::{Add, Div, Neg};
+use crate::{FermionOperator, coefficient::imaginary};
+use core::ops::Neg;
 use num_traits::{One, Zero};
 use qmb_core::{
     Act, Dimension, DimensionOverflow, HomogeneousParity, ImaginaryUnit, InnerProduct,
@@ -43,7 +40,7 @@ impl<C: Zero + One> InnerProduct<C> for FermionState {
 
 impl<C> Act<C> for FermionState
 where
-    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
+    C: One + Neg<Output = C> + ImaginaryUnit,
 {
     type Operator = FermionOperator;
     type Term = Self;
@@ -54,17 +51,15 @@ where
         use LinearCombination as Lc;
         match (*operator, *self) {
             (I, state) => Lc::primitive(state),
-            (Parity, Empty) => Lc::primitive(Empty),
             (Annihilate, Empty) | (Create, Occupied) | (Number, Empty) => Lc::zero(),
             (Annihilate, Occupied) => Lc::primitive(Empty),
             (Create, Empty) | (Number, Occupied) => Lc::primitive(Occupied),
-            (Parity, Occupied) => Lc::term(-C::one(), Occupied),
-            (MajoranaX, Empty) => Lc::term(half(), Occupied),
-            (MajoranaX, Occupied) => Lc::term(half(), Empty),
-            (MajoranaY, Empty) => Lc::term(imaginary(half()), Occupied),
-            (MajoranaY, Occupied) => Lc::term(imaginary(-half::<C>()), Empty),
-            (MajoranaZ, Empty) => Lc::term(half(), Empty),
-            (MajoranaZ, Occupied) => Lc::term(-half::<C>(), Occupied),
+            (Mx, Empty) => Lc::term(C::one(), Occupied),
+            (Mx, Occupied) => Lc::term(C::one(), Empty),
+            (My, Empty) => Lc::term(imaginary(C::one()), Occupied),
+            (My, Occupied) => Lc::term(imaginary(-C::one()), Empty),
+            (Mz, Empty) => Lc::term(C::one(), Empty),
+            (Mz, Occupied) => Lc::term(-C::one(), Occupied),
         }
     }
 }

@@ -103,11 +103,10 @@ fn check<T: Real>() {
         }
     }
     // Adjoint reverses products and conjugates genuinely complex coefficients.
-    let a =
-        op(O::SPlus).scaled(c::<T>(0.2, 0.7)) + op(O::Qyz).scaled(c::<T>(-0.4, 0.1)) + op(O::Q0);
+    let a = op(O::Sp).scaled(c::<T>(0.2, 0.7)) + op(O::Qyz).scaled(c::<T>(-0.4, 0.1)) + op(O::Q0);
     let reference = add(
         &add(
-            &scale(&matrix(O::SPlus), Complex::new(0.2, 0.7)),
+            &scale(&matrix(O::Sp), Complex::new(0.2, 0.7)),
             &scale(&matrix(O::Qyz), Complex::new(-0.4, 0.1)),
         ),
         &matrix(O::Q0),

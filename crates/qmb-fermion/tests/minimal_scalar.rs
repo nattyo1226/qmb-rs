@@ -215,12 +215,38 @@ fn independent_capabilities_do_not_inherit_majorana_bounds() {
     let _ = psi.act(&op.at(&a).unwrap()).unwrap();
 }
 
-// Models need coefficient cloning and negation, but no arithmetic or evaluator.
+// Shifted interaction construction needs fractions, but no Float or evaluator.
 #[derive(Clone)]
-struct ModelCoefficient(i32);
+struct ModelCoefficient(f64);
+impl core::ops::Add for ModelCoefficient {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl core::ops::Mul for ModelCoefficient {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        Self(self.0 * rhs.0)
+    }
+}
+
+impl core::ops::Div for ModelCoefficient {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self {
+        Self(self.0 / rhs.0)
+    }
+}
+impl num_traits::One for ModelCoefficient {
+    fn one() -> Self {
+        Self(1.0)
+    }
+}
+
 impl From<i32> for ModelCoefficient {
     fn from(n: i32) -> Self {
-        Self(n)
+        Self(f64::from(n))
     }
 }
 impl Neg for ModelCoefficient {
@@ -264,4 +290,36 @@ fn hubbard_construction_needs_neither_primitive_evaluation_nor_index_cloning() {
                 .shares_node_with(&sites[0])
         );
     }
+}
+
+#[test]
+fn standard_hubbard_keeps_construction_without_scalar_arithmetic() {
+    #[derive(Clone)]
+    struct Coefficient(i32);
+    impl From<i32> for Coefficient {
+        fn from(value: i32) -> Self {
+            Self(value)
+        }
+    }
+    impl Neg for Coefficient {
+        type Output = Self;
+        fn neg(self) -> Self {
+            Self(-self.0)
+        }
+    }
+    let sites = [0, 2].map(|i| {
+        HilbertSpace::tensor_all_g([
+            HilbertSpace::factor(Index(i)),
+            HilbertSpace::factor(Index(i + 1)),
+        ])
+        .unwrap()
+    });
+    let model = qmb_fermion::models::FermionModels::<Fermion<Coefficient>>::hubbard(
+        &Chain::new(2, Boundary::Open),
+        &sites,
+        1,
+        4,
+    )
+    .unwrap();
+    assert_eq!(model.space().unwrap().leaves().count(), 4);
 }

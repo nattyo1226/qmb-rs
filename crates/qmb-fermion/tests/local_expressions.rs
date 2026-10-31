@@ -102,12 +102,12 @@ fn check<T: Real>() {
     }
     // Complex coefficients ensure adjoints exercise scalar conjugation too.
     let a = op(O::Create).scaled(c::<T>(0.2, 0.7))
-        + op(O::Parity).scaled(c::<T>(-0.4, 0.1))
+        + op(O::Mz).scaled(c::<T>(-0.4, 0.1))
         + op(O::Number);
     let reference = add(
         &add(
             &scale(&matrix(O::Create), Complex::new(0.2, 0.7)),
-            &scale(&matrix(O::Parity), Complex::new(-0.4, 0.1)),
+            &scale(&matrix(O::Mz), Complex::new(-0.4, 0.1)),
         ),
         &matrix(O::Number),
     );

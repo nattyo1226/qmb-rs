@@ -1,6 +1,6 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-31
+更新日: 2026-11-01
 
 ## 1. 文書の位置づけ
 
@@ -56,15 +56,15 @@ qmb-export は既定 feature なしで Vec 出力を提供し、ndarray・sprs �
 
 ### 2.4. Fermion（実装済み）
 
-`qmb-fermion` は `no_std + alloc` で、二状態の単一 mode、I・a・a†・n・su(2) 規格化した MajoranaX/Y/Z・Parity の八つの primitive を提供する。状態基底は OccupationBasis、演算子基底は LadderBasis と MajoranaBasis とする。`Fermion<C>` は ExpressionFactory の型エイリアスとして共通の構築入口を使い、局所規則に Float・係数の Clone / Copy を要求しない。
+`qmb-fermion` は `no_std + alloc` で、二状態の単一 mode、I・a・a†・n・Mx・My・Mz の七つの primitive を提供する。状態基底は OccupationBasis、演算子基底は LadderBasis と MajoranaBasis とする。`Fermion<C>` は ExpressionFactory の型エイリアスとして共通の構築入口を使い、局所規則に Float・係数の Clone / Copy を要求しない。
 
-複数 mode の交換符号は primitive の parity と core の graded 評価に委ねる。モデル構築は `models::FermionModels<Fermion<C>>::hubbard`・`symmetric_hubbard` に、Chain と各 Site が `(up,down)` の2 mode を持つ graded 空間列を渡す。両モデルの係数 bound は `Clone + From<R> + Neg` だけであり、構築に局所 Product・Act を要求しない。規約・基底・検証記録は [Fermion の局所代数](design/local-structure.md#9-fermion-の局所代数)、モデル API は [Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)、利用例は [hubbard.rs](../examples/src/bin/hubbard.rs) に記録する。
+複数 mode の交換符号は primitive の parity と core の graded 評価に委ねる。モデル構築は `models::FermionModels<Fermion<C>>::hubbard`・`symmetric_hubbard` に、Chain と各 Site が `(up,down)` の2 mode を持つ graded 空間列を渡す。標準 Hubbard の係数 bound は `Clone + From<R> + Neg`、symmetric Hubbard はさらに `One + Add + Div` を要求する。後者は `(U/4) Mz_up Mz_down` によって物理的な結合定数を維持し、構築に局所 Product・Act を要求しない。規約・基底・検証記録は [Fermion の局所代数](design/local-structure.md#9-fermion-の局所代数)、モデル API は [Hubbard モデルの設計](design/geometry.md#6-fermion-の-hubbard-モデル)、利用例は [hubbard.rs](../examples/src/bin/hubbard.rs) に記録する。
 
 ### 2.5. Spin-one（実装済み）
 
-`qmb-spin-one` は三状態と I・スピン5値・四重極9値の計15演算子 primitive を提供し、状態空間3次元・演算子空間9次元を表す。状態基底は SzBasis、演算子基底は CartesianBasis / LadderBasis。同じ基底の primitive 同士の積はその基底内に閉じる。std を許可し、作用は `Complex<R>`・`R: Float`、他の局所規則は操作ごとの小さい bound とする。規則は直接の match で実装し、全要素 even・P=I で共通の ordinary / graded 評価へ接続する。規約・係数能力・検証は [Spin-one の局所代数](design/local-structure.md#10-spin-one-の局所代数)にまとめる。
+`qmb-spin-one` は三状態と I・スピン5値・四重極9値の計15演算子 primitive を提供し、状態空間3次元・演算子空間9次元を表す。状態基底は SzBasis、演算子基底は CartesianBasis / LadderBasis。同じ基底の primitive 同士の積はその基底内に閉じる。CartesianBasis は次元規格化した HS 内積に関して正規直交とする。std を許可し、積と作用は `Complex<R>`・`R: Float`、他の局所規則は操作ごとの小さい bound とする。規則は直接の match で実装し、全要素 even・P=I で共通の ordinary / graded 評価へ接続する。規約・係数能力・検証は [Spin-one の局所代数](design/local-structure.md#10-spin-one-の局所代数)にまとめる。
 
-`models::SpinOneModels<SpinOne<C>>::xyz`・`heisenberg`・`blbq` は Chain と外部の Site 空間列から束縛済み Hamiltonian を構築する。符号・全葉ペア・空 Site・空間共有の扱いは spin-half にそろえ、BLBQ は各葉ペアの内積を個別に二乗する。構築に必要な係数能力は `Clone + From<R> + Neg` だけで、局所評価は遅延する。[SpinOne のモデル構築](design/geometry.md#7-spinone-のモデル構築)に定義と検証を記録する。
+`models::SpinOneModels<SpinOne<C>>::xyz`・`heisenberg`・`blbq` は Chain と外部の Site 空間列から束縛済み Hamiltonian を構築する。符号・全葉ペア・空 Site・空間共有の扱いは spin-half にそろえ、BLBQ は各葉ペアの内積を個別に二乗する。構築に必要な係数能力は `Clone + From<R> + Neg + One + Add + Div` とし、2/3・4/9の補正によって結合定数の物理的な意味を維持する。局所評価は遅延する。[SpinOne のモデル構築](design/geometry.md#7-spinone-のモデル構築)に定義と検証を記録する。
 
 ## 3. Index・自由度・局所構造・空間
 
@@ -110,7 +110,7 @@ Rust の契約では、LocalStructure と追加の定義ラベルを廃止し、
 
 Core の共通の式木は、加算・scalar multiplication・zero と、積・作用・随伴などの構築を提供する。局所式は `LocalState<S, O, C>`・`LocalOperator<O, C>` のハンドルが `Arc` で節点 enum を共有し、和・スカラー倍・積・作用・随伴の variant は対応する共通パーツを保持する。zero は空の和で表す。同じ式ハンドルを再利用した箇所で不変な部分式を共有し、別々に構築した同形の式を自動検出して共有する機構は設けない。
 
-必要な評価時に線型性・半双線型性・共役線型性を用いて primitive の規則へ委譲し、構築時には式全体を展開しない。状態式の `act` は `Act` 節点による遅延した作用を構築し、`evaluate` は基底を指定せず局所規則に基づいて状態式を評価する。`ψ.act(&b).act(&a)` は `A(Bψ)` を表す。Norm、正規化、期待値、正規化期待値、commutator、Hilbert–Schmidt 内積などは共通機構から導出する。bra 型は初期版では導入せず、braket は内積で計算する。
+必要な評価時に線型性・半双線型性・共役線型性を用いて primitive の規則へ委譲し、構築時には式全体を展開しない。状態式の `act` は `Act` 節点による遅延した作用を構築し、`evaluate` は基底を指定せず局所規則に基づいて状態式を評価する。`ψ.act(&b).act(&a)` は `A(Bψ)` を表す。Norm、正規化、期待値、正規化期待値、commutator、Hilbert–Schmidt 内積などは共通機構から導出する。HS 内積は `Tr(A†B)/D` とし、通常 trace の非正規化は維持する。bra 型は初期版では導入せず、braket は内積で計算する。
 
 評価器は状態評価・演算子の作用・演算子項の走査を分担し、必要な範囲を処理する。評価と、最後の所有者になった式節点の破棄は明示的な作業スタックで反復的に行う。式同士の二項演算子は所有値・借用値の4通りに対応し、所有ハンドルを移動、借用ハンドルは共有参照を複製する。名前付きメソッドは共有借用を基本とする。
 
@@ -168,7 +168,7 @@ Index は引き続き Eq だけで照合し、共有に Clone・再発行を要�
 
 2026-10-27に、partial trace と写像の表現行列・表現係数を future work とし、Step 5 の担当範囲と初期版の必須機能・検証項目から外した。基底処理と数値接続の実装は、これらの機能を前提条件にしない。
 
-初期版の標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,S+,S-`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,S+,S-,Sz}` とする。初期版から延期した fermion は第2.4節のとおり実装済みである。異種局所構造の混在・合成、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は引き続き後続とする。
+初期版の標準の状態 primitive・基底は `up,down`、演算子 primitive は `I,Sx,Sy,Sz,Sp,Sm`、演算子基底は `{I,Sx,Sy,Sz}` と `{I,Sp,Sm,Sz}` とする。初期版から延期した fermion は第2.4節のとおり実装済みである。異種局所構造の混在・合成、source の自動保持・式の構造比較・表示、保存・復元、個別の簡約ルール、キャッシュ、並列化、追加の ML・tensor network 接続は引き続き後続とする。
 
 完成条件は、Heisenberg chain と Neel 状態の代表シナリオ、独立な小規模行列との一致、基底展開・再展開と座標取得の一貫性、別の局所代数を独立した系で使う抽象化と非正規直交基底の検証、lazy 評価・共有、および実行可能な利用例と不正入力の検証とする。数値 export の API・backend・依存指定は[数値 export の設計](design/export.md)として実装済みである。後続へ延期した機能は[今後の課題](future-work.md)にまとめる。
 

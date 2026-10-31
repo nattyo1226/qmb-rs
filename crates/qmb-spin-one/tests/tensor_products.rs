@@ -62,6 +62,16 @@ fn basis<T: Real, B: Basis<O, Complex<T>>>(
         .collect::<Result<_, _>>()
         .unwrap();
     assert_eq!(operators.len(), 81);
+    for (i, lhs) in operators.iter().enumerate() {
+        let reference = kron(&matrix(elements[i / 9]), &matrix(elements[i % 9]));
+        let norm_squared = reference.iter().map(|z| z.norm_sqr()).sum::<f64>() / 9.0;
+        for (j, rhs) in operators.iter().enumerate() {
+            close::<T>(
+                to64(lhs.hs_inner_product(rhs).unwrap()),
+                if i == j { norm_squared } else { 0.0 }.into(),
+            );
+        }
+    }
     for (i, op) in operators.into_iter().enumerate() {
         let expected = kron(&matrix(elements[i / 9]), &matrix(elements[i % 9]));
         values::<T>(&exported(&op), &expected);
@@ -126,12 +136,7 @@ fn check<T: Real>() {
                 close::<T>(to64(placed.trace().unwrap()), trace(&expected));
             }
         }
-        let first = (local(O::SPlus)
-            .at(&a)
-            .unwrap()
-            .bind(&space)
-            .unwrap()
-            .clone()
+        let first = (local(O::Sp).at(&a).unwrap().bind(&space).unwrap().clone()
             + &local(O::Qyz).at(&b).unwrap().bind(&space).unwrap())
             .unwrap();
         let second = SpinOne::<Complex<T>>::operator_product_at([(&a, O::Qzx), (&b, O::Sy)])
@@ -142,7 +147,7 @@ fn check<T: Real>() {
             + &identity.scaled(c::<T>(0.2, -0.3)))
             .unwrap();
         let first_m = add(
-            &kron(&matrix(O::SPlus), &matrix(O::I)),
+            &kron(&matrix(O::Sp), &matrix(O::I)),
             &kron(&matrix(O::I), &matrix(O::Qyz)),
         );
         let second_m = kron(&matrix(O::Qzx), &matrix(O::Sy));

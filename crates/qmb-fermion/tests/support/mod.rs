@@ -5,15 +5,14 @@ use num_traits::{Float, FromPrimitive};
 use qmb_core::{LinearCombination, LocalOperator};
 use qmb_fermion::{Fermion, FermionOperator as O, FermionState as S, LadderBasis};
 
-pub const OPS: [O; 8] = [
+pub const OPS: [O; 7] = [
     O::I,
     O::Annihilate,
     O::Create,
     O::Number,
-    O::Parity,
-    O::MajoranaX,
-    O::MajoranaY,
-    O::MajoranaZ,
+    O::Mx,
+    O::My,
+    O::Mz,
 ];
 pub const STATES: [S; 2] = [S::Empty, S::Occupied];
 pub type Matrix = Vec<Complex<f64>>;
@@ -54,10 +53,9 @@ pub fn matrix(op: O) -> Matrix {
         O::Annihilate => vec![0.0.into(), 1.0.into(), 0.0.into(), 0.0.into()],
         O::Create => vec![0.0.into(), 0.0.into(), 1.0.into(), 0.0.into()],
         O::Number => vec![0.0.into(), 0.0.into(), 0.0.into(), 1.0.into()],
-        O::Parity => vec![1.0.into(), 0.0.into(), 0.0.into(), (-1.0).into()],
-        O::MajoranaX => vec![0.0.into(), 0.5.into(), 0.5.into(), 0.0.into()],
-        O::MajoranaY => vec![0.0.into(), -0.5 * i, 0.5 * i, 0.0.into()],
-        O::MajoranaZ => vec![0.5.into(), 0.0.into(), 0.0.into(), (-0.5).into()],
+        O::Mx => vec![0.0.into(), 1.0.into(), 1.0.into(), 0.0.into()],
+        O::My => vec![0.0.into(), -1.0 * i, 1.0 * i, 0.0.into()],
+        O::Mz => vec![1.0.into(), 0.0.into(), 0.0.into(), (-1.0).into()],
     }
 }
 pub fn add(a: &[Complex<f64>], b: &[Complex<f64>]) -> Matrix {

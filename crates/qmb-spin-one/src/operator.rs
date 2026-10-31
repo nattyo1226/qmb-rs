@@ -1,510 +1,658 @@
 //! Spin-1 dipoles, quadrupoles, and direct multiplication rules.
 
-use crate::coefficient::{
-    four_thirds, half, imaginary, sixth, third, three_halves, two, two_thirds,
-};
-use core::ops::{Add, Div, Neg};
-use num_traits::{One, Zero};
+use crate::coefficient::{four, spin_scale, sqrt_two, three, two};
+use num_complex::Complex;
+use num_traits::{Float, One, Zero};
 use qmb_core::{
-    Adjoint, Dimension, DimensionOverflow, Identity, ImaginaryUnit, LinearCombination, Product,
-    Trace,
+    Adjoint, Dimension, DimensionOverflow, Identity, LinearCombination, Product, Trace,
 };
 
 /// Fifteen primitives spanning the nine-dimensional spin-1 operator space.
 ///
-/// With `hbar = 1`, `SPlus = Sx + i Sy` and `SMinus = Sx - i Sy`.
-/// The quadrupoles have no additional normalization or spherical-tensor phases.
+/// Cartesian components are `S = c J`, with physical spin `J` and `c = sqrt(3/2)`.
+/// The nine Hermitian elements have `Tr(A† A)/3 = 1`.
+/// `Sp = Sx + i Sy`, `Sm = Sx - i Sy`; no spherical-tensor phases are applied.
 /// Primitive equality compares variants, not operator values after expansion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SpinOneOperator {
     /// The identity.
     I,
-    /// The x component of spin.
+    /// The normalized x component `sqrt(3/2) Jx`.
     Sx,
-    /// The y component of spin.
+    /// The normalized y component `sqrt(3/2) Jy`.
     Sy,
-    /// The z component, with eigenvalues `1, 0, -1`.
+    /// The normalized z component, with eigenvalues `sqrt(3/2), 0, -sqrt(3/2)`.
     Sz,
     /// The raising operator `Sx + i Sy`.
-    SPlus,
+    Sp,
     /// The lowering operator `Sx - i Sy`.
-    SMinus,
-    /// The Cartesian quadrupole `Sx² - Sy²`.
+    Sm,
+    /// The Cartesian quadrupole `(Sx² - Sy²)/c`.
     Dxy,
-    /// The traceless diagonal quadrupole `3 Sz² - 2 I`.
+    /// The traceless diagonal quadrupole `sqrt(2) (Sz² - I)`.
     Q0,
-    /// The anticommutator `Sx Sy + Sy Sx`.
+    /// The normalized quadrupole `{Sx,Sy}/c`.
     Qxy,
-    /// The anticommutator `Sy Sz + Sz Sy`.
+    /// The normalized quadrupole `{Sy,Sz}/c`.
     Qyz,
-    /// The anticommutator `Sz Sx + Sx Sz`.
+    /// The normalized quadrupole `{Sz,Sx}/c`.
     Qzx,
-    /// The quadrupole `{Sz, SPlus} = Qzx + i Qyz`.
-    Q1Plus,
-    /// The quadrupole `{Sz, SMinus} = Qzx - i Qyz`.
-    Q1Minus,
-    /// The double raising operator `SPlus² = Dxy + i Qxy`.
-    Q2Plus,
-    /// The double lowering operator `SMinus² = Dxy - i Qxy`.
-    Q2Minus,
+    /// The quadrupole `{Sz, Sp}/c = Qzx + i Qyz`.
+    Q1p,
+    /// The quadrupole `{Sz, Sm}/c = Qzx - i Qyz`.
+    Q1m,
+    /// The double raising operator `Sp²/c = Dxy + i Qxy`.
+    Q2p,
+    /// The double lowering operator `Sm²/c = Dxy - i Qxy`.
+    Q2m,
 }
 
-impl<C> Product<C> for SpinOneOperator
-where
-    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
-{
+impl<R: Float> Product<Complex<R>> for SpinOneOperator {
     type Term = Self;
-    fn product(&self, rhs: &Self) -> LinearCombination<Self, C> {
+    fn product(&self, rhs: &Self) -> LinearCombination<Self, Complex<R>> {
         use LinearCombination as Lc;
         use SpinOneOperator::*;
-        // Each branch emits only mathematically nonzero terms, in basis order.
-        // The match is exhaustive; coefficients are constructed directly in C.
+        let real = |value| Complex::new(value, R::zero());
+        let imaginary = |value| Complex::new(R::zero(), value);
+        // Direct rules: analytically zero terms are omitted; each result keeps basis order.
         match (*self, *rhs) {
             (I, op) | (op, I) => Lc::primitive(op),
             (Sx, Sx) | (Qyz, Qyz) => {
-                Lc::term(two_thirds(), I) + Lc::term(half(), Dxy) + Lc::term(-sixth::<C>(), Q0)
+                Lc::primitive(I)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
             }
-            (Sx, Sy) => Lc::term(imaginary(half()), Sz) + Lc::term(half(), Qxy),
-            (Sx, Sz) => Lc::term(imaginary(-half::<C>()), Sy) + Lc::term(half(), Qzx),
+            (Sx, Sy) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Sx, Sz) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qzx)
+            }
             (Sx, Dxy) | (Sy, Qxy) | (Qzx, Sz) => {
-                Lc::term(half(), Sx) + Lc::term(imaginary(-half::<C>()), Qyz)
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qyz)
             }
-            (Sx, Q0) => Lc::term(-half::<C>(), Sx) + Lc::term(imaginary(-three_halves::<C>()), Qyz),
-            (Sx, Qxy) | (Qyz, Sz) => Lc::term(half(), Sy) + Lc::term(imaginary(half()), Qzx),
-            (Sx, Qyz) => Lc::term(imaginary(half()), Dxy) + Lc::term(imaginary(half()), Q0),
-            (Sx, Qzx) | (Qyz, Sy) => Lc::term(half(), Sz) + Lc::term(imaginary(-half::<C>()), Qxy),
-            (Sx, SPlus) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(-half::<C>(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Sx, Q0) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sx)
+                    + Lc::term(
+                        imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()),
+                        Qyz,
+                    )
             }
-            (Sx, SMinus) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(half(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Sx, Qxy) | (Qyz, Sz) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Sx, Q1Plus) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(-half::<C>(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Sx, Qyz) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
             }
-            (Sx, Q1Minus) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(half(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Sx, Qzx) | (Qyz, Sy) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Sx, Q2Plus) | (Qzx, Q2Plus) | (SMinus, Dxy) | (Q1Minus, Dxy) => {
-                Lc::term(half(), Sx)
-                    + Lc::term(imaginary(half()), Sy)
-                    + Lc::term(imaginary(-half::<C>()), Qyz)
-                    + Lc::term(-half::<C>(), Qzx)
+            (Sx, Sp) => {
+                Lc::primitive(I)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Sx, Q2Minus) | (SPlus, Dxy) => {
-                Lc::term(half(), Sx)
-                    + Lc::term(imaginary(-half::<C>()), Sy)
-                    + Lc::term(imaginary(-half::<C>()), Qyz)
-                    + Lc::term(half(), Qzx)
+            (Sx, Sm) => {
+                Lc::primitive(I)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Sy, Sx) => Lc::term(imaginary(-half::<C>()), Sz) + Lc::term(half(), Qxy),
+            (Sx, Q1p) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Sx, Q1m) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Sx, Q2p) | (Qzx, Q2p) | (Sm, Dxy) | (Q1m, Dxy) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Sx, Q2m) | (Sp, Dxy) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Sy, Sx) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
+            }
             (Sy, Sy) | (Qzx, Qzx) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
+                Lc::primitive(I)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
             }
-            (Sy, Sz) | (Qyz, Dxy) => Lc::term(imaginary(half()), Sx) + Lc::term(half(), Qyz),
-            (Sy, Dxy) => Lc::term(-half::<C>(), Sy) + Lc::term(imaginary(-half::<C>()), Qzx),
-            (Sy, Q0) => Lc::term(-half::<C>(), Sy) + Lc::term(imaginary(three_halves()), Qzx),
-            (Sy, Qyz) | (Qzx, Sx) => Lc::term(half(), Sz) + Lc::term(imaginary(half()), Qxy),
-            (Sy, Qzx) => Lc::term(imaginary(half()), Dxy) + Lc::term(imaginary(-half::<C>()), Q0),
-            (Sy, SPlus) => {
-                Lc::term(imaginary(two_thirds()), I)
-                    + Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(-sixth::<C>()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Sy, Sz) | (Qyz, Dxy) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qyz)
             }
-            (Sy, SMinus) => {
-                Lc::term(imaginary(-two_thirds::<C>()), I)
-                    + Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(sixth()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Sy, Dxy) => {
+                Lc::term(real(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Sy, Q1Plus) => {
-                Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(-half::<C>()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Sy, Q0) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sy)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Qzx)
             }
-            (Sy, Q1Minus) => {
-                Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(-half::<C>()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Sy, Qyz) | (Qzx, Sx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Sy, Q2Plus) | (Qyz, Q2Plus) => {
-                Lc::term(imaginary(half()), Sx)
-                    + Lc::term(-half::<C>(), Sy)
-                    + Lc::term(half(), Qyz)
-                    + Lc::term(imaginary(-half::<C>()), Qzx)
+            (Sy, Qzx) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
             }
-            (Sy, Q2Minus) | (Q1Plus, Qxy) => {
-                Lc::term(imaginary(-half::<C>()), Sx)
-                    + Lc::term(-half::<C>(), Sy)
-                    + Lc::term(-half::<C>(), Qyz)
-                    + Lc::term(imaginary(-half::<C>()), Qzx)
+            (Sy, Sp) => {
+                Lc::term(imaginary(R::one()), I)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Sz, Sx) => Lc::term(imaginary(half()), Sy) + Lc::term(half(), Qzx),
-            (Sz, Sy) | (Dxy, Qyz) => Lc::term(imaginary(-half::<C>()), Sx) + Lc::term(half(), Qyz),
-            (Sz, Sz) | (Dxy, Dxy) | (Qxy, Qxy) => Lc::term(two_thirds(), I) + Lc::term(third(), Q0),
-            (Sz, Dxy) => Lc::term(imaginary(C::one()), Qxy),
-            (Sz, Q0) | (Q0, Sz) => Lc::primitive(Sz),
-            (Sz, Qxy) => Lc::term(imaginary(-C::one()), Dxy),
-            (Sz, Qyz) | (Qxy, Sx) => Lc::term(half(), Sy) + Lc::term(imaginary(-half::<C>()), Qzx),
+            (Sy, Sm) => {
+                Lc::term(imaginary(-R::one()), I)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Sy, Q1p) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Sy, Q1m) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Sy, Q2p) | (Qyz, Q2p) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Sy, Q2m) | (Q1p, Qxy) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Sz, Sx) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Sz, Sy) | (Dxy, Qyz) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qyz)
+            }
+            (Sz, Sz) | (Dxy, Dxy) | (Qxy, Qxy) => {
+                Lc::primitive(I) + Lc::term(real(sqrt_two::<R>() / two::<R>()), Q0)
+            }
+            (Sz, Dxy) => Lc::term(imaginary(spin_scale::<R>()), Qxy),
+            (Sz, Q0) | (Q0, Sz) => Lc::term(real(sqrt_two::<R>() / two::<R>()), Sz),
+            (Sz, Qxy) => Lc::term(imaginary(-spin_scale::<R>()), Dxy),
+            (Sz, Qyz) | (Qxy, Sx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qzx)
+            }
             (Sz, Qzx) | (Dxy, Sx) | (Qxy, Sy) => {
-                Lc::term(half(), Sx) + Lc::term(imaginary(half()), Qyz)
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qyz)
             }
-            (Sz, SPlus) | (Sz, Q1Plus) => Lc::term(half(), SPlus) + Lc::term(half(), Q1Plus),
-            (Sz, SMinus) => Lc::term(-half::<C>(), SMinus) + Lc::term(half(), Q1Minus),
-            (Sz, Q1Minus) => Lc::term(half(), SMinus) + Lc::term(-half::<C>(), Q1Minus),
-            (Sz, Q2Plus) | (Q0, Q2Plus) | (SPlus, SPlus) | (Q1Plus, SPlus) | (Q2Plus, Q0) => {
-                Lc::primitive(Q2Plus)
+            (Sz, Sp) | (Sz, Q1p) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sp)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Q1p)
             }
-            (Sz, Q2Minus) | (Q1Minus, SMinus) | (Q1Minus, Q1Minus) => Lc::term(-C::one(), Q2Minus),
-            (Dxy, Sy) => Lc::term(-half::<C>(), Sy) + Lc::term(imaginary(half()), Qzx),
-            (Dxy, Sz) => Lc::term(imaginary(-C::one()), Qxy),
-            (Dxy, Q0) | (Q0, Dxy) => Lc::primitive(Dxy),
-            (Dxy, Qxy) => Lc::term(imaginary(C::one()), Sz),
+            (Sz, Sm) => {
+                Lc::term(real(-spin_scale::<R>() / two::<R>()), Sm)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Q1m)
+            }
+            (Sz, Q1m) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sm)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Q1m)
+            }
+            (Sz, Q2p) | (Sp, Sp) | (Q1p, Sp) => Lc::term(real(spin_scale::<R>()), Q2p),
+            (Q0, Q2p) | (Q2p, Q0) => Lc::term(real(sqrt_two::<R>() / two::<R>()), Q2p),
+            (Sz, Q2m) | (Q1m, Sm) | (Q1m, Q1m) => Lc::term(real(-spin_scale::<R>()), Q2m),
+            (Dxy, Sy) => {
+                Lc::term(real(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Dxy, Sz) => Lc::term(imaginary(-spin_scale::<R>()), Qxy),
+            (Dxy, Q0) | (Q0, Dxy) => Lc::term(real(sqrt_two::<R>() / two::<R>()), Dxy),
+            (Dxy, Qxy) => Lc::term(imaginary(spin_scale::<R>()), Sz),
             (Dxy, Qzx) | (Qxy, Qyz) => {
-                Lc::term(imaginary(-half::<C>()), Sy) + Lc::term(-half::<C>(), Qzx)
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Dxy, SPlus) | (Dxy, Q1Plus) | (Q2Minus, Sx) | (Q2Minus, Qzx) => {
-                Lc::term(half(), Sx)
-                    + Lc::term(imaginary(-half::<C>()), Sy)
-                    + Lc::term(imaginary(half()), Qyz)
-                    + Lc::term(-half::<C>(), Qzx)
+            (Dxy, Sp) | (Dxy, Q1p) | (Q2m, Sx) | (Q2m, Qzx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Dxy, SMinus) | (Q2Plus, Sx) => {
-                Lc::term(half(), Sx)
-                    + Lc::term(imaginary(half()), Sy)
-                    + Lc::term(imaginary(half()), Qyz)
-                    + Lc::term(half(), Qzx)
+            (Dxy, Sm) | (Q2p, Sx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Dxy, Q1Minus) | (Q2Plus, Qzx) => {
-                Lc::term(-half::<C>(), Sx)
-                    + Lc::term(imaginary(-half::<C>()), Sy)
-                    + Lc::term(imaginary(-half::<C>()), Qyz)
-                    + Lc::term(-half::<C>(), Qzx)
+            (Dxy, Q1m) | (Q2p, Qzx) => {
+                Lc::term(real(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Dxy, Q2Plus) | (Q2Minus, Dxy) => {
-                Lc::term(two_thirds(), I) + Lc::term(-C::one(), Sz) + Lc::term(third(), Q0)
+            (Dxy, Q2p) | (Q2m, Dxy) => {
+                Lc::primitive(I)
+                    + Lc::term(real(-spin_scale::<R>()), Sz)
+                    + Lc::term(real(sqrt_two::<R>() / two::<R>()), Q0)
             }
-            (Dxy, Q2Minus) | (Q2Plus, Dxy) => {
-                Lc::term(two_thirds(), I) + Lc::primitive(Sz) + Lc::term(third(), Q0)
+            (Dxy, Q2m) | (Q2p, Dxy) => {
+                Lc::primitive(I)
+                    + Lc::term(real(spin_scale::<R>()), Sz)
+                    + Lc::term(real(sqrt_two::<R>() / two::<R>()), Q0)
             }
-            (Q0, Sx) => Lc::term(-half::<C>(), Sx) + Lc::term(imaginary(three_halves()), Qyz),
-            (Q0, Sy) => Lc::term(-half::<C>(), Sy) + Lc::term(imaginary(-three_halves::<C>()), Qzx),
-            (Q0, Q0) => Lc::term(two(), I) + Lc::term(-C::one(), Q0),
-            (Q0, Qxy) | (Qxy, Q0) => Lc::primitive(Qxy),
+            (Q0, Sx) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sx)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Qyz)
+            }
+            (Q0, Sy) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sy)
+                    + Lc::term(
+                        imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()),
+                        Qzx,
+                    )
+            }
+            (Q0, Q0) => Lc::primitive(I) + Lc::term(real(-sqrt_two::<R>() / two::<R>()), Q0),
+            (Q0, Qxy) | (Qxy, Q0) => Lc::term(real(sqrt_two::<R>() / two::<R>()), Qxy),
             (Q0, Qyz) => {
-                Lc::term(imaginary(-three_halves::<C>()), Sx) + Lc::term(-half::<C>(), Qyz)
+                Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Sx)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Qyz)
             }
-            (Q0, Qzx) => Lc::term(imaginary(three_halves()), Sy) + Lc::term(-half::<C>(), Qzx),
-            (Q0, SPlus) => Lc::term(-half::<C>(), SPlus) + Lc::term(three_halves(), Q1Plus),
-            (Q0, SMinus) => {
-                Lc::term(-half::<C>(), SMinus) + Lc::term(-three_halves::<C>(), Q1Minus)
+            (Q0, Qzx) => {
+                Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Sy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Qzx)
             }
-            (Q0, Q1Plus) => Lc::term(three_halves(), SPlus) + Lc::term(-half::<C>(), Q1Plus),
-            (Q0, Q1Minus) => {
-                Lc::term(-three_halves::<C>(), SMinus) + Lc::term(-half::<C>(), Q1Minus)
+            (Q0, Sp) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sp)
+                    + Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Q1p)
             }
-            (Q0, Q2Minus)
-            | (SMinus, SMinus)
-            | (SMinus, Q1Minus)
-            | (Q2Minus, Sz)
-            | (Q2Minus, Q0) => Lc::primitive(Q2Minus),
-            (Qxy, Sz) => Lc::term(imaginary(C::one()), Dxy),
-            (Qxy, Dxy) => Lc::term(imaginary(-C::one()), Sz),
-            (Qxy, Qzx) => Lc::term(imaginary(half()), Sx) + Lc::term(-half::<C>(), Qyz),
-            (Qxy, SPlus) | (Qxy, Q1Plus) => {
-                Lc::term(imaginary(half()), Sx)
-                    + Lc::term(half(), Sy)
-                    + Lc::term(-half::<C>(), Qyz)
-                    + Lc::term(imaginary(-half::<C>()), Qzx)
+            (Q0, Sm) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sm)
+                    + Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q1m)
             }
-            (Qxy, SMinus) | (Q2Plus, Qyz) => {
-                Lc::term(imaginary(-half::<C>()), Sx)
-                    + Lc::term(half(), Sy)
-                    + Lc::term(half(), Qyz)
-                    + Lc::term(imaginary(-half::<C>()), Qzx)
+            (Q0, Q1p) => {
+                Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Sp)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q1p)
             }
-            (Qxy, Q1Minus) | (Q2Plus, Sy) => {
-                Lc::term(imaginary(half()), Sx)
-                    + Lc::term(-half::<C>(), Sy)
-                    + Lc::term(-half::<C>(), Qyz)
-                    + Lc::term(imaginary(half()), Qzx)
+            (Q0, Q1m) => {
+                Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Sm)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q1m)
             }
-            (Qxy, Q2Plus) => {
-                Lc::term(imaginary(two_thirds()), I)
-                    + Lc::term(imaginary(-C::one()), Sz)
-                    + Lc::term(imaginary(third()), Q0)
+            (Q0, Q2m) | (Q2m, Q0) => Lc::term(real(sqrt_two::<R>() / two::<R>()), Q2m),
+            (Sm, Sm) | (Sm, Q1m) | (Q2m, Sz) => Lc::term(real(spin_scale::<R>()), Q2m),
+            (Qxy, Sz) => Lc::term(imaginary(spin_scale::<R>()), Dxy),
+            (Qxy, Dxy) => Lc::term(imaginary(-spin_scale::<R>()), Sz),
+            (Qxy, Qzx) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qyz)
             }
-            (Qxy, Q2Minus) => {
-                Lc::term(imaginary(-two_thirds::<C>()), I)
-                    + Lc::term(imaginary(-C::one()), Sz)
-                    + Lc::term(imaginary(-third::<C>()), Q0)
+            (Qxy, Sp) | (Qxy, Q1p) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Qxy, Sm) | (Q2p, Qyz) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Qxy, Q1m) | (Q2p, Sy) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Qxy, Q2p) => {
+                Lc::term(imaginary(R::one()), I)
+                    + Lc::term(imaginary(-spin_scale::<R>()), Sz)
+                    + Lc::term(imaginary(sqrt_two::<R>() / two::<R>()), Q0)
+            }
+            (Qxy, Q2m) => {
+                Lc::term(imaginary(-R::one()), I)
+                    + Lc::term(imaginary(-spin_scale::<R>()), Sz)
+                    + Lc::term(imaginary(-sqrt_two::<R>() / two::<R>()), Q0)
             }
             (Qyz, Sx) => {
-                Lc::term(imaginary(-half::<C>()), Dxy) + Lc::term(imaginary(-half::<C>()), Q0)
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
             }
-            (Qyz, Q0) => Lc::term(imaginary(three_halves()), Sx) + Lc::term(-half::<C>(), Qyz),
+            (Qyz, Q0) => {
+                Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Sx)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Qyz)
+            }
             (Qyz, Qxy) | (Qzx, Dxy) => {
-                Lc::term(imaginary(half()), Sy) + Lc::term(-half::<C>(), Qzx)
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Qyz, Qzx) => Lc::term(imaginary(-half::<C>()), Sz) + Lc::term(-half::<C>(), Qxy),
-            (Qyz, SPlus) => {
-                Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(-half::<C>()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Qyz, Qzx) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qyz, SMinus) => {
-                Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(-half::<C>()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Qyz, Sp) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qyz, Q1Plus) => {
-                Lc::term(imaginary(two_thirds()), I)
-                    + Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(-sixth::<C>()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Qyz, Sm) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qyz, Q1Minus) => {
-                Lc::term(imaginary(-two_thirds::<C>()), I)
-                    + Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(sixth()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Qyz, Q1p) => {
+                Lc::term(imaginary(R::one()), I)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qyz, Q2Minus) | (SPlus, Qxy) => {
-                Lc::term(imaginary(half()), Sx)
-                    + Lc::term(half(), Sy)
-                    + Lc::term(half(), Qyz)
-                    + Lc::term(imaginary(half()), Qzx)
+            (Qyz, Q1m) => {
+                Lc::term(imaginary(-R::one()), I)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qzx, Sy) => Lc::term(imaginary(-half::<C>()), Dxy) + Lc::term(imaginary(half()), Q0),
+            (Qyz, Q2m) | (Sp, Qxy) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Qzx, Sy) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+            }
             (Qzx, Q0) => {
-                Lc::term(imaginary(-three_halves::<C>()), Sy) + Lc::term(-half::<C>(), Qzx)
+                Lc::term(imaginary(-three::<R>() * sqrt_two::<R>() / four::<R>()), Sy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Qzx)
             }
-            (Qzx, Qxy) => Lc::term(imaginary(-half::<C>()), Sx) + Lc::term(-half::<C>(), Qyz),
-            (Qzx, Qyz) => Lc::term(imaginary(half()), Sz) + Lc::term(-half::<C>(), Qxy),
-            (Qzx, SPlus) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(-half::<C>(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Qzx, Qxy) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qyz)
             }
-            (Qzx, SMinus) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(half(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Qzx, Qyz) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qzx, Q1Plus) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(-half::<C>(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Qzx, Sp) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qzx, Q1Minus) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(half(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Qzx, Sm) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Qzx, Q2Minus) | (Q1Plus, Dxy) => {
-                Lc::term(-half::<C>(), Sx)
-                    + Lc::term(imaginary(half()), Sy)
-                    + Lc::term(imaginary(half()), Qyz)
-                    + Lc::term(-half::<C>(), Qzx)
+            (Qzx, Q1p) => {
+                Lc::primitive(I)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (SPlus, Sx) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(half(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Qzx, Q1m) => {
+                Lc::primitive(I)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (SPlus, Sy) => {
-                Lc::term(imaginary(two_thirds()), I)
-                    + Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(-sixth::<C>()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Qzx, Q2m) | (Q1p, Dxy) => {
+                Lc::term(real(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (SPlus, Sz) => Lc::term(-half::<C>(), SPlus) + Lc::term(half(), Q1Plus),
-            (SPlus, Q0) => Lc::term(-half::<C>(), SPlus) + Lc::term(-three_halves::<C>(), Q1Plus),
-            (SPlus, Qyz) => {
-                Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(half()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Sp, Sx) => {
+                Lc::primitive(I)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (SPlus, Qzx) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(half(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Sp, Sy) => {
+                Lc::term(imaginary(R::one()), I)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (SPlus, SMinus) | (Q1Plus, Q1Minus) => {
-                Lc::term(four_thirds(), I) + Lc::primitive(Sz) + Lc::term(-third::<C>(), Q0)
+            (Sp, Sz) => {
+                Lc::term(real(-spin_scale::<R>() / two::<R>()), Sp)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Q1p)
             }
-            (SPlus, Q1Plus) | (Q1Plus, Q1Plus) | (Q2Plus, Sz) => Lc::term(-C::one(), Q2Plus),
-            (SPlus, Q1Minus) | (Q1Plus, SMinus) => Lc::primitive(Sz) + Lc::primitive(Q0),
-            (SPlus, Q2Plus)
-            | (SMinus, Q2Minus)
-            | (Q1Plus, Q2Plus)
-            | (Q1Minus, Q2Minus)
-            | (Q2Plus, SPlus)
-            | (Q2Plus, Q1Plus)
-            | (Q2Plus, Q2Plus)
-            | (Q2Minus, SMinus)
-            | (Q2Minus, Q1Minus)
-            | (Q2Minus, Q2Minus) => Lc::zero(),
-            (SPlus, Q2Minus) => Lc::primitive(SMinus) + Lc::primitive(Q1Minus),
-            (SMinus, Sx) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(-half::<C>(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Sp, Q0) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sp)
+                    + Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q1p)
             }
-            (SMinus, Sy) => {
-                Lc::term(imaginary(-two_thirds::<C>()), I)
-                    + Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(sixth()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Sp, Qyz) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (SMinus, Sz) | (Q1Minus, Sz) => Lc::term(half(), SMinus) + Lc::term(half(), Q1Minus),
-            (SMinus, Q0) => Lc::term(-half::<C>(), SMinus) + Lc::term(three_halves(), Q1Minus),
-            (SMinus, Qxy) | (Q1Minus, Qxy) => {
-                Lc::term(imaginary(-half::<C>()), Sx)
-                    + Lc::term(half(), Sy)
-                    + Lc::term(-half::<C>(), Qyz)
-                    + Lc::term(imaginary(half()), Qzx)
+            (Sp, Qzx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (SMinus, Qyz) => {
-                Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(half()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Sp, Sm) | (Q1p, Q1m) => {
+                Lc::term(real(two::<R>()), I)
+                    + Lc::term(real(spin_scale::<R>()), Sz)
+                    + Lc::term(real(-sqrt_two::<R>() / two::<R>()), Q0)
             }
-            (SMinus, Qzx) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(-half::<C>(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Sp, Q1p) | (Q1p, Q1p) | (Q2p, Sz) => Lc::term(real(-spin_scale::<R>()), Q2p),
+            (Sp, Q1m) | (Q1p, Sm) => {
+                Lc::term(real(spin_scale::<R>()), Sz)
+                    + Lc::term(real(three::<R>() * sqrt_two::<R>() / two::<R>()), Q0)
             }
-            (SMinus, SPlus) | (Q1Minus, Q1Plus) => {
-                Lc::term(four_thirds(), I) + Lc::term(-C::one(), Sz) + Lc::term(-third::<C>(), Q0)
+            (Sp, Q2p)
+            | (Sm, Q2m)
+            | (Q1p, Q2p)
+            | (Q1m, Q2m)
+            | (Q2p, Sp)
+            | (Q2p, Q1p)
+            | (Q2p, Q2p)
+            | (Q2m, Sm)
+            | (Q2m, Q1m)
+            | (Q2m, Q2m) => Lc::zero(),
+            (Sp, Q2m) => {
+                Lc::term(real(spin_scale::<R>()), Sm) + Lc::term(real(spin_scale::<R>()), Q1m)
             }
-            (SMinus, Q1Plus) | (Q1Minus, SPlus) => Lc::primitive(Sz) + Lc::term(-C::one(), Q0),
-            (SMinus, Q2Plus) | (Q1Minus, Q2Plus) => {
-                Lc::primitive(SPlus) + Lc::term(-C::one(), Q1Plus)
+            (Sm, Sx) => {
+                Lc::primitive(I)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Q1Plus, Sx) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(half(), Dxy)
-                    + Lc::term(half(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Sm, Sy) => {
+                Lc::term(imaginary(-R::one()), I)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Q1Plus, Sy) => {
-                Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(half()), Q0)
-                    + Lc::term(half(), Qxy)
+            (Sm, Sz) | (Q1m, Sz) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sm)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Q1m)
             }
-            (Q1Plus, Sz) => Lc::term(half(), SPlus) + Lc::term(-half::<C>(), Q1Plus),
-            (Q1Plus, Q0) => Lc::term(-three_halves::<C>(), SPlus) + Lc::term(-half::<C>(), Q1Plus),
-            (Q1Plus, Qyz) => {
-                Lc::term(imaginary(two_thirds()), I)
-                    + Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(half()), Dxy)
-                    + Lc::term(imaginary(-sixth::<C>()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Sm, Q0) => {
+                Lc::term(real(-sqrt_two::<R>() / four::<R>()), Sm)
+                    + Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Q1m)
             }
-            (Q1Plus, Qzx) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(half(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(-half::<C>()), Qxy)
+            (Sm, Qxy) | (Q1m, Qxy) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qzx)
             }
-            (Q1Plus, Q2Minus) => Lc::term(-C::one(), SMinus) + Lc::term(-C::one(), Q1Minus),
-            (Q1Minus, Sx) => {
-                Lc::term(half(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(-half::<C>(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Sm, Qyz) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Q1Minus, Sy) => {
-                Lc::term(imaginary(-half::<C>()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(half()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Sm, Qzx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Q1Minus, Q0) => Lc::term(three_halves(), SMinus) + Lc::term(-half::<C>(), Q1Minus),
-            (Q1Minus, Qyz) => {
-                Lc::term(imaginary(-two_thirds::<C>()), I)
-                    + Lc::term(imaginary(half()), Sz)
-                    + Lc::term(imaginary(-half::<C>()), Dxy)
-                    + Lc::term(imaginary(sixth()), Q0)
-                    + Lc::term(-half::<C>(), Qxy)
+            (Sm, Sp) | (Q1m, Q1p) => {
+                Lc::term(real(two::<R>()), I)
+                    + Lc::term(real(-spin_scale::<R>()), Sz)
+                    + Lc::term(real(-sqrt_two::<R>() / two::<R>()), Q0)
             }
-            (Q1Minus, Qzx) => {
-                Lc::term(two_thirds(), I)
-                    + Lc::term(-half::<C>(), Sz)
-                    + Lc::term(-half::<C>(), Dxy)
-                    + Lc::term(-sixth::<C>(), Q0)
-                    + Lc::term(imaginary(half()), Qxy)
+            (Sm, Q1p) | (Q1m, Sp) => {
+                Lc::term(real(spin_scale::<R>()), Sz)
+                    + Lc::term(real(-three::<R>() * sqrt_two::<R>() / two::<R>()), Q0)
             }
-            (Q2Plus, Qxy) => {
-                Lc::term(imaginary(two_thirds()), I)
-                    + Lc::term(imaginary(C::one()), Sz)
-                    + Lc::term(imaginary(third()), Q0)
+            (Sm, Q2p) | (Q1m, Q2p) => {
+                Lc::term(real(spin_scale::<R>()), Sp) + Lc::term(real(-spin_scale::<R>()), Q1p)
             }
-            (Q2Plus, SMinus) => Lc::primitive(SPlus) + Lc::primitive(Q1Plus),
-            (Q2Plus, Q1Minus) => Lc::term(-C::one(), SPlus) + Lc::term(-C::one(), Q1Plus),
-            (Q2Plus, Q2Minus) => {
-                Lc::term(four_thirds(), I) + Lc::term(two(), Sz) + Lc::term(two_thirds(), Q0)
+            (Q1p, Sx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Q2Minus, Sy) | (Q2Minus, Qyz) => {
-                Lc::term(imaginary(-half::<C>()), Sx)
-                    + Lc::term(-half::<C>(), Sy)
-                    + Lc::term(half(), Qyz)
-                    + Lc::term(imaginary(half()), Qzx)
+            (Q1p, Sy) => {
+                Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qxy)
             }
-            (Q2Minus, Qxy) => {
-                Lc::term(imaginary(-two_thirds::<C>()), I)
-                    + Lc::term(imaginary(C::one()), Sz)
-                    + Lc::term(imaginary(-third::<C>()), Q0)
+            (Q1p, Sz) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sp)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Q1p)
             }
-            (Q2Minus, SPlus) | (Q2Minus, Q1Plus) => {
-                Lc::primitive(SMinus) + Lc::term(-C::one(), Q1Minus)
+            (Q1p, Q0) => {
+                Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Sp)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q1p)
             }
-            (Q2Minus, Q2Plus) => {
-                Lc::term(four_thirds(), I) + Lc::term(-two::<C>(), Sz) + Lc::term(two_thirds(), Q0)
+            (Q1p, Qyz) => {
+                Lc::term(imaginary(R::one()), I)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Q1p, Qzx) => {
+                Lc::primitive(I)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Q1p, Q2m) => {
+                Lc::term(real(-spin_scale::<R>()), Sm) + Lc::term(real(-spin_scale::<R>()), Q1m)
+            }
+            (Q1m, Sx) => {
+                Lc::term(real(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Q1m, Sy) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(three::<R>() * sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Q1m, Q0) => {
+                Lc::term(real(three::<R>() * sqrt_two::<R>() / four::<R>()), Sm)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q1m)
+            }
+            (Q1m, Qyz) => {
+                Lc::term(imaginary(-R::one()), I)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(imaginary(sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Q1m, Qzx) => {
+                Lc::primitive(I)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sz)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Dxy)
+                    + Lc::term(real(-sqrt_two::<R>() / four::<R>()), Q0)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qxy)
+            }
+            (Q2p, Qxy) => {
+                Lc::term(imaginary(R::one()), I)
+                    + Lc::term(imaginary(spin_scale::<R>()), Sz)
+                    + Lc::term(imaginary(sqrt_two::<R>() / two::<R>()), Q0)
+            }
+            (Q2p, Sm) => {
+                Lc::term(real(spin_scale::<R>()), Sp) + Lc::term(real(spin_scale::<R>()), Q1p)
+            }
+            (Q2p, Q1m) => {
+                Lc::term(real(-spin_scale::<R>()), Sp) + Lc::term(real(-spin_scale::<R>()), Q1p)
+            }
+            (Q2p, Q2m) => {
+                Lc::term(real(two::<R>()), I)
+                    + Lc::term(real(two::<R>() * spin_scale::<R>()), Sz)
+                    + Lc::term(real(sqrt_two::<R>()), Q0)
+            }
+            (Q2m, Sy) | (Q2m, Qyz) => {
+                Lc::term(imaginary(-spin_scale::<R>() / two::<R>()), Sx)
+                    + Lc::term(real(-spin_scale::<R>() / two::<R>()), Sy)
+                    + Lc::term(real(spin_scale::<R>() / two::<R>()), Qyz)
+                    + Lc::term(imaginary(spin_scale::<R>() / two::<R>()), Qzx)
+            }
+            (Q2m, Qxy) => {
+                Lc::term(imaginary(-R::one()), I)
+                    + Lc::term(imaginary(spin_scale::<R>()), Sz)
+                    + Lc::term(imaginary(-sqrt_two::<R>() / two::<R>()), Q0)
+            }
+            (Q2m, Sp) | (Q2m, Q1p) => {
+                Lc::term(real(spin_scale::<R>()), Sm) + Lc::term(real(-spin_scale::<R>()), Q1m)
+            }
+            (Q2m, Q2p) => {
+                Lc::term(real(two::<R>()), I)
+                    + Lc::term(real(-two::<R>() * spin_scale::<R>()), Sz)
+                    + Lc::term(real(sqrt_two::<R>()), Q0)
             }
         }
     }
@@ -515,12 +663,12 @@ impl<C: One> Adjoint<C> for SpinOneOperator {
     fn adjoint(&self) -> LinearCombination<Self, C> {
         use SpinOneOperator::*;
         LinearCombination::primitive(match self {
-            SPlus => SMinus,
-            SMinus => SPlus,
-            Q1Plus => Q1Minus,
-            Q1Minus => Q1Plus,
-            Q2Plus => Q2Minus,
-            Q2Minus => Q2Plus,
+            Sp => Sm,
+            Sm => Sp,
+            Q1p => Q1m,
+            Q1m => Q1p,
+            Q2p => Q2m,
+            Q2m => Q2p,
             I | Sx | Sy | Sz | Dxy | Q0 | Qxy | Qyz | Qzx => *self,
         })
     }

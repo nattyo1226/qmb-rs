@@ -2,7 +2,7 @@
 
 use crate::{
     SpinOneOperator,
-    coefficient::{sqrt_two, two},
+    coefficient::{spin_scale, sqrt_three, sqrt_two, two},
 };
 use num_complex::Complex;
 use num_traits::{Float, One, Zero};
@@ -34,18 +34,19 @@ impl<R: Float> Act<Complex<R>> for SpinOneState {
         use SpinOneState::*;
         let real = |value| Complex::new(value, R::zero());
         let imaginary = |value| Complex::new(R::zero(), value);
-        let half_root = || sqrt_two::<R>() / two::<R>();
+        let half_root = || sqrt_three::<R>() / two::<R>();
         match (*operator, *self) {
-            (I, state) | (Q0, state @ (Plus | Minus)) => Lc::primitive(state),
-            (Sz, Plus) | (Dxy, Minus) => Lc::primitive(Plus),
-            (Sz, Minus) => Lc::term(real(-R::one()), Minus),
-            (Dxy, Plus) => Lc::primitive(Minus),
-            (Q0, Zero) => Lc::term(real(-two::<R>()), Zero),
-            (SPlus, Zero) | (Q1Plus, Zero) => Lc::term(real(sqrt_two()), Plus),
-            (SPlus, Minus) | (SMinus, Plus) | (Q1Minus, Plus) => Lc::term(real(sqrt_two()), Zero),
-            (SMinus, Zero) => Lc::term(real(sqrt_two()), Minus),
-            (Q1Plus, Minus) => Lc::term(real(-sqrt_two::<R>()), Zero),
-            (Q1Minus, Zero) => Lc::term(real(-sqrt_two::<R>()), Minus),
+            (I, state) => Lc::primitive(state),
+            (Q0, state @ (Plus | Minus)) => Lc::term(real(sqrt_two::<R>() / two::<R>()), state),
+            (Sz, Plus) | (Dxy, Minus) => Lc::term(real(spin_scale()), Plus),
+            (Sz, Minus) => Lc::term(real(-spin_scale::<R>()), Minus),
+            (Dxy, Plus) => Lc::term(real(spin_scale()), Minus),
+            (Q0, Zero) => Lc::term(real(-sqrt_two::<R>()), Zero),
+            (Sp, Zero) | (Q1p, Zero) => Lc::term(real(sqrt_three()), Plus),
+            (Sp, Minus) | (Sm, Plus) | (Q1m, Plus) => Lc::term(real(sqrt_three()), Zero),
+            (Sm, Zero) => Lc::term(real(sqrt_three()), Minus),
+            (Q1p, Minus) => Lc::term(real(-sqrt_three::<R>()), Zero),
+            (Q1m, Zero) => Lc::term(real(-sqrt_three::<R>()), Minus),
             (Sx, Plus | Minus) | (Qzx, Plus) => Lc::term(real(half_root()), Zero),
             (Qzx, Minus) => Lc::term(real(-half_root()), Zero),
             (Sx, Zero) => Lc::term(real(half_root()), Plus) + Lc::term(real(half_root()), Minus),
@@ -58,15 +59,15 @@ impl<R: Float> Act<Complex<R>> for SpinOneState {
             (Qyz, Zero) => {
                 Lc::term(imaginary(-half_root()), Plus) + Lc::term(imaginary(-half_root()), Minus)
             }
-            (Qxy, Plus) => Lc::term(imaginary(R::one()), Minus),
-            (Qxy, Minus) => Lc::term(imaginary(-R::one()), Plus),
-            (Q2Plus, Minus) => Lc::term(real(two()), Plus),
-            (Q2Minus, Plus) => Lc::term(real(two()), Minus),
+            (Qxy, Plus) => Lc::term(imaginary(spin_scale()), Minus),
+            (Qxy, Minus) => Lc::term(imaginary(-spin_scale::<R>()), Plus),
+            (Q2p, Minus) => Lc::term(real(two::<R>() * spin_scale::<R>()), Plus),
+            (Q2m, Plus) => Lc::term(real(two::<R>() * spin_scale::<R>()), Minus),
             (Sz | Dxy | Qxy, Zero)
-            | (SPlus | Q1Plus, Plus)
-            | (SMinus | Q1Minus, Minus)
-            | (Q2Plus, Plus | Zero)
-            | (Q2Minus, Zero | Minus) => Lc::zero(),
+            | (Sp | Q1p, Plus)
+            | (Sm | Q1m, Minus)
+            | (Q2p, Plus | Zero)
+            | (Q2m, Zero | Minus) => Lc::zero(),
         }
     }
 }

@@ -89,7 +89,7 @@ Site 順序と別途存在する全空間の因子順序を区別する。接続
 
 既存の `ExpressionFactory::operator_product_at`・`try_operator_product` は任意長の配置・積を受け取れる。体数別の構築 API や geometry 固有の評価器は追加せず、列挙・接続に評価用の数値能力を要求しない。
 
-全 Pauli string の使用例は [pauli_strings.rs](../../examples/src/bin/pauli_strings.rs) に置く。1 Site が1 spin-1/2 の場合、通常の Iterator で大きさ `r = 0..=min(K,N)` の支持集合を一度ずつ選び、各集合へ `3^r` 通りの X/Y/Z を割り当てる。項数は `Σ(r=0..min(K,N)) binomial(N,r) × 3^r` となり、3 Site・高々2 Site では恒等項を含む37項になる。空の支持集合は全作用空間上の恒等項一つであり、`Consecutive<0>` とは別の契約である。Sx/Sy/Sz の各因子を2倍して Pauli の規格化に合わせ、全作用空間へ bind する。構築に必要な制約は `C: From<f64>, I: Eq, Group: AsRef<[usize]>` と Group の IntoIterator に留める。
+全 Pauli string の使用例は [pauli_strings.rs](../../examples/src/bin/pauli_strings.rs) に置く。1 Site が1 spin-1/2 の場合、通常の Iterator で大きさ `r = 0..=min(K,N)` の支持集合を一度ずつ選び、各集合へ `3^r` 通りの X/Y/Z を割り当てる。項数は `Σ(r=0..min(K,N)) binomial(N,r) × 3^r` となり、3 Site・高々2 Site では恒等項を含む37項になる。空の支持集合は全作用空間上の恒等項一つであり、`Consecutive<0>` とは別の契約である。Sx/Sy/Sz は Pauli 行列をそのまま表すため、追加の倍率を掛けずに全作用空間へ bind する。構築に必要な制約は `I: Eq, Group: AsRef<[usize]>` と Group の IntoIterator に留める。
 
 K は作用する Site 数であり、実際に作用する葉の数とは区別する。1 Site に m 個の spin-1/2 があれば、その Site 上の非恒等 Pauli string は `4^m - 1` 種類となる。複数葉への全割り当ては利用側の Iterator や独自 combiner で扱い、geometry の標準操作は増やさない。この全割り当ては現在の使用例には含めていない。
 
@@ -105,7 +105,7 @@ K は作用する Site 数であり、実際に作用する葉の数とは区別
 
 全関数は Result を返し、列長と全葉の Index 重複を、辺がなくても検証する。列長の不一致は `UtilityError::Mapping(MappingError::SiteCountMismatch { expected, actual })`、重複は `UtilityError::Space(SpaceError::DuplicateIndex)`、配置・束縛エラーは `UtilityError::Expression` とし、元エラーを source として保持する。Index には Eq のみを要求する。
 
-XYZ は `−Σ_(i,j) Σ_(a∈Li,b∈Lj) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)` を構築する。Li は Site i の葉集合であり、`NearestNeighbors` と `leaves_cartesian()` の全組み合わせを使う。Site 内の葉間結合は追加しない。Heisenberg は三結合を J に揃え、正の J を強磁性的とする。標準モデルは位置対応を暗黙に選ばない。
+XYZ は `−(1/4)Σ_(i,j) Σ_(a∈Li,b∈Lj) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)` を構築する。Li は Site i の葉集合であり、`NearestNeighbors` と `leaves_cartesian()` の全組み合わせを使う。Site 内の葉間結合は追加しない。Heisenberg は三結合を J に揃え、正の J を強磁性的とする。標準モデルは位置対応を暗黙に選ばない。
 
 XYZ・Heisenberg の全作用空間は、入力の局所空間ハンドルを共有し、列順に tensor した空間である。局所 grouping と相互作用に現れない Site も保持し、返す演算子をその空間に bind する。別途存在する全空間の root・上位 grouping・異なる因子順序は保存しない。
 
@@ -113,7 +113,7 @@ Neel は Site 位置と first から向きを交互に決め、その Site の�
 
 0 Site は単位空間に束縛した zero Hamiltonian と単位状態を返す。全 Site が空でも同様であり、Hamiltonian の空間には空 Site の grouping を残す。
 
-数値能力は個別関数へ限定する。xyz は `C: Clone + From<R> + Neg<Output=C>`、heisenberg はさらに `R: Clone` を要求する。neel の C に Clone・数値演算は不要である。モデル固有関数は QuantumSystem trait に追加しない。
+数値能力は個別関数へ限定する。xyz は `C: Clone + From<R> + Neg<Output=C> + One + Add<Output=C> + Div<Output=C>`、heisenberg はさらに `R: Clone` を要求する。neel の C に Clone・数値演算は不要である。モデル固有関数は QuantumSystem trait に追加しない。
 
 ## 5. 検証対象
 
@@ -189,7 +189,7 @@ H_{\mathrm{symmetric}}(t,U)
    -\frac U2 N+\frac{UL}{4}I.
 ```
 
-`n−I/2=−Z` なので、symmetric な局所相互作用は `U Z↑Z↓` とも表せる。両表現の値の一致を検証する。
+`n−I/2=−Mz/2` なので、symmetric な局所相互作用は `(U/4) Mz↑Mz↓` とも表せる。両表現の値の一致を検証する。
 
 ### 6.2. 公開入口と配置
 
@@ -207,16 +207,16 @@ FermionModels::<Fermion<C>>::symmetric_hubbard(&chain, &sites, t, u)
 - open / periodic の辺は既存 Chain の契約に従う。0・1 Site は辺なし、2 Site の periodic でも辺は一つとし、ホッピングを重複させない。
 - Site 数の一致、各 Site が二つの葉を持つ graded 空間であること、全 mode の Index 重複を、結合値が0でも検証する。不正な Site 構成は `UtilityError::InvalidSite { site }` とし、列長・空間・式のエラーはそれぞれ `Mapping`・`Space`・`Expression` variant に元エラーを保持する。
 - 0 Site は graded な単位空間に束縛した zero Hamiltonian を返す。1 Site はホッピングなしで相互作用を保持する。
-- 両モデルの係数 bound は `C: Clone + From<R> + Neg<Output=C>`、入力 t・U は同じ R とする。symmetric 相互作用は `U Z↑Z↓` を使うため、構築に定数生成・除算・虚数単位や局所 Product・Act・Float を要求しない。t・U が実数に対応することはモデルの数学的契約とする。
+- standard Hubbard の係数 bound は `C: Clone + From<R> + Neg<Output=C>`、symmetric Hubbard はさらに `One + Add<Output=C> + Div<Output=C>` を要求する。入力 t・U は同じ R とする。symmetric 相互作用は `(U/4) Mz↑Mz↓` を使い、1/4を係数型の中で生成する。虚数単位・局所 Product・Act・Float は要求しない。t・U が実数に対応すること、分数を数学的に表せることを契約とする。
 
-局所演算子・Majorana の規格化・基底・spinful の位相規約は [Fermion の局所代数](local-structure.md#9-fermion-の局所代数)に従う。係数の恒等元・分数生成を避けて `U Z↑Z↓` を構築する実装は [models.rs](../../crates/qmb-fermion/src/models.rs) に置く。
+局所演算子・Majorana の規格化・基底・spinful の位相規約は [Fermion の局所代数](local-structure.md#9-fermion-の局所代数)に従う。係数の中で1/4を生成して `(U/4) Mz↑Mz↓` を構築する実装は [models.rs](../../crates/qmb-fermion/src/models.rs) に置く。
 
 ### 6.3. 検証
 
 - 二 mode の CAR、spinful の二重占有からの消滅符号、および全空間の mode 順を確認する。
 - 1 Site の表示順 `[empty,up,down,double]` で、標準形の対角成分が `[0,0,0,U]`、symmetric 形が `[U/4,−U/4,−U/4,U/4]` となることを確認する。実際の列挙順との対応は明示する。
 - 2 Site（4 mode、16状態）の両モデルを、core の評価・export を使わない Fock 空間の符号規則から構築した参照行列と比較する。実パラメータでの Hermite 性、粒子数・各 spin の粒子数の保存、`t=0`・`U=0` の極限を確認する。
-- 両モデルの差が `−(U/2)N+(UL/4)I` であることと、symmetric 相互作用の `U Z↑Z↓` による構築を、定数項を含めて比較する。
+- 両モデルの差が `−(U/2)N+(UL/4)I` であることと、symmetric 相互作用の `(U/4) Mz↑Mz↓` による構築を、定数項を含めて比較する。
 - 0・1・2 Site と3 Site 以上の open / periodic、Site 数不一致、mode 数の過不足、ordinary な Site、Index 重複、非 Clone Index を検証する。
 - `Complex<f32>` / `Complex<f64>` と Vec・ndarray・sprs の同じ基底順で値を比較し、構築の係数 bound に評価能力が混入していないことも確認する。
 
@@ -228,26 +228,26 @@ FermionModels::<Fermion<C>>::symmetric_hubbard(&chain, &sites, t, u)
 
 ### 7.1. Hamiltonian の規約
 
-`hbar=1` とし、まず1 Site が1 spin の場合を示す。和は Chain の最近接結合を各1回数える。
+`hbar=1` とし、まず1 Site が1 spin の場合を示す。和は Chain の最近接結合を各1回数える。primitive は `S=√(3/2) J_physical` なので、係数を2/3・4/9で補正し、結合定数の従来の物理的な意味を維持する。
 
 ```math
-H_{\mathrm{XYZ}}=-\sum_{\langle ij\rangle}
+H_{\mathrm{XYZ}}=-\frac23\sum_{\langle ij\rangle}
 \left(J_xS_i^xS_j^x+J_yS_i^yS_j^y+J_zS_i^zS_j^z\right),
 ```
 
 ```math
-H_{\mathrm{Heisenberg}}=-J\sum_{\langle ij\rangle}\mathbf S_i\cdot\mathbf S_j,
+H_{\mathrm{Heisenberg}}=-\frac{2J}{3}\sum_{\langle ij\rangle}\mathbf S_i\cdot\mathbf S_j,
 ```
 
 ```math
 H_{\mathrm{BLBQ}}=-\sum_{\langle ij\rangle}
-\left[J\,\mathbf S_i\cdot\mathbf S_j
-+K\,(\mathbf S_i\cdot\mathbf S_j)^2\right].
+\left[\frac{2J}{3}\,\mathbf S_i\cdot\mathbf S_j
++\frac{4K}{9}\,(\mathbf S_i\cdot\mathbf S_j)^2\right].
 ```
 
 符号は既存 SpinHalf のモデルにそろえる。J>0 の bilinear 結合は強磁性的、J<0 は反強磁性的となる。`heisenberg(j)` は `xyz(j,j,j)`、`blbq(j,0)` は `heisenberg(j)` と数学的に同じである。単イオン異方性・磁場項・追加の定数シフトは設けず、上の式のエネルギー原点を保持する。
 
-BLBQ は bilinear 結合 J と biquadratic 結合 K を独立に受け取る。角度表示 `H=sum[cos(theta) A_ij+sin(theta) A_ij²]`、`A_ij=S_i·S_j` は `blbq(-cos(theta),-sin(theta))` で表せる。角度専用の入口は設けない。Hermite Hamiltonian に対して実数値の結合を渡す契約とし、型による実数制限や実行時の判定は追加しない。
+BLBQ は bilinear 結合 J と biquadratic 結合 K を独立に受け取る。角度表示 `H=sum[cos(theta) A_ij+sin(theta) A_ij²]`、`A_ij=J_physical,i·J_physical,j=(2/3)S_i·S_j` は `blbq(-cos(theta),-sin(theta))` で表せる。角度専用の入口は設けない。Hermite Hamiltonian に対して実数値の結合を渡す契約とし、型による実数制限や実行時の判定は追加しない。
 
 ### 7.2. 公開入口と空間
 
@@ -269,15 +269,15 @@ BLBQ は bilinear 結合 J と biquadratic 結合 K を独立に受け取る。�
 
 ### 7.3. 遅延構築と係数能力
 
-XYZ は配置した Cartesian 成分の積と和、Heisenberg は XYZ の等方的な場合として構築する。BLBQ は各葉ペアの `A_ab=Sx_a Sx_b+Sy_a Sy_b+Sz_a Sz_b` を一度構築し、式を共有して `(&A_ab * &A_ab)` を作る。J・K は最後に各項へ適用し、J の符号や大きさを二乗へ混入させない。
+XYZ は配置した Cartesian 成分の積と和、Heisenberg は XYZ の等方的な場合として構築する。BLBQ は各葉ペアの `A_ab=Sx_a Sx_b+Sy_a Sy_b+Sz_a Sz_b` を一度構築し、式を共有して `(&A_ab * &A_ab)` を作る。J・K は2/3・4/9で補正して最後に各項へ適用し、J の符号や大きさを二乗へ混入させない。
 
 | 関数 | 構築に必要な bound |
 | --- | --- |
-| `xyz<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C>` |
-| `heisenberg<I: Eq,R: Clone>` | `C: Clone + From<R> + Neg<Output=C>` |
-| `blbq<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C>` |
+| `xyz<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C> + One + Add<Output=C> + Div<Output=C>` |
+| `heisenberg<I: Eq,R: Clone>` | `C: Clone + From<R> + Neg<Output=C> + One + Add<Output=C> + Div<Output=C>` |
+| `blbq<I: Eq,R>` | `C: Clone + From<R> + Neg<Output=C> + One + Add<Output=C> + Div<Output=C>` |
 
-構築時には局所規則の評価・基底展開・係数同士の加算や乗算を行わず、密行列・数値 backend・追加の局所規則は使わない。C の Float・Zero・One・除算・共役等も要求しない。評価・trace・export 時には既存 core と局所 primitive の操作別の bound が適用される。モデル固有メソッドを QuantumSystem trait に追加しない。
+構築時に係数 C の中で有理数の補正を行う。局所規則の評価・基底展開・密行列・数値 backend は使わず、C の Float・Zero・共役を要求しない。評価・trace・export 時には既存 core と局所 primitive の操作別の bound が適用される。モデル固有メソッドを QuantumSystem trait に追加しない。
 
 ### 7.4. 検証と実装時の記録
 

@@ -1,17 +1,17 @@
 //! Fermion and Majorana primitives and their local multiplication rules.
 
-use crate::coefficient::{half, imaginary, quarter};
-use core::ops::{Add, Div, Neg};
+use crate::coefficient::imaginary;
+use core::ops::{Add, Neg};
 use num_traits::{One, Zero};
 use qmb_core::{
     Adjoint, Dimension, DimensionOverflow, HomogeneousParity, Identity, ImaginaryUnit,
     LinearCombination, Parity, ParityOperator, Product, Trace,
 };
 
-/// Eight homogeneous primitives spanning the four-dimensional operator space.
+/// Seven homogeneous primitives spanning the four-dimensional operator space.
 ///
-/// X and Y are half the standard Majorana operators, so `[X,Y]=iZ` and
-/// `X²=Y²=Z²=I/4`, matching spin-half normalization. Z is an even bilinear.
+/// Mx and My are standard Majorana operators, with `[Mx,My]=2iMz` and
+/// `Mx²=My²=Mz²=I`. Mz is the even parity operator `I-2n`.
 /// Structural equality distinguishes the linearly dependent primitive values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FermionOperator {
@@ -23,63 +23,48 @@ pub enum FermionOperator {
     Create,
     /// Occupation number `n = a†a`.
     Number,
-    /// Half the first Majorana: `X = (a+a†)/2`, odd and Hermite.
-    MajoranaX,
-    /// Half the second Majorana: `Y = (a-a†)/(2i)`, odd and Hermite.
-    MajoranaY,
-    /// Hermite even bilinear `Z = -2iXY = I/2-n`, not an odd Majorana.
-    MajoranaZ,
-    /// The parity operator `P = I-2n = 2Z`.
-    Parity,
+    /// The first Majorana: `Mx = a+a†`, odd and Hermite.
+    Mx,
+    /// The second Majorana: `My = (a-a†)/i`, odd and Hermite.
+    My,
+    /// Parity `Mz = -i Mx My = I-2n`, a Hermitian even bilinear.
+    Mz,
 }
 
 impl<C> Product<C> for FermionOperator
 where
-    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
+    C: One + Add<Output = C> + Neg<Output = C> + ImaginaryUnit,
 {
     type Term = Self;
     fn product(&self, rhs: &Self) -> LinearCombination<Self, C> {
         use FermionOperator::{
-            Annihilate as A, Create as D, I, MajoranaX as X, MajoranaY as Y, MajoranaZ as Z,
-            Number as N, Parity as P,
+            Annihilate as A, Create as D, I, Mx as X, My as Y, Mz as Z, Number as N,
         };
         use LinearCombination as Lc;
+        // Direct rules: analytically zero terms are omitted; each result keeps basis order.
         match (*self, *rhs) {
             (I, op) | (op, I) => Lc::primitive(op),
             (A, A) | (D, D) | (D, N) | (N, A) => Lc::zero(),
-            (A, D) => Lc::primitive(I) + Lc::term(-C::one(), N),
-            (A, N) | (P, A) => Lc::primitive(A),
-            (A, P) => Lc::term(-C::one(), A),
-            (D, A) | (N, N) => Lc::primitive(N),
-            (D, P) | (N, D) => Lc::primitive(D),
-            (N, P) | (P, N) => Lc::term(-C::one(), N),
-            (P, D) => Lc::term(-C::one(), D),
-            (P, P) => Lc::primitive(I),
-            (A, X) | (X, D) => Lc::term(half(), I) + Lc::term(-half::<C>(), N),
-            (A, Y) => Lc::term(imaginary(half()), I) + Lc::term(imaginary(-half::<C>()), N),
-            (A, Z) => Lc::term(-half::<C>(), A),
-            (Z, D) => Lc::term(-half::<C>(), D),
-            (D, X) | (X, A) => Lc::term(half(), N),
-            (D, Y) => Lc::term(imaginary(-half::<C>()), N),
-            (D, Z) | (N, X) => Lc::term(half(), D),
-            (N, Y) => Lc::term(imaginary(half()), D),
-            (N, Z) | (Z, N) => Lc::term(-half::<C>(), N),
-            (P, X) => Lc::term(imaginary(C::one()), Y),
-            (Y, P) => Lc::term(imaginary(C::one()), X),
-            (P, Y) => Lc::term(imaginary(-C::one()), X),
-            (X, P) => Lc::term(imaginary(-C::one()), Y),
-            (P, Z) | (Z, P) => Lc::term(half(), I),
-            (X, N) | (Z, A) => Lc::term(half(), A),
-            (X, X) | (Y, Y) | (Z, Z) => Lc::term(quarter(), I),
-            (X, Y) => Lc::term(imaginary(half()), Z),
-            (X, Z) => Lc::term(imaginary(-half::<C>()), Y),
-            (Y, A) => Lc::term(imaginary(half()), N),
-            (Y, D) => Lc::term(imaginary(-half::<C>()), I) + Lc::term(imaginary(half()), N),
-            (Y, N) => Lc::term(imaginary(-half::<C>()), A),
-            (Y, X) => Lc::term(imaginary(-half::<C>()), Z),
-            (Y, Z) => Lc::term(imaginary(half()), X),
-            (Z, X) => Lc::term(imaginary(half()), Y),
-            (Z, Y) => Lc::term(imaginary(-half::<C>()), X),
+            (A, D) | (A, X) | (X, D) => Lc::primitive(I) + Lc::term(-C::one(), N),
+            (A, N) | (X, N) | (Z, A) => Lc::primitive(A),
+            (D, A) | (N, N) | (D, X) | (X, A) => Lc::primitive(N),
+            (N, D) | (D, Z) | (N, X) => Lc::primitive(D),
+            (A, Y) => Lc::term(imaginary(C::one()), I) + Lc::term(imaginary(-C::one()), N),
+            (A, Z) => Lc::term(-C::one(), A),
+            (Z, D) => Lc::term(-C::one(), D),
+            (D, Y) => Lc::term(imaginary(-C::one()), N),
+            (N, Y) => Lc::term(imaginary(C::one()), D),
+            (N, Z) | (Z, N) => Lc::term(-C::one(), N),
+            (X, X) | (Y, Y) | (Z, Z) => Lc::primitive(I),
+            (X, Y) => Lc::term(imaginary(C::one()), Z),
+            (X, Z) => Lc::term(imaginary(-C::one()), Y),
+            (Y, A) => Lc::term(imaginary(C::one()), N),
+            (Y, D) => Lc::term(imaginary(-C::one()), I) + Lc::term(imaginary(C::one()), N),
+            (Y, N) => Lc::term(imaginary(-C::one()), A),
+            (Y, X) => Lc::term(imaginary(-C::one()), Z),
+            (Y, Z) => Lc::term(imaginary(C::one()), X),
+            (Z, X) => Lc::term(imaginary(C::one()), Y),
+            (Z, Y) => Lc::term(imaginary(-C::one()), X),
         }
     }
 }
@@ -118,13 +103,13 @@ impl Dimension for FermionOperator {
 impl HomogeneousParity for FermionOperator {
     fn parity(&self) -> Parity {
         match self {
-            Self::Annihilate | Self::Create | Self::MajoranaX | Self::MajoranaY => Parity::Odd,
+            Self::Annihilate | Self::Create | Self::Mx | Self::My => Parity::Odd,
             _ => Parity::Even,
         }
     }
 }
 impl ParityOperator for FermionOperator {
     fn parity_operator() -> Self {
-        Self::Parity
+        Self::Mz
     }
 }

@@ -20,13 +20,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let singlet = (&up_down - &down_up)?.scaled(amplitude);
     let triplet = (&up_down + &down_up)?.scaled(amplitude);
 
-    // H = S_a . S_b, with positive exchange coupling J = 1.
+    // H = J_a . J_b = (S_a . S_b)/4, with physical exchange coupling 1.
     // Each axis builds a placed product; try_operator_sum collects the terms.
     let h = Spin::try_operator_sum(
         [Op::Sx, Op::Sy, Op::Sz]
             .into_iter()
             .map(|axis| Spin::operator_product_at([(&a, axis), (&b, axis)])),
     )?
+    .scaled(0.25)
     .bind(&space)?;
 
     for (name, state, expected_energy) in

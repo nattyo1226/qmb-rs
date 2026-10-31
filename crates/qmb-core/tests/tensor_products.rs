@@ -127,10 +127,10 @@ fn check<T: Real>() {
                             );
                             close(
                                 lhs.hs_inner_product_in(&rhs, &h).unwrap(),
-                                trace(&product(
+                                trace::<T>(&product(
                                     &adjoint(&embedding(a, i, n, kind)),
                                     &embedding(b, j, n, kind),
-                                )),
+                                )) / c((1usize << n) as f64, 0.0),
                             );
                             for basis in [false, true] {
                                 let expanded = if basis {

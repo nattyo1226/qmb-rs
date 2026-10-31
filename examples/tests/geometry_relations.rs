@@ -60,7 +60,7 @@ fn check_spin_placements<const K: usize>(boundary: Boundary, expected: &[[usize;
             leaves
                 .iter()
                 .zip(axes)
-                .map(|(leaf, axis)| SpinHalf::<C>::operator(axis).scaled(2.).at(leaf)),
+                .map(|(leaf, axis)| SpinHalf::<C>::operator(axis).at(leaf)),
         )
         .unwrap()
         .bind(&ambient)
@@ -69,7 +69,7 @@ fn check_spin_placements<const K: usize>(boundary: Boundary, expected: &[[usize;
             placement
                 .iter()
                 .zip(axes)
-                .map(|(&i, axis)| SpinHalf::<C>::operator(axis).scaled(2.).at(&sites[i])),
+                .map(|(&i, axis)| SpinHalf::<C>::operator(axis).at(&sites[i])),
         )
         .unwrap()
         .bind(&ambient)
@@ -154,11 +154,7 @@ fn mapper_constructs_all_37_pauli_strings_with_support_at_most_two_once() {
                 let axis = digits % 3;
                 digits /= 3;
                 labels[*site.factor_index().unwrap()] = axis + 1;
-                factors.push(
-                    SpinHalf::<C>::operator([S::Sx, S::Sy, S::Sz][axis])
-                        .scaled(2.)
-                        .at(site),
-                );
+                factors.push(SpinHalf::<C>::operator([S::Sx, S::Sy, S::Sz][axis]).at(site));
             }
             assert!(seen.insert(labels));
             let operator = SpinHalf::<C>::try_operator_product(factors)

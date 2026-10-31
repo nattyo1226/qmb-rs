@@ -5,15 +5,15 @@
 
 ## 1. 採用範囲と実装状況
 
-v3 の修正案として、以下の名前と Hermite 演算子の規格化を採用する。実装は未着手であり、本書は変更後の規約を記録する。現行の規約は[要件の spin-half の定義](../../requirements.md#23-spin-12-の規約)、[局所 primitive の設計](../../design/local-structure.md)、各 crate の実装・rustdoc を参照する。
+以下の名前と Hermite 演算子の規格化への移行を実装した。本書は採用した規約と移行内容を記録し、第10節に検証結果をまとめる。現行の規約は[要件の spin-half の定義](../../requirements.md#23-spin-12-の規約)、[局所 primitive の設計](../../design/local-structure.md)、各 crate の実装・rustdoc にも反映した。
 
 | 対象 | 採用する変更 |
 | --- | --- |
 | `qmb-spin-half` | `Sx/Sy/Sz` を Pauli 行列として再定義し、`SPlus/SMinus` を `Sp/Sm` に変更する |
-| `qmb-fermion` | `MajoranaX/Y/Z` を現行値の2倍に変更し、`Mx/My/Mz` とする。`Parity` は `Mz` に統合する |
+| `qmb-fermion` | `MajoranaX/Y/Z` を変更前の値の2倍に変更し、`Mx/My/Mz` とする。`Parity` は `Mz` に統合する |
 | `qmb-spin-one` | Hermite な9要素 `I/Sx/Sy/Sz/Dxy/Q0/Qxy/Qyz/Qzx` を第5節の規約に揃え、演算子名の `Plus/Minus` を `p/m` に変更する |
 
-spin-half の Cartesian 成分の公開名は `Sx/Sy/Sz` とし、現行の同名 primitive の2倍に再定義する。旧規格化との互換性は維持しない。spin-one の Hermite primitive の名前も現行名を使い、意味を本書の規格化へ更新する。両 spin の昇降演算子名は `Plus/Minus` を `p/m` に短縮する。
+spin-half の Cartesian 成分の公開名は `Sx/Sy/Sz` とし、変更前の同名 primitive の2倍に再定義する。旧規格化との互換性は維持しない。spin-one の Hermite primitive の名前も現行名を使い、意味を本書の規格化へ更新する。両 spin の昇降演算子名は `Plus/Minus` を `p/m` に短縮する。
 
 状態 primitive・状態の内積・局所次元は維持する。fermion の `Annihilate/Create/Number` は現行の消滅・生成・占有数演算子を表す。これらまで一律に単位ノルムへ変更する案ではない。
 
@@ -104,7 +104,7 @@ S_y=\begin{pmatrix}0&-i\\i&0\end{pmatrix},\qquad
 S_z=\begin{pmatrix}1&0\\0&-1\end{pmatrix}.
 ```
 
-公開名はそれぞれ `Sx/Sy/Sz`。現行の同名 primitive の2倍であり、固有値は ±1 となる。物理的な角運動量を J と書けば、ℏ=1 で `J_alpha=S_alpha/2` である。
+公開名はそれぞれ `Sx/Sy/Sz`。変更前の同名 primitive の2倍であり、固有値は ±1 となる。物理的な角運動量を J と書けば、ℏ=1 で `J_alpha=S_alpha/2` である。
 
 ```math
 S_\alpha^2=I,\qquad
@@ -127,7 +127,7 @@ M_y=\frac{a-a^\dagger}{i},\qquad
 M_z=-iM_xM_y=I-2n.
 ```
 
-公開名は `Mx/My/Mz`。占有基底での行列は第3節の Pauli 行列と同じで、現行の `MajoranaX/Y/Z` の2倍となる。`Mx/My` は odd、`Mz` は even とし、Z 成分を第三の odd Majorana として扱わない。
+公開名は `Mx/My/Mz`。占有基底での行列は第3節の Pauli 行列と同じで、変更前の `MajoranaX/Y/Z` の2倍となる。`Mx/My` は odd、`Mz` は even とし、Z 成分を第三の odd Majorana として扱わない。
 
 ```math
 M_\alpha^2=I,\qquad
@@ -164,7 +164,7 @@ J_z=\begin{pmatrix}1&0&0\\0&0&0\\0&0&-1\end{pmatrix}.
 
 `c=√(3/2)` と置き、v3 の Hermite primitive を次で定義する。右辺の J は物理的なスピンであり、左辺の規格化した S と区別する。反交換子は `{A,B}=AB+BA` とする。
 
-| 公開 primitive | v3 の定義 | 現行値に掛ける係数 |
+| 公開 primitive | v3 の定義 | 変更前の値に掛ける係数 |
 | --- | --- | --- |
 | `I` | 恒等演算子 | 1 |
 | `Sx/Sy/Sz` | `S_alpha=c J_alpha` | `√(3/2)` |
@@ -185,7 +185,7 @@ S_x=\frac{\sqrt3}{2}\begin{pmatrix}0&1&0\\1&0&1\\0&1&0\end{pmatrix},\qquad
 
 `CartesianBasis` の順序は `[I,Sx,Sy,Sz,Dxy,Q0,Qxy,Qyz,Qzx]` を維持する。全9要素が Hermite で、通常の HS Gram 行列は `3 I_9`、正規化 HS Gram 行列は `I_9` となる。
 
-現行のトレースレスな8要素のうち Q0 をまず `Q0/√3` とすれば、すべて通常の HS ノルム二乗が2になる。本案はこの8要素全体を c 倍する規格化である。スピン3成分と四重極5成分の回転に関する部分空間を保つ。
+変更前のトレースレスな8要素のうち Q0 をまず `Q0/√3` とすれば、すべて通常の HS ノルム二乗が2になる。本案はこの8要素全体を c 倍する規格化である。スピン3成分と四重極5成分の回転に関する部分空間を保つ。
 
 変更後の代表的な関係は次となる。
 
@@ -202,7 +202,7 @@ Q_{xy}=\frac1c\{S_x,S_y\},\qquad
 Q_0=\sqrt2(S_z^2-I).
 ```
 
-Qyz・Qzx も同じ係数で定義される。現行の `SPlus²=Q2Plus` は、v3 の primitive では `Sp²=c Q2p` となる。各倍率から多項式関係を再導出する。随伴は Hermite な9要素を保存し、通常の trace は I が3、他の8要素が0となる。
+Qyz・Qzx も同じ係数で定義される。変更前の `SPlus²=Q2Plus` は、v3 の primitive では `Sp²=c Q2p` となる。各倍率から多項式関係を再導出する。随伴は Hermite な9要素を保存し、通常の trace は I が3、他の8要素が0となる。
 
 ## 6. 非 Hermite な昇降演算子（採用）
 
@@ -230,7 +230,7 @@ Q_{1\pm}=Q_{zx}\pm iQ_{yz},\qquad
 Q_{2\pm}=D_{xy}\pm iQ_{xy}.
 ```
 
-この案では全6要素が現行値の c 倍となり、Cartesian 基底との変換は和差・1/2・i だけで表せる。`S_±²=c Q_2±`、`{Sz,S_±}=c Q_1±` と、多項式からの定義には c が付く。状態への `S_±` の非零な遷移振幅は √3 となる。
+この案では全6要素が変更前の値の c 倍となり、Cartesian 基底との変換は和差・1/2・i だけで表せる。`S_±²=c Q_2±`、`{Sz,S_±}=c Q_1±` と、多項式からの定義には c が付く。状態への `S_±` の非零な遷移振幅は √3 となる。
 
 基底展開を重視し、単純な線型変換を優先する。多項式関係の係数は文書・テストで明示する。通常の HS ノルム二乗は全6要素で6、正規化 HS ノルムは √2 となるが、その値は定義の結果として扱う。`LadderBasis` の順序は `[I,Sp,Sm,Sz,Q0,Q1p,Q1m,Q2p,Q2m]` とし、通常の HS Gram 行列は `diag(3,6,6,3,3,6,6,6,6)` となる。
 
@@ -244,19 +244,19 @@ Q_{2\pm}=D_{xy}\pm iQ_{xy}.
 
 | モデル | 新 primitive での表現 |
 | --- | --- |
-| spin-half XYZ / Heisenberg | 現行の各 `−j_alpha J_i^alpha J_j^alpha` を `−(j_alpha/4) S_i^alpha S_j^alpha` とする |
-| spin-one XYZ / Heisenberg | 現行の各 `−j_alpha J_i^alpha J_j^alpha` を `−(2j_alpha/3) S_i^alpha S_j^alpha` とする |
+| spin-half XYZ / Heisenberg | 変更前の各 `−j_alpha J_i^alpha J_j^alpha` を `−(j_alpha/4) S_i^alpha S_j^alpha` とする |
+| spin-one XYZ / Heisenberg | 変更前の各 `−j_alpha J_i^alpha J_j^alpha` を `−(2j_alpha/3) S_i^alpha S_j^alpha` とする |
 | spin-one BLBQ | 各葉ペアで `−[(2j/3) A_ij+(4k/9) A_ij²]` とする |
-| fermion symmetric Hubbard | 現行の `U (n_up−I/2)(n_down−I/2)` を `(U/4) Mz_up Mz_down` とする |
+| fermion symmetric Hubbard | 変更前の `U (n_up−I/2)(n_down−I/2)` を `(U/4) Mz_up Mz_down` とする |
 | fermion standard Hubbard | a・a†・n の定義を保つため、Hamiltonian の係数は維持する |
 
 現行のモデルと配置の契約は[Chain・Site の設計](../../design/geometry.md)、symmetric Hubbard の実装は [models.rs](../../../crates/qmb-fermion/src/models.rs)を参照する。モデルの符号、境界条件、葉ペアの列挙と定数項も合わせて検証する。
 
-モデル構築で数値係数を直接補正する場合、現行の `Clone + From<R> + Neg` だけでは分数の生成を保証できない。係数補正に必要な One・算術・除算等の trait bound は、実装時に演算ごとに適宜要求し、公開関数の能力要件とテストを更新する。std 等の feature 要件に影響する変更は第9節に従って別途検討する。
+モデル構築で数値係数を直接補正する場合、変更前の `Clone + From<R> + Neg` だけでは分数の生成を保証できない。係数補正に必要な One・算術・除算等の trait bound は、実装時に演算ごとに適宜要求し、公開関数の能力要件とテストを更新する。std 等の feature 要件に影響する変更は第9節に従って別途検討する。
 
 ### 7.2. Spin-one の平方根係数（Float を採用）
 
-現行の spin-one は局所積と基底変換を複素有理係数で扱え、作用だけが `Complex<R>, R: Float` を使う。本案では Hermite primitive 同士の積にも c・√2 等が現れるため、現在の有理係数だけの検証をそのまま維持することはできない。
+変更前の spin-one は局所積と基底変換を複素有理係数で扱え、作用だけが `Complex<R>, R: Float` を使う。本案では Hermite primitive 同士の積にも c・√2 等が現れるため、変更前の有理係数だけの検証をそのまま維持することはできない。
 
 当面、平方根係数を必要とする局所積・作用は `Complex<R>`、`R: num_traits::Float` を対象とする。厳密な代数的係数のための新しい能力 trait は今回追加しない。平方根を必要としない基底変換・随伴・trace 等は操作に必要な bound を維持する。式の保持・遅延構築へ一律の `Float` 制約を追加しない。定数は R の One・算術・sqrt から選択した精度で生成し、f64 経由の変換やパースを前提にしない。
 
@@ -290,7 +290,7 @@ Q_{2\pm}=D_{xy}\pm iQ_{xy}.
 - 第7.3節の相殺・微小非零係数の保存を検証し、局所規則の厳密零と一般の式の数値的な零を区別する。
 - export の Vec / ndarray / sprs、最小係数能力、構築時の能力要件、公開名の doctest と examples を更新する。Pauli string の既存例にある因子ごとの2倍を取り除く。
 
-実装後に workspace の関連テスト・doctest、feature 構成、format、Clippy、ドキュメント生成を検証する。具体的な実行結果は実装時に記録し、現時点では成功済みと扱わない。
+workspace の関連テスト・doctest、feature 構成、format、Clippy、ドキュメント生成の検証結果を第10節に記録する。
 
 ## 9. 補助 API と trait bound の実装方針（採用）
 
@@ -298,4 +298,33 @@ Q_{2\pm}=D_{xy}\pm iQ_{xy}.
 
 モデルの係数補正を含め、各操作の実装に必要な trait bound は実装時に適宜要求する。係数型の能力はそれを使う操作に限定し、式の保持・遅延構築へ一律の数値制約を追加しない。std / no_std や依存 crate の feature 要件に影響する変更は、この trait bound の具体化とは分けて検討する。
 
-本書の primitive と規格化、HS 内積の局所 trace ごとの次元規格化と通常の Trace の維持、`Mz` への統合、モデルの結合定数の物理的な意味、平方根係数の Float による扱い、第7.3節の相殺への対応、および本節の実装方針は採用済みとする。現時点で本件の設計上の未決事項はない。実装と第8節の検証は未着手である。
+本書の primitive と規格化、HS 内積の局所 trace ごとの次元規格化と通常の Trace の維持、`Mz` への統合、モデルの結合定数の物理的な意味、平方根係数の Float による扱い、第7.3節の相殺への対応、および本節の実装方針は実装済みとする。現時点で本件の設計上の未決事項はない。
+
+## 10. 実装と検証の記録
+
+2026-11-01、Rust 1.99.1 の direnv devShell で実装と受入検証を行った。以下のコマンドはリポジトリ直下で `direnv exec .` を付けて実行し、すべて成功した。
+
+```sh
+cargo test --workspace --all-features --no-fail-fast --quiet
+cargo test --workspace --no-default-features --offline --no-fail-fast --quiet
+cargo test -p qmb-spin-one -p qmb-fermion --all-features --offline --quiet
+cargo test -p qmb-spin-one --test tensor_products -p qmb-fermion --test models --offline --quiet
+cargo check -p qmb-core -p qmb-geometry --no-default-features --offline
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features --offline -- -D warnings
+cargo clippy --workspace --all-targets --no-default-features --offline -- -D warnings
+sh -c 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps --offline'
+```
+
+qmb-export は単独でも `cargo test -p qmb-export --no-default-features --offline --quiet` を実行し、追加 feature なし・`--features ndarray`・`--features sprs` の3構成を確認した。両 backend 有効の構成は workspace の全 feature テストで確認した。
+
+確認した内容は次のとおり。
+
+- 各代数の全 primitive の積・作用・随伴・通常 trace、両演算子基底の変換と座標を、独立行列と f32 / f64 で照合した。spin-one の全225積・45作用、結合則・作用との整合性も検証した。
+- 局所の正規化 HS Gram 行列に加え、spin-one の Cartesian / Ladder tensor 基底と fermion の graded Majorana tensor 基底の Gram 行列を検証した。graded 評価の符号・CAR と通常作用行列も照合した。
+- [HS 内積の回帰テスト](../../../crates/qmb-core/tests/hs_inner_product.rs)で、明示行列による `Tr(A†B)/D`、空空間、spectator の追加、明示空間による束縛の上書き、および2048因子での `⟨I,I⟩=1` を確認した。状態型・Dimension・整数変換を要求しないこと、Divide だけを持つ係数でも計算できること、通常 trace に除算能力を要求しないことも検証した。
+- 物理的なモデルの独立参照行列とエネルギー・定数シフトを維持した。微小係数の保存と厳密な相殺、解析的に零の局所規則の空性も確認した。暗黙の近似的な切り捨ては追加していない。
+
+examples の全8バイナリを `cargo run -p examples --bin <name> --offline --quiet` により、既定 feature・`--all-features`・`--no-default-features` の3構成で実行した。一重項・三重項のエネルギー −0.75 / 0.25、symmetric Hubbard のエネルギー −2、spin-one BLBQ の期待値0.5、Pauli string の37項と密疎 export の一致が保たれた。
+
+依存関係と feature 要件は変更していない。MSRV 1.85 と専用 no_std target での実ビルドは今回実行しておらず、[未実施の検証](../../future-work.md#3-未実施の検証と性能)として引き続き扱う。

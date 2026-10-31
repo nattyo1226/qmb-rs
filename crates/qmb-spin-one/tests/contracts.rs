@@ -143,18 +143,18 @@ fn laws<T: Real>() {
 
 fn spin_relations<T: Real>() {
     let op = SpinOne::<Complex<T>>::operator;
-    let [x, y, z, p, m, q0] = [O::Sx, O::Sy, O::Sz, O::SPlus, O::SMinus, O::Q0].map(op);
+    let [x, y, z, p, m, q0] = [O::Sx, O::Sy, O::Sz, O::Sp, O::Sm, O::Q0].map(op);
     for (a, b, result) in [(&x, &y, &z), (&y, &z, &x), (&z, &x, &y)] {
         let comm = (a.clone() * b) - (b.clone() * a);
         values::<T>(
             &local_value(&comm),
-            &local_value(&result.scaled(c::<T>(0., 1.))),
+            &local_value(&result.scaled(c::<T>(0., (3.0_f64 / 2.0).sqrt()))),
         );
     }
     for (ladder, sign) in [(&p, 1.), (&m, -1.)] {
         values::<T>(
             &local_value(&((z.clone() * ladder) - (ladder.clone() * &z))),
-            &local_value(&ladder.scaled(c::<T>(sign, 0.))),
+            &local_value(&ladder.scaled(c::<T>(sign * (3.0_f64 / 2.0).sqrt(), 0.))),
         );
         values::<T>(
             &local_value(&((ladder.clone() * ladder).clone() * ladder)),
@@ -163,36 +163,30 @@ fn spin_relations<T: Real>() {
     }
     values::<T>(
         &local_value(&((p.clone() * &m) - (m.clone() * &p))),
-        &scale(&matrix(O::Sz), 2.0.into()),
+        &scale(&matrix(O::Sz), (2.0 * (3.0_f64 / 2.0).sqrt()).into()),
     );
     values::<T>(
         &local_value(&((x.clone() * &x) + (y.clone() * &y) + (z.clone() * &z))),
-        &scale(&matrix(O::I), 2.0.into()),
+        &scale(&matrix(O::I), 3.0.into()),
     );
     values::<T>(
         &local_value(&(z.clone() * &z)),
-        &local_value(&(op(O::I).scaled(c::<T>(2. / 3., 0.)) + q0.scaled(c::<T>(1. / 3., 0.)))),
+        &local_value(&(op(O::I) + q0.scaled(c::<T>(1. / 2_f64.sqrt(), 0.)))),
     );
     for a in [&x, &y, &z] {
-        close::<T>(to64((a.clone() * a).trace()), 2.0.into());
+        close::<T>(to64((a.clone() * a).trace()), 3.0.into());
     }
-    assert_eq!(
-        <O as Product<Complex<T>>>::product(&O::SPlus, &O::SPlus),
-        Lc::primitive(O::Q2Plus)
-    );
-    assert_eq!(
-        <O as Product<Complex<T>>>::product(&O::SMinus, &O::SMinus),
-        Lc::primitive(O::Q2Minus)
-    );
-    for (a, sign) in [
-        (O::Q1Plus, 1.),
-        (O::Q1Minus, -1.),
-        (O::Q2Plus, 2.),
-        (O::Q2Minus, -2.),
-    ] {
+    for (input, output) in [(O::Sp, O::Q2p), (O::Sm, O::Q2m)] {
+        let squared = <O as Product<Complex<T>>>::product(&input, &input);
+        assert_eq!(squared.len(), 1);
+        let term = squared.into_iter().next().unwrap();
+        assert_eq!(term.operand, output);
+        close::<T>(to64(term.coefficient), (3.0_f64 / 2.0).sqrt().into());
+    }
+    for (a, sign) in [(O::Q1p, 1.), (O::Q1m, -1.), (O::Q2p, 2.), (O::Q2m, -2.)] {
         values::<T>(
             &local_value(&((z.clone() * &op(a)) - (op(a).clone() * &z))),
-            &scale(&matrix(a), sign.into()),
+            &scale(&matrix(a), (sign * (3.0_f64 / 2.0).sqrt()).into()),
         );
     }
 }
@@ -239,8 +233,8 @@ fn bases<T: Real>() {
             }
         }
     }
-    check::<T, _>(CartesianBasis, CART, [3., 2., 2., 2., 2., 6., 2., 2., 2.]);
-    check::<T, _>(LadderBasis, LADDER, [3., 4., 4., 2., 6., 4., 4., 4., 4.]);
+    check::<T, _>(CartesianBasis, CART, [1.; 9]);
+    check::<T, _>(LadderBasis, LADDER, [1., 2., 2., 1., 1., 2., 2., 2., 2.]);
     let states: Vec<_> = <SzBasis as Basis<S, Complex<T>>>::elements(&SzBasis).collect();
     assert_eq!(states, STATES);
     for (i, s) in STATES.into_iter().enumerate() {
@@ -253,6 +247,47 @@ fn bases<T: Real>() {
             Lc::primitive(s)
         );
     }
+}
+
+#[test]
+fn reexpansion_preserves_tiny_nonzero_coefficients_without_pruning() {
+    fn check<T: Real>() {
+        let op = SpinOne::<Complex<T>>::operator;
+        let tiny = c::<T>(1e-30, -1e-30);
+        let original = op(O::Sx).scaled(tiny) + op(O::Q0).scaled(c::<T>(1e10, 0.0));
+        let mut round = original.clone();
+        for _ in 0..10 {
+            round = round
+                .expand(&LadderBasis)
+                .unwrap()
+                .expand(&CartesianBasis)
+                .unwrap();
+        }
+        let coords = round.coordinates(&CartesianBasis).unwrap();
+        assert_eq!(coords.len(), 2);
+        let value = coords
+            .flat_entries()
+            .map(Result::unwrap)
+            .find(|(i, _)| *i == 1)
+            .unwrap()
+            .1;
+        // Compare relative to the tiny coefficient, so the standard absolute
+        // matrix tolerance cannot mask its accidental removal.
+        close::<T>(
+            to64(Complex::new(value.re / tiny.re, value.im / tiny.im)),
+            Complex::new(1.0, 1.0),
+        );
+        values::<T>(&local_value(&round), &local_value(&original));
+        let cancellation = op(O::Sx).scaled(tiny) - op(O::Sx).scaled(tiny);
+        assert!(
+            cancellation
+                .coordinates(&CartesianBasis)
+                .unwrap()
+                .is_empty()
+        );
+    }
+    check::<f32>();
+    check::<f64>();
 }
 
 #[test]

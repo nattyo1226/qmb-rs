@@ -14,15 +14,14 @@ pub struct SzBasis;
 
 /// The orthogonal Hermitian basis `I, Sx, Sy, Sz, Dxy, Q0, Qxy, Qyz, Qzx`.
 ///
-/// Squared Hilbert–Schmidt norms are 3 for I, 6 for Q0, and 2 otherwise.
-/// These elements are not rescaled to unit norm.
+/// Orthonormal under the dimension-normalized inner product `Tr(A† B)/3`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CartesianBasis;
 
-/// The orthogonal basis `I, SPlus, SMinus, Sz, Q0, Q1Plus, Q1Minus, Q2Plus, Q2Minus`.
+/// The orthogonal basis `I, Sp, Sm, Sz, Q0, Q1p, Q1m, Q2p, Q2m`.
 ///
-/// Squared Hilbert–Schmidt norms are 3 for I, 2 for Sz, 6 for Q0, and 4
-/// otherwise. No spherical-tensor normalization or phase factors are applied.
+/// Dimension-normalized squared norms are 1 for I, Sz and Q0, and 2
+/// for the six ladder elements. No spherical-tensor phase factors are applied.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct LadderBasis;
 
@@ -47,12 +46,12 @@ impl<C: One + Neg<Output = C> + ImaginaryUnit> Basis<O, C> for CartesianBasis {
         use LinearCombination as Lc;
         use O::*;
         match primitive {
-            SPlus => Lc::primitive(Sx) + Lc::term(imaginary(C::one()), Sy),
-            SMinus => Lc::primitive(Sx) + Lc::term(imaginary(-C::one()), Sy),
-            Q1Plus => Lc::primitive(Qzx) + Lc::term(imaginary(C::one()), Qyz),
-            Q1Minus => Lc::primitive(Qzx) + Lc::term(imaginary(-C::one()), Qyz),
-            Q2Plus => Lc::primitive(Dxy) + Lc::term(imaginary(C::one()), Qxy),
-            Q2Minus => Lc::primitive(Dxy) + Lc::term(imaginary(-C::one()), Qxy),
+            Sp => Lc::primitive(Sx) + Lc::term(imaginary(C::one()), Sy),
+            Sm => Lc::primitive(Sx) + Lc::term(imaginary(-C::one()), Sy),
+            Q1p => Lc::primitive(Qzx) + Lc::term(imaginary(C::one()), Qyz),
+            Q1m => Lc::primitive(Qzx) + Lc::term(imaginary(-C::one()), Qyz),
+            Q2p => Lc::primitive(Dxy) + Lc::term(imaginary(C::one()), Qxy),
+            Q2m => Lc::primitive(Dxy) + Lc::term(imaginary(-C::one()), Qxy),
             _ => Lc::primitive(*primitive),
         }
     }
@@ -68,7 +67,7 @@ impl<C: One + Neg<Output = C> + ImaginaryUnit> Basis<O, C> for CartesianBasis {
             Qxy => Some(6),
             Qyz => Some(7),
             Qzx => Some(8),
-            SPlus | SMinus | Q1Plus | Q1Minus | Q2Plus | Q2Minus => None,
+            Sp | Sm | Q1p | Q1m | Q2p | Q2m => None,
         }
     }
     fn elements(&self) -> impl Iterator<Item = O> + '_ {
@@ -85,12 +84,12 @@ where
         use LinearCombination as Lc;
         use O::*;
         match primitive {
-            Sx => Lc::term(half(), SPlus) + Lc::term(half(), SMinus),
-            Sy => Lc::term(imaginary(-half::<C>()), SPlus) + Lc::term(imaginary(half()), SMinus),
-            Qzx => Lc::term(half(), Q1Plus) + Lc::term(half(), Q1Minus),
-            Qyz => Lc::term(imaginary(-half::<C>()), Q1Plus) + Lc::term(imaginary(half()), Q1Minus),
-            Dxy => Lc::term(half(), Q2Plus) + Lc::term(half(), Q2Minus),
-            Qxy => Lc::term(imaginary(-half::<C>()), Q2Plus) + Lc::term(imaginary(half()), Q2Minus),
+            Sx => Lc::term(half(), Sp) + Lc::term(half(), Sm),
+            Sy => Lc::term(imaginary(-half::<C>()), Sp) + Lc::term(imaginary(half()), Sm),
+            Qzx => Lc::term(half(), Q1p) + Lc::term(half(), Q1m),
+            Qyz => Lc::term(imaginary(-half::<C>()), Q1p) + Lc::term(imaginary(half()), Q1m),
+            Dxy => Lc::term(half(), Q2p) + Lc::term(half(), Q2m),
+            Qxy => Lc::term(imaginary(-half::<C>()), Q2p) + Lc::term(imaginary(half()), Q2m),
             _ => Lc::primitive(*primitive),
         }
     }
@@ -98,19 +97,19 @@ where
         use O::*;
         match primitive {
             I => Some(0),
-            SPlus => Some(1),
-            SMinus => Some(2),
+            Sp => Some(1),
+            Sm => Some(2),
             Sz => Some(3),
             Q0 => Some(4),
-            Q1Plus => Some(5),
-            Q1Minus => Some(6),
-            Q2Plus => Some(7),
-            Q2Minus => Some(8),
+            Q1p => Some(5),
+            Q1m => Some(6),
+            Q2p => Some(7),
+            Q2m => Some(8),
             Sx | Sy | Dxy | Qxy | Qyz | Qzx => None,
         }
     }
     fn elements(&self) -> impl Iterator<Item = O> + '_ {
         use O::*;
-        [I, SPlus, SMinus, Sz, Q0, Q1Plus, Q1Minus, Q2Plus, Q2Minus].into_iter()
+        [I, Sp, Sm, Sz, Q0, Q1p, Q1m, Q2p, Q2m].into_iter()
     }
 }

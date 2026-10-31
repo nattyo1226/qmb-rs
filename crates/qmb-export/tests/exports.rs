@@ -52,7 +52,7 @@ fn check_local<T: Real>() {
         values(sparse.data().data(), &reference);
     }
 
-    let ops = [Op::I, Op::Sx, Op::Sy, Op::Sz, Op::SPlus, Op::SMinus];
+    let ops = [Op::I, Op::Sx, Op::Sy, Op::Sz, Op::Sp, Op::Sm];
     for a in ops {
         for b in ops {
             let op = (Lo::<T>::primitive(a).clone() * &Lo::primitive(b))
@@ -144,10 +144,7 @@ fn check_composite<T: Real>() {
         + &Lo::primitive(Op::Sy).at(&g).unwrap().scaled(c(-0.3, 0.4)))
         .unwrap();
     let b = (Lo::<T>::primitive(Op::Sz).at(&f).unwrap().clone()
-        + &Lo::primitive(Op::SMinus)
-            .at(&g)
-            .unwrap()
-            .scaled(c(0.1, -0.6)))
+        + &Lo::primitive(Op::Sm).at(&g).unwrap().scaled(c(0.1, -0.6)))
         .unwrap();
     let am: Vec<_> = kron(&local::<T>(Op::Sx), &local(Op::I))
         .into_iter()
@@ -156,7 +153,7 @@ fn check_composite<T: Real>() {
         .collect();
     let bm: Vec<_> = kron(&local::<T>(Op::Sz), &local(Op::I))
         .into_iter()
-        .zip(kron(&local::<T>(Op::I), &local(Op::SMinus)))
+        .zip(kron(&local::<T>(Op::I), &local(Op::Sm)))
         .map(|(a, b)| a + b * c(0.1, -0.6))
         .collect();
     let expected = adjoint(&product(&am, &bm, 4), 4);

@@ -1,7 +1,9 @@
 //! Spin-1 chain Hamiltonians on caller-owned site spaces.
 
+use crate::coefficient::{four_ninths, two_thirds};
 use crate::{SpinOne, SpinOneOperator as O};
-use core::ops::Neg;
+use core::ops::{Add, Div, Neg};
+use num_traits::One;
 use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError};
 use qmb_geometry::{Chain, MappingError, NearestNeighbors, SiteMapper};
 
@@ -34,7 +36,7 @@ fn model_space<I: Eq>(
 pub struct SpinOneModels<Q>(core::marker::PhantomData<fn() -> Q>);
 
 impl<C> SpinOneModels<SpinOne<C>> {
-    /// Builds `-sum_(i,j) sum_(a in i,b in j) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)`.
+    /// Builds `-(2/3) sum_(i,j) sum_(a in i,b in j) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)`.
     ///
     /// Each input space is one site, with any number of leaves. All leaf pairs
     /// across nearest-neighbor sites interact; no within-site terms are added.
@@ -45,8 +47,8 @@ impl<C> SpinOneModels<SpinOne<C>> {
     /// zero couplings. The result is bound to a tensor sharing the supplied
     /// site trees in order. Zero sites give zero on the unit space.
     /// Parameters must represent real values for a Hermitian Hamiltonian.
-    /// Construction does not evaluate local rules or perform scalar arithmetic
-    /// beyond converting and negating the couplings.
+    /// Couplings retain their physical-spin meaning; rational rescaling is
+    /// performed in C without evaluating local rules or requiring Float.
     pub fn xyz<I: Eq, R>(
         chain: &Chain,
         sites: &[HilbertSpace<I>],
@@ -55,13 +57,13 @@ impl<C> SpinOneModels<SpinOne<C>> {
         jz: R,
     ) -> Result<OperatorOf<SpinOne<C>, I>, UtilityError>
     where
-        C: Clone + From<R> + Neg<Output = C>,
+        C: Clone + From<R> + Neg<Output = C> + One + Add<Output = C> + Div<Output = C>,
     {
         let space = model_space(chain, sites)?;
         let axes = [
-            (O::Sx, -C::from(jx)),
-            (O::Sy, -C::from(jy)),
-            (O::Sz, -C::from(jz)),
+            (O::Sx, -C::from(jx) * two_thirds::<C>()),
+            (O::Sy, -C::from(jy) * two_thirds::<C>()),
+            (O::Sz, -C::from(jz) * two_thirds::<C>()),
         ];
         let mut terms = Vec::new();
         let mapper = SiteMapper::new(chain, sites)?;
@@ -83,7 +85,7 @@ impl<C> SpinOneModels<SpinOne<C>> {
         Ok(SpinOne::<C>::operator_sum(terms)?.bind(&space)?)
     }
 
-    /// Builds `-J sum_(i,j) sum_(a in i,b in j) S_a dot S_b`.
+    /// Builds `-(2J/3) sum_(i,j) sum_(a in i,b in j) S_a dot S_b`.
     ///
     /// This is [`Self::xyz`] with all three couplings equal; positive J is
     /// ferromagnetic. Validation, all-leaf pairing and space binding are the same.
@@ -93,23 +95,25 @@ impl<C> SpinOneModels<SpinOne<C>> {
         j: R,
     ) -> Result<OperatorOf<SpinOne<C>, I>, UtilityError>
     where
-        C: Clone + From<R> + Neg<Output = C>,
+        C: Clone + From<R> + Neg<Output = C> + One + Add<Output = C> + Div<Output = C>,
     {
         Self::xyz(chain, sites, j.clone(), j.clone(), j)
     }
 
-    /// Builds `-sum_(i,j) sum_(a in i,b in j) [J A_ab + K A_ab^2]`, where `A_ab = S_a dot S_b`.
+    /// Builds `-sum_(i,j) sum_(a in i,b in j) [(2J/3) A_ab + (4K/9) A_ab^2]`, where `A_ab = S_a dot S_b`.
     ///
     /// The square is taken separately for each leaf pair, with all Cartesian
     /// cross terms retained. No constant energy shift is added or discarded.
     /// At K = 0 this equals [`Self::heisenberg`]; J > 0 is ferromagnetic.
-    /// The angular convention `sum [cos(theta) A + sin(theta) A^2]` corresponds
-    /// to `j = -cos(theta), k = -sin(theta)`.
+    /// The physical-spin angular convention `sum [cos(theta) B + sin(theta) B^2]`,
+    /// with `B = J_a dot J_b`, corresponds to `j = -cos(theta), k = -sin(theta)`.
     ///
     /// Site validation, boundaries, empty sites and binding follow [`Self::xyz`].
     /// Couplings must represent real values for a Hermitian Hamiltonian.
-    /// The unscaled bilinear expression is shared in its delayed square, so
-    /// construction requires no coefficient multiplication, fractions or Float.
+    /// The unscaled bilinear expression is shared in its delayed square.
+    /// Physical couplings are converted using rational arithmetic in C;
+    /// construction requires neither local evaluation nor Float. Fractions
+    /// must use mathematical division, not truncating integer arithmetic.
     ///
     /// ```
     /// use num_complex::Complex;
@@ -130,11 +134,11 @@ impl<C> SpinOneModels<SpinOne<C>> {
         k: R,
     ) -> Result<OperatorOf<SpinOne<C>, I>, UtilityError>
     where
-        C: Clone + From<R> + Neg<Output = C>,
+        C: Clone + From<R> + Neg<Output = C> + One + Add<Output = C> + Div<Output = C>,
     {
         let space = model_space(chain, sites)?;
-        let minus_j = -C::from(j);
-        let minus_k = -C::from(k);
+        let minus_j = -C::from(j) * two_thirds::<C>();
+        let minus_k = -C::from(k) * four_ninths::<C>();
         let mut terms = Vec::new();
         let mapper = SiteMapper::new(chain, sites)?;
         for group in mapper
