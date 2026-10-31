@@ -4,14 +4,14 @@ use crate::{Fermion, FermionOperator as O};
 use alloc::vec::Vec;
 use core::ops::Neg;
 use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError, TensorKind};
-use qmb_geometry::{Chain, ChainError};
+use qmb_geometry::{Chain, MappingError, NearestNeighbors, SiteMapper};
 
 /// Failure to construct a Hubbard model on a site-ordered space assignment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum UtilityError {
     /// The supplied site count does not match the chain.
     #[error("{0}")]
-    Chain(#[from] ChainError),
+    Mapping(#[from] MappingError),
     /// Indices are duplicated, or tensor kinds are incompatible.
     #[error("{0}")]
     Space(#[from] SpaceError),
@@ -100,7 +100,7 @@ impl<C> FermionModels<Fermion<C>> {
         C: Clone + Neg<Output = C>,
     {
         // Validate without depending on edges, coefficients, or evaluator traits.
-        let _ = chain.nn_site_pairs_with(sites)?;
+        SiteMapper::new(chain, sites)?;
         let mut modes = Vec::with_capacity(sites.len());
         for (site, space) in sites.iter().enumerate() {
             let mut leaves = space.leaves();
@@ -123,7 +123,14 @@ impl<C> FermionModels<Fermion<C>> {
                     .scaled(u.clone()),
             );
         }
-        for (left, right) in chain.nn_site_pairs_with(&modes)? {
+        let mapper = SiteMapper::new(chain, &modes)?;
+        for group in mapper
+            .groups(&NearestNeighbors)
+            .unwrap_or_else(|never| match never {})
+        {
+            let group = group?;
+            let left = group.get(0).expect("nearest-neighbor pair");
+            let right = group.get(1).expect("nearest-neighbor pair");
             for spin in 0..2 {
                 for (from, to) in [(left[spin], right[spin]), (right[spin], left[spin])] {
                     terms.push(

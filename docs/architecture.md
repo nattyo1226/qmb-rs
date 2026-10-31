@@ -1,6 +1,6 @@
 # qmb-rs アーキテクチャ概要
 
-更新日: 2026-10-30
+更新日: 2026-10-31
 
 ## 1. 文書の位置づけ
 
@@ -44,7 +44,7 @@ core 内では局所契約、式、空間、評価、基底処理を module で�
 
 core は `ops` に `Dimension::dim()`・`Identity` と代数契約、`expr::parts` に有限線型結合と共通構文パーツ、`expr::traversal` に内部走査を置く。式の保持・構築は `expr`、評価・内積・trace は非公開のトップレベル `evaluate`、基底列挙・展開・座標取得は `basis` が担当する。旧 `primitive` とトップレベル `linear_combination` は廃止し、主要型・trait の crate root からの再公開は維持する。
 
-geometry は `boundary`・`geometry::chain`・`relation::nearest_neighbor`・`connection` に分け、Chain の既存メソッドから委譲する。export は `output`・`metadata`・`args`・共通の `coordinates` と `vector`・`matrix`、storage 契約と Vec・ndarray・sprs の `backend` に分ける。具体的代数のモデル構築は各 crate の `models`、normalize は `norm`・`expectation`・`error` に責任をまとめる。これらの crate の公開窓口は引き続き crate root とし、basic の構成は維持する。
+geometry は `boundary`・`geometry`・`relation`・`group`・`connection` に分ける。`Geometry::num_sites()` を共通契約とし、Chain の `NearestNeighbors`・`Consecutive<K>` を `Relation<G>` として公開する。`SiteMapper` が外部列へ接続し、元の Group を保持する `MappedGroup` を返す。export は `output`・`metadata`・`args`・共通の `coordinates` と `vector`・`matrix`、storage 契約と Vec・ndarray・sprs の `backend` に分ける。具体的代数のモデル構築は各 crate の `models`、normalize は `norm`・`expectation`・`error` に責任をまとめる。これらの crate の公開窓口は引き続き crate root とし、basic の構成は維持する。
 
 ### 2.3. 数値 export（実装済み）
 
@@ -152,7 +152,7 @@ Step 3 の複合状態 `State` は常に所属空間を持ち、複合演算子 
 
 Chain はサイト数と境界条件のみを持ち、Index の入力・発行・ToSpace による空間生成を行わない。`Chain::new(n, boundary)` は Self を返す。近接 Site 対は辞書順で、0・1 Site は辺なし、2 Site は open／periodic とも一辺とする。
 
-外部の Site 順列を借用する `_with` API は、列長を列挙前に検証する。`nn_site_pairs_with` は入力要素対、`nn_pairs_with` は Site 間の全葉の直積、`nn_zip_with` は短い方までの葉の位置対応を返す。`_in` は保存された全空間のトップレベル分割を Site と読み `_with` へ委譲する。葉の列挙には core の `leaves()` を使い、要素・Index の Clone・Eq を要求しない。
+`SiteMapper::new(&geometry, &values)` は Relation の適用前に列長を検証する。`groups(&relation)` は規則固有の関連型 Error を返し、成功時は各 Group の番号範囲を遅延検証して MappedGroup へ写す。HilbertSpace 用の `leaves_cartesian`・`leaves_zip` は共通入口 `combine_leaves(FnOnce)` で実装し、任意の Site 数を扱う。`from_space` は保存されたトップレベル分割を Site と読む。要素・Index の Clone・Eq は接続に要求しない。
 
 モデル構築は `qmb_spin_half::models::SpinHalfModels<SpinHalf<C>>` の関連関数 xyz・heisenberg・neel で提供し、Chain と局所空間列を受け取る。Index の重複と列長を辺の有無によらず検証する。Hamiltonian は局所空間ハンドルを共有して列順に tensor した空間へ束縛する。標準モデルは複数葉と空 Site を受け入れ、XYZ・Heisenberg は Site 間の全葉ペアへ結合を与え、Neel は Site ごとに向きを決めて全葉へ割り当てる。空 Site は位置と偶奇を保ち、前後を直接結び直さない。0 Site では単位空間上の zero Hamiltonian と単位状態を返す。
 

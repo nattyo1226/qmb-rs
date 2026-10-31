@@ -1,6 +1,6 @@
 use num_complex::Complex;
 use qmb_core::{ExpressionError, HilbertSpace as H, SpaceError, State, StateOf};
-use qmb_geometry::{Boundary, Chain, ChainError};
+use qmb_geometry::{Boundary, Chain, MappingError};
 use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op, SpinHalfState as Ket, UtilityError};
 
 type Spin = SpinHalf<Complex<f64>>;
@@ -182,7 +182,10 @@ fn every_model_validates_length_and_duplicate_indices_without_edges() {
             let sites: Vec<_> = (0..count).map(H::factor).collect();
             let chain = Chain::new(n, Boundary::Open);
             let expected =
-                (n != count).then_some(UtilityError::Chain(ChainError::SiteCountMismatch));
+                (n != count).then_some(UtilityError::Mapping(MappingError::SiteCountMismatch {
+                    expected: n,
+                    actual: count,
+                }));
             assert_eq!(
                 qmb_spin_half::models::SpinHalfModels::<Spin>::neel(&chain, &sites, Ket::Up).err(),
                 expected
@@ -318,8 +321,15 @@ fn model_errors_preserve_sources_and_messages() {
             SpaceError::DuplicateIndex.to_string(),
         ),
         (
-            UtilityError::from(ChainError::SiteCountMismatch),
-            ChainError::SiteCountMismatch.to_string(),
+            UtilityError::from(MappingError::SiteCountMismatch {
+                expected: 2,
+                actual: 1,
+            }),
+            MappingError::SiteCountMismatch {
+                expected: 2,
+                actual: 1,
+            }
+            .to_string(),
         ),
     ] {
         assert_eq!(error.to_string(), source);

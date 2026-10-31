@@ -13,7 +13,7 @@ type Models = qmb_spin_half::models::SpinHalfModels<Spin>;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let chain = Chain::new(6, Boundary::Open);
-    let factors: Vec<_> = (0..chain.site_count())
+    let factors: Vec<_> = (0..chain.num_sites())
         .map(|_| HilbertSpace::factor(Id128::default()))
         .collect();
     // H = -J sum(Sx Sx + Sy Sy + Sz Sz); positive J is ferromagnetic.

@@ -1,6 +1,6 @@
 # qmb-rs 要件
 
-更新日: 2026-10-28
+更新日: 2026-10-31
 
 ## 1. 文書の目的と責任分離
 
@@ -833,7 +833,7 @@ A_{mn}=\langle e_m^{\mathrm{out}}|A|e_n^{\mathrm{in}}\rangle.
 - nearest-neighbor 関係
 - 関係の列挙
 
-Site は `0..chain.site_count()` の位置番号 usize で指定する。専用の SiteId や所属トークンは設けず、外部列の長さを接続時に検証する。詳細は [Chain・Site と自由度の配置](design/geometry.md)に定める。
+Site は `0..chain.num_sites()` の位置番号 usize で指定する。専用の SiteId や所属トークンは設けず、外部列の長さを接続時に検証する。詳細は [Chain・Site と自由度の配置](design/geometry.md)に定める。
 
 一次元 chain は、一般的な site 集合と関係からなる物理空間を構築するための便利な生成手段として位置づける。幾何学的な関係と Hamiltonian の結合は同一視しない。物理空間は関係を提供し、モデル構築処理がその関係に演算子と係数を割り当てる。
 
@@ -867,7 +867,11 @@ Periodic chain では、次の規約を採用する。
 
 Chain はサイト数と境界条件だけを保持し、Index の入力・発行・空間への変換は行わない。利用側が Site 順の局所空間列を構築し、借用して接続する。一要素は一 Site であり、葉・入れ子・複数葉・単項 Tensor・空 Site を受け入れる。
 
-`nn_site_pairs_with` は任意の入力要素への参照対、`nn_pairs_with` は最近接 Site 間の全葉の直積、`nn_zip_with` は短い方までの葉の位置対応を返す。いずれも Iterator を返す前に列長の完全一致を検証し、要素や Index の Clone・Eq を要求しない。`_in` の入口は全空間の保存されたトップレベル分割を Site と読み、対応する `_with` へ委譲する。葉は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site と読む。
+`Geometry` は `num_sites()`、`Relation<G>` は `AsRef<[usize]>` な Group の列挙と規則固有の関連型 Error を保証する。`SiteMapper::new(&geometry, &values)` は列長を Relation の適用前に検証し、`groups(&relation)` は各 Group の番号範囲を遅延検証して元の型を保持する MappedGroup へ写す。`iter()` は組内順の借用、HilbertSpace 用の `leaves_cartesian()` は Site ごとの葉の直積、`leaves_zip()` は最短までの位置対応を返す。共通入口 `combine_leaves(FnOnce)` で独自の Iterator の組み合わせも指定でき、要素・Index の Clone・Eq や体数別の tuple trait は要求しない。
+
+`SiteMapper::from_space` は全空間の保存されたトップレベル分割を Site と読む。葉は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site とする。Group が0 Site なら直積・zip とも空の葉列を一つ返し、空 Site を含めば結果なしとする。
+
+Chain の最近接は `NearestNeighbors`、順序付きの連続 K Site は `Consecutive<K>` として提供する。後者は open で `0..=N-K`、periodic で `0..N` の開始位置を持ち、順序・役割を保って折り返す。K=0 はエラー、K>N は配置なしとする。2 Site の periodic では最近接の一辺と、連続配置の二つの向きを区別する。一般の支持集合の組み合わせは標準 Relation に含めない。
 
 標準モデルの入口は `models::SpinHalfModels<SpinHalf<C>>::xyz`・`heisenberg`・`neel` とし、Chain と局所空間列を受け取る。全空間の引数は不要である。各関数は列長と全局所空間にわたる Index 重複を辺の有無によらず検証し、I には Eq のみを要求する。局所空間ハンドルを共有して Site 順に tensor した空間へ Hamiltonian を束縛し、内部 grouping と相互作用に現れない Site も保持する。別途存在する全空間の root・上位 grouping・異なる因子順序を復元する契約は持たない。既存状態・行列の暗黙の並べ替えは行わない。
 
@@ -897,7 +901,7 @@ Hermiticity と解析的なエネルギー期待値の検証には、実数の�
 - 構築した Heisenberg Hamiltonian が Hermitian である。
 - 代数的な演算子作用および内積から得た期待値が解析解と一致する。
 
-配置について、非 Clone・非 Eq の入力要素への借用、列長の過不足、全葉の Index 重複拒否、入れ子・空・可変長の局所空間を検証する。両葉ペア列挙の順序、トップレベルと全葉の区別、`_in` と `_with` の一致も確認する。
+配置について、非 Clone・非 Eq の入力要素への借用、列長の過不足、全葉の Index 重複拒否、入れ子・空・可変長の局所空間を検証する。両葉ペア列挙の順序、トップレベルと全葉の区別、`SiteMapper::from_space` と `new` の一致も確認する。
 
 モデル構築側は局所 grouping の共有、Site 順に生成する全空間の因子順序、複数葉の全組み合わせ結合、空 Site の偶奇と非再接続、0 Site・全空の場合、および一葉の場合の従来の数値結果との一致を検証する。
 
