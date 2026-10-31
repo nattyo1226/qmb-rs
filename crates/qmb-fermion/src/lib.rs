@@ -1,11 +1,11 @@
-//! Single-mode fermions, su(2)-normalized Majorana operators, and Hubbard chains.
+//! Single-mode fermions, standard Majorana operators, and Hubbard chains.
 //!
-//! States are ordered `Empty, Occupied`. With `a = Annihilate`, the Hermite
-//! operators are `X = (a + a†)/2`, `Y = (a - a†)/(2i)`, and
-//! `Z = -2iXY = I/2 - n`. Thus `[X,Y] = iZ` and `X² = Y² = Z² = I/4`.
-//! X and Y are half the usual Majorana operators; Z is an even bilinear,
-//! not a third odd Majorana. The parity operator `P = I - 2n = 2Z` is retained
-//! independently. Eight primitives span a four-dimensional operator space.
+//! States are ordered `Empty, Occupied`. With `a = Annihilate`, the Hermitian
+//! operators are `Mx = a + a†`, `My = (a - a†)/i`, and
+//! `Mz = -i Mx My = I - 2n`. Thus `[Mx,My] = 2iMz` and `Mx² = My² = Mz² = I`.
+//! Mx and My are odd Majoranas; Mz is the even parity operator.
+//! Seven primitives span a four-dimensional operator space. MajoranaBasis
+//! is orthonormal under the dimension-normalized inner product `Tr(A†B)/2`.
 //!
 //! Primitive types have no coefficient precision. [`Fermion<C>`] selects it
 //! once, while [`qmb_core::ExpressionFactory`] constructs shared core expressions.

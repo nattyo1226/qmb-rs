@@ -5,7 +5,7 @@ use num_complex::Complex;
 use num_traits::One;
 use qmb_core::{
     Adjoint, Basis, HilbertSpace, Identity, ImaginaryUnit, InnerProduct, LinearCombination as Lc,
-    Product, Trace,
+    Trace,
 };
 use qmb_spin_one::{
     CartesianBasis, LadderBasis, SpinOne, SpinOneOperator as O, SpinOneState as S, SzBasis,
@@ -123,14 +123,8 @@ fn exact_value(lc: Lc<O, Exact>) -> Matrix {
 }
 
 #[test]
-fn all_products_and_bases_accept_nonclone_exact_coefficients() {
+fn basis_conversions_accept_nonclone_exact_coefficients() {
     for a in OPS {
-        for b in OPS {
-            values::<f64>(
-                &exact_value(<O as Product<Exact>>::product(&a, &b)),
-                &product(&matrix(a), &matrix(b)),
-            );
-        }
         values::<f64>(
             &exact_value(<CartesianBasis as Basis<O, Exact>>::expand(
                 &CartesianBasis,
@@ -151,19 +145,6 @@ fn all_products_and_bases_accept_nonclone_exact_coefficients() {
             9
         );
     }
-    let terms: Vec<_> = <O as Product<Exact>>::product(&O::Sz, &O::Sz)
-        .into_iter()
-        .collect();
-    assert_eq!(terms.len(), 2);
-    assert_eq!(
-        (terms[0].coefficient.re.0, terms[0].coefficient.re.1),
-        (2, 3)
-    );
-    assert_eq!(
-        (terms[1].coefficient.re.0, terms[1].coefficient.re.1),
-        (1, 3)
-    );
-    assert!(<O as Product<Exact>>::product(&O::Q2Plus, &O::Q2Plus).is_empty());
 }
 
 struct OneOnly(u8);

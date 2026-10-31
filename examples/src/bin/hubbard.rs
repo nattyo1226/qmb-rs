@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (normalized.normalized_expectation(&symmetric)? - shifted_energy).norm_sqr() < 1e-24
         );
     }
-    let p = F::operator(O::Parity).coordinates(&MajoranaBasis)?;
+    let p = F::operator(O::Mz).coordinates(&MajoranaBasis)?;
     for entry in p.flat_entries() {
         let (index, coefficient) = entry?;
         println!("Parity in MajoranaBasis: coordinate {index} = {coefficient}");

@@ -249,13 +249,11 @@ fn graded<T: Real>() {
             sign.into(),
         );
     }
-    let parity = Fermion::<Complex<T>>::operator_product_at([
-        (&modes[0], O::Parity),
-        (&modes[1], O::Parity),
-    ])
-    .unwrap()
-    .bind(&space)
-    .unwrap();
+    let parity =
+        Fermion::<Complex<T>>::operator_product_at([(&modes[0], O::Mz), (&modes[1], O::Mz)])
+            .unwrap()
+            .bind(&space)
+            .unwrap();
     let m = exported_matrix(&parity);
     assert_eq!([m[0].re, m[5].re, m[10].re, m[15].re], [1., -1., -1., 1.]);
     let reversed = (annihilate[1].clone() * &annihilate[0])
@@ -276,6 +274,19 @@ fn graded<T: Real>() {
         round.coordinates(&MajoranaBasis).unwrap().dim().unwrap(),
         16
     );
+    let basis: Vec<_> = space
+        .basis_operators::<O, Complex<T>, _>(&MajoranaBasis)
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let matrices: Vec<_> = basis.iter().map(exported_matrix).collect();
+    for (i, lhs) in basis.iter().enumerate() {
+        for (j, rhs) in basis.iter().enumerate() {
+            let reference = trace(&product(&adjoint(&matrices[i]), &matrices[j])) / 4.0;
+            close::<T>(reference, f64::from(i == j).into());
+            close::<T>(to64(lhs.hs_inner_product(rhs).unwrap()), reference);
+        }
+    }
 }
 #[test]
 fn car_spinful_signs_and_parity_f32() {

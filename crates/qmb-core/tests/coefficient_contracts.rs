@@ -96,6 +96,54 @@ impl Divide for Weight {
 }
 
 #[test]
+fn normalized_hs_needs_no_dimension_float_cast_or_general_div_trait() {
+    use qmb_core::{Identity, Product, Trace};
+    struct IdentityOnly;
+    impl Identity for IdentityOnly {
+        fn identity() -> Self {
+            Self
+        }
+    }
+    impl Adjoint<Weight> for IdentityOnly {
+        type Term = Self;
+        fn adjoint(&self) -> LinearCombination<Self, Weight> {
+            LinearCombination::primitive(Self)
+        }
+    }
+    impl Product<Weight> for IdentityOnly {
+        type Term = Self;
+        fn product(&self, _: &Self) -> LinearCombination<Self, Weight> {
+            LinearCombination::primitive(Self)
+        }
+    }
+    impl Trace<Weight> for IdentityOnly {
+        fn trace(&self) -> Weight {
+            Weight(3.0)
+        }
+    }
+    impl qmb_core::HomogeneousParity for IdentityOnly {
+        fn parity(&self) -> qmb_core::Parity {
+            qmb_core::Parity::Even
+        }
+    }
+    impl qmb_core::ParityOperator for IdentityOnly {
+        fn parity_operator() -> Self {
+            Self
+        }
+    }
+    let local = LocalOperator::<IdentityOnly, Weight>::identity().scaled(Weight(4.0));
+    assert_eq!(local.trace().0, 12.0);
+    assert_eq!(local.hs_inner_product(&local).0, 16.0);
+    let space = HilbertSpace::tensor_all((0..80).map(HilbertSpace::factor)).unwrap();
+    let operator = local
+        .at(space.leaves().next().unwrap())
+        .unwrap()
+        .bind(&space)
+        .unwrap();
+    assert_eq!(operator.hs_inner_product(&operator).unwrap().0, 16.0);
+}
+
+#[test]
 fn expectation_quotients_require_neither_real_part_nor_float_or_general_comparison() {
     let state =
         LocalState::<Primitive, Primitive, Weight>::primitive(Primitive).scaled(Weight(2.0));

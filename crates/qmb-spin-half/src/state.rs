@@ -1,14 +1,11 @@
 //! Spin-1/2 states, their orthonormal inner product, and operator actions.
 
-use core::ops::{Add, Div, Neg};
+use core::ops::Neg;
 
 use num_traits::{One, Zero};
 use qmb_core::{Act, Dimension, DimensionOverflow, ImaginaryUnit, InnerProduct, LinearCombination};
 
-use crate::{
-    SpinHalfOperator,
-    coefficient::{half, imaginary},
-};
+use crate::{SpinHalfOperator, coefficient::imaginary};
 
 /// The eigenstates of `Sz`, independent of coefficient precision.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -27,7 +24,7 @@ impl<C: Zero + One> InnerProduct<C> for SpinHalfState {
 
 impl<C> Act<C> for SpinHalfState
 where
-    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
+    C: One + Neg<Output = C> + ImaginaryUnit,
 {
     type Operator = SpinHalfOperator;
     type Term = Self;
@@ -39,15 +36,15 @@ where
 
         match (*operator, *self) {
             (I, state) => Lc::primitive(state),
-            (Sx, Up) => Lc::term(half(), Down),
-            (Sx, Down) => Lc::term(half(), Up),
-            (Sy, Up) => Lc::term(imaginary(half()), Down),
-            (Sy, Down) => Lc::term(imaginary(-half::<C>()), Up),
-            (Sz, Up) => Lc::term(half(), Up),
-            (Sz, Down) => Lc::term(-half::<C>(), Down),
-            (SPlus, Up) | (SMinus, Down) => Lc::zero(),
-            (SPlus, Down) => Lc::primitive(Up),
-            (SMinus, Up) => Lc::primitive(Down),
+            (Sx, Up) => Lc::term(C::one(), Down),
+            (Sx, Down) => Lc::term(C::one(), Up),
+            (Sy, Up) => Lc::term(imaginary(C::one()), Down),
+            (Sy, Down) => Lc::term(imaginary(-C::one()), Up),
+            (Sz, Up) => Lc::term(C::one(), Up),
+            (Sz, Down) => Lc::term(-C::one(), Down),
+            (Sp, Up) | (Sm, Down) => Lc::zero(),
+            (Sp, Down) => Lc::primitive(Up),
+            (Sm, Up) => Lc::primitive(Down),
         }
     }
 }

@@ -1,8 +1,10 @@
 //! Spin models built on a chain and caller-owned site spaces.
 
+use crate::coefficient::quarter;
 use crate::{SpinHalf, SpinHalfOperator, SpinHalfState};
 use alloc::vec::Vec;
-use core::ops::Neg;
+use core::ops::{Add, Div, Neg};
+use num_traits::One;
 use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError, State, StateOf};
 use qmb_geometry::{Chain, MappingError, NearestNeighbors, SiteMapper};
 
@@ -35,7 +37,7 @@ fn model_space<I: Eq>(
 pub struct SpinHalfModels<Q>(core::marker::PhantomData<fn() -> Q>);
 
 impl<C> SpinHalfModels<SpinHalf<C>> {
-    /// Builds `-sum_(i,j) sum_(a in i,b in j) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)`.
+    /// Builds `-(1/4) sum_(i,j) sum_(a in i,b in j) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)`.
     ///
     /// Each input space is one site, with any number of leaves. All leaf pairs
     /// across nearest-neighbor sites interact; no within-site terms are added.
@@ -43,6 +45,8 @@ impl<C> SpinHalfModels<SpinHalf<C>> {
     /// The exact site count and index uniqueness are checked even without edges.
     /// The result is bound to a tensor sharing the supplied site trees in order.
     /// Zero sites return a zero Hamiltonian bound to the unit space.
+    /// Couplings refer to physical spins J = S/2; fractions must be represented
+    /// by mathematical division, rather than truncating integer arithmetic.
     pub fn xyz<I: Eq, R>(
         chain: &Chain,
         factors: &[HilbertSpace<I>],
@@ -51,13 +55,13 @@ impl<C> SpinHalfModels<SpinHalf<C>> {
         jz: R,
     ) -> Result<OperatorOf<SpinHalf<C>, I>, UtilityError>
     where
-        C: Clone + From<R> + Neg<Output = C>,
+        C: Clone + From<R> + Neg<Output = C> + One + Add<Output = C> + Div<Output = C>,
     {
         let space = model_space(chain, factors)?;
         let axes = [
-            (SpinHalfOperator::Sx, -C::from(jx)),
-            (SpinHalfOperator::Sy, -C::from(jy)),
-            (SpinHalfOperator::Sz, -C::from(jz)),
+            (SpinHalfOperator::Sx, -C::from(jx) * quarter::<C>()),
+            (SpinHalfOperator::Sy, -C::from(jy) * quarter::<C>()),
+            (SpinHalfOperator::Sz, -C::from(jz) * quarter::<C>()),
         ];
         let mut terms = Vec::new();
         let mapper = SiteMapper::new(chain, factors)?;
@@ -85,7 +89,7 @@ impl<C> SpinHalfModels<SpinHalf<C>> {
         coupling: R,
     ) -> Result<OperatorOf<SpinHalf<C>, I>, UtilityError>
     where
-        C: Clone + From<R> + Neg<Output = C>,
+        C: Clone + From<R> + Neg<Output = C> + One + Add<Output = C> + Div<Output = C>,
     {
         Self::xyz(chain, factors, coupling.clone(), coupling.clone(), coupling)
     }

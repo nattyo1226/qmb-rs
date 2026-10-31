@@ -1,6 +1,6 @@
 # 局所 primitive・式木の数学的能力
 
-更新日: 2026-10-27
+更新日: 2026-11-01
 
 ## 1. 対象と責任分担
 
@@ -101,7 +101,7 @@ A(aB+bC)=a(AB)+b(AC),
 | 状態式 | 正規化 | norm と scalar multiplication を用いる。zero-norm state の正規化は拒否する |
 | 状態式（後続） | bra | Hilbert 空間の内積により ket の随伴として得る。ket から bra への対応は共役線型とする |
 | 演算子式 | commutator / anticommutator | 積と加算から `AB−BA` / `AB+BA` を構築する |
-| 演算子式 | Hilbert–Schmidt 内積 | `Tr(A†B)` を計算する。次元による除算は行わない |
+| 演算子式 | Hilbert–Schmidt 内積 | `Tr(A†B)/d` を計算する。局所次元 d は `Tr(I)` から取得し、既存の Divide で除算する。Trace 自体は非正規化のまま |
 | 演算子式・状態式 | 期待値 | 作用と内積から `⟨ψ,Aψ⟩` を計算する |
 | 演算子式・状態式 | 正規化期待値 | 期待値を `⟨ψ,ψ⟩` で割る。zero-norm state では拒否する |
 
@@ -127,9 +127,31 @@ norm squared は自己内積の実部、norm はその平方根とする。`norm
 
 拡張 trait とエラーは `qmb-normalize` から直接利用する。core の libm feature は設けず、core の代数 API・norm squared・スカラー除算は正規化 crate がなくても利用できる。非零の自己内積による商を明示的に計算でき、平方根を使わない正規化期待値の拡張 trait も `qmb-normalize` に属する。
 
+### 4.2. Hilbert–Schmidt 内積の次元規格化
+
+局所では状態空間の次元 d、複合系では全作用空間の次元 D を用い、演算子の内積とそのノルムを次で定義する。演算子空間の次元 d² や primitive の variant 数で割らない。
+
+```math
+\langle A,B\rangle_D=\frac{\operatorname{Tr}(A^\dagger B)}{D},\qquad
+\|A\|_D^2=\frac{\operatorname{Tr}(A^\dagger A)}{D}.
+```
+
+この規格化では `||I||_D=1` となり、identity spectator を追加しても内積を保つ。Hermite 演算子 A では最大混合状態での二乗平均 `Tr((I/D) A²)` に対応する。相互作用項そのものを増やした場合のノルムまで一定にするものではない。
+
+```math
+\langle A\otimes I_m,B\otimes I_m\rangle_{Dm}
+=\langle A,B\rangle_D.
+```
+
+`Trace` は通常の非正規化 trace のまま、`Tr(I)=D` とする。期待値・密度行列の純度に使う trace、状態内積・norm・状態正規化も既存の意味を維持する。任意の独自代数や Basis に正規直交性を要求しない。
+
+`LocalOperator::hs_inner_product` は局所の `Tr(A†B)` を `O::identity()` の trace で割る。`Operator::hs_inner_product`・`hs_inner_product_in` は[通常表現の局所 trace の走査](composite-expression.md#124-intrinsic-な項と通常表現)で各 trace を規格化してから縮約する。各局所次元は係数型 C の非零の値として表せ、数学的な除算ができることを要求する。除算には既存の `Divide` を使い、通常の `trace` / `trace_in` に除算能力を追加しない。
+
+この計算には状態型・Dimension・総次元の整数化・整数から C への変換を要求しない。空の tensor 空間は D=1 とする。総次元の `usize` overflow と、identity spectator の次元を掛け重ねることによる中間値の増大を避けるが、一般の係数の桁あふれや丸め誤差を防ぐ保証はしない。実装は [evaluate/trace.rs](../../crates/qmb-core/src/evaluate/trace.rs)、回帰テストは [hs_inner_product.rs](../../crates/qmb-core/tests/hs_inner_product.rs)を参照する。
+
 ## 5. 線型従属性と基底との接続
 
-Primitive が線型独立でないため、同じ数学的対象に複数の式表現を許す。たとえば `S+` と `Sx + i Sy` をどちらも記述できる。各能力は、primitive の線型関係を保存し、同じ対象を表す異なる入力表現から数学的に同じ結果を得ることを要求する。結果の係数列や式木の構造の一致は要求しない。
+Primitive が線型独立でないため、同じ数学的対象に複数の式表現を許す。たとえば spin-half の `Sp` と `(Sx + i Sy)/2` をどちらも記述できる。各能力は、primitive の線型関係を保存し、同じ対象を表す異なる入力表現から数学的に同じ結果を得ることを要求する。結果の係数列や式木の構造の一致は要求しない。
 
 評価に primitive や式の構造比較を必須としない。指定基底への展開では、その基底の順序番号を用いて同じ基底要素の係数をまとめる。局所構造や Index の整合性を検証する契約は、式の構造比較を延期しても維持する。
 

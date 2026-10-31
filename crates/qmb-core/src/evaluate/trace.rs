@@ -1,8 +1,8 @@
 //! Ordinary traces and Hilbert–Schmidt contractions.
 
 use crate::{
-    Adjoint, Conjugate, ExpressionError, HilbertSpace, Identity, LocalOperator, Operator, Product,
-    Trace,
+    Adjoint, Conjugate, Divide, ExpressionError, HilbertSpace, Identity, LocalOperator, Operator,
+    Product, Trace,
     coefficient::{add, multiply, zero},
     expr::traversal::{LinearTerms, OrdinaryOpTerms, operator_view},
 };
@@ -29,15 +29,17 @@ impl<O, C> LocalOperator<O, C> {
         result
     }
 
-    /// Computes the unnormalized Hilbert-Schmidt inner product `Tr(self† rhs)`.
-    /// No division by the local dimension is performed.
+    /// Computes the normalized Hilbert–Schmidt inner product `Tr(self† rhs)/d`.
+    ///
+    /// The local dimension is obtained as `Tr(I)` in the coefficient type. It
+    /// must be nonzero and division by it must represent mathematical division.
     pub fn hs_inner_product(&self, rhs: &Self) -> C
     where
-        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C>,
+        C: Clone + Zero + Mul<Output = C> + Conjugate<Output = C> + Divide<Output = C>,
         O: Identity,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
-        (self.adjoint() * rhs).trace()
+        (self.adjoint() * rhs).trace().divide(O::identity().trace())
     }
 }
 
@@ -74,18 +76,34 @@ impl<I: Eq, O, C> Operator<I, O, C> {
         O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
+        self.trace_on_with(ambient, |value| value)
+    }
+
+    // Both contractions use ordinary local traces after grading has been
+    // resolved. Only the HS caller supplies division; ordinary trace keeps its
+    // original coefficient bounds.
+    fn trace_on_with(
+        &self,
+        ambient: &HilbertSpace<I>,
+        local_trace: impl Fn(C) -> C,
+    ) -> Result<C, ExpressionError>
+    where
+        C: Clone + Zero + One + Conjugate<Output = C>,
+        O: Identity + crate::HomogeneousParity + crate::ParityOperator,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
+    {
         let mut result = zero();
         for (coefficient, factors) in OrdinaryOpTerms::new(&self.expression, ambient) {
             let mut value = one();
             for index in ambient.indices() {
-                let local_trace = match factors
+                let local_trace_value = match factors
                     .iter()
                     .find(|(factor, _)| factor.factor_index() == Some(index))
                 {
                     Some((_, local)) => local.trace(),
                     None => LocalOperator::<O, C>::identity().trace(),
                 };
-                value = multiply(value, local_trace);
+                value = multiply(value, local_trace(local_trace_value));
             }
             if let Some(c) = coefficient {
                 value = multiply(c, value);
@@ -95,28 +113,46 @@ impl<I: Eq, O, C> Operator<I, O, C> {
         Ok(result)
     }
 
-    /// Computes the unnormalized Hilbert-Schmidt inner product `Tr(self† rhs)`.
-    pub fn hs_inner_product(&self, rhs: &Self) -> Result<C, ExpressionError>
+    fn normalized_trace_on(&self, ambient: &HilbertSpace<I>) -> Result<C, ExpressionError>
     where
-        C: Clone + Zero + One + Conjugate<Output = C>,
+        C: Clone + Zero + One + Conjugate<Output = C> + Divide<Output = C>,
         O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
-        (self.adjoint() * rhs)?.trace()
+        let dimension = O::identity().trace();
+        self.trace_on_with(ambient, |value| value.divide(dimension.clone()))
     }
 
-    /// Computes the unnormalized Hilbert-Schmidt inner product `Tr(self† rhs)`
-    /// on an explicit ambient space.
+    /// Computes the normalized Hilbert–Schmidt inner product `Tr(self† rhs)/D`.
+    ///
+    /// Each ordinary local trace is divided by `Tr(I)` before contraction, so
+    /// no integer total dimension or large unnormalized trace is constructed.
+    /// Local dimensions must be nonzero and support mathematical division.
+    pub fn hs_inner_product(&self, rhs: &Self) -> Result<C, ExpressionError>
+    where
+        C: Clone + Zero + One + Conjugate<Output = C> + Divide<Output = C>,
+        O: Identity + crate::HomogeneousParity + crate::ParityOperator,
+        O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
+    {
+        let product = (self.adjoint() * rhs)?;
+        let ambient = product.select_space(None, None)?;
+        product.normalized_trace_on(ambient)
+    }
+
+    /// Computes `Tr(self† rhs)/D` on an explicit ambient space.
+    ///
+    /// Uses local trace normalization, with the same coefficient requirements
+    /// as [`Self::hs_inner_product`]. The explicit space overrides old bindings.
     pub fn hs_inner_product_in(
         &self,
         rhs: &Self,
         ambient: &HilbertSpace<I>,
     ) -> Result<C, ExpressionError>
     where
-        C: Clone + Zero + One + Conjugate<Output = C>,
+        C: Clone + Zero + One + Conjugate<Output = C> + Divide<Output = C>,
         O: Identity + crate::HomogeneousParity + crate::ParityOperator,
         O: Product<C, Term = O> + Adjoint<C, Term = O> + Trace<C>,
     {
-        (self.bind(ambient)?.adjoint() * &rhs.bind(ambient)?)?.trace()
+        (self.bind(ambient)?.adjoint() * &rhs.bind(ambient)?)?.normalized_trace_on(ambient)
     }
 }

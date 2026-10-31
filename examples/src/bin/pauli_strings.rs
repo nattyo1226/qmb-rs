@@ -69,7 +69,6 @@ fn for_each_pauli_string<C, I, Group>(
     mut emit: impl FnMut(PauliString<I, C>),
 ) -> Result<(), Error>
 where
-    C: From<f64>,
     I: Eq,
     Group: AsRef<[usize]>,
 {
@@ -94,8 +93,8 @@ where
 
         for axes in axis_assignments(support.len()) {
             let factors = support.iter().zip(axes).map(|(&i, axis)| {
-                // X = 2 Sx, Y = 2 Sy, Z = 2 Sz.
-                SpinHalf::<C>::operator(axis).scaled(2.0).at(&sites[i])
+                // Sx, Sy and Sz already use Pauli normalization.
+                SpinHalf::<C>::operator(axis).at(&sites[i])
             });
             let word = SpinHalf::<C>::try_operator_product(factors)?.bind(&space)?;
             emit(word);

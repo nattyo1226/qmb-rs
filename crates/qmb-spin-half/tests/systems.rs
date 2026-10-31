@@ -18,7 +18,7 @@ fn local_and_composite_expressions_connect_to_existing_types() {
     .unwrap();
     let zz: qmb_core::OperatorOf<Spin, _> =
         (sz.at(&a).unwrap().clone() * &sz.at(&b).unwrap()).unwrap();
-    assert_eq!(psi.expectation(&zz).unwrap(), Complex::new(-0.25, 0.));
+    assert_eq!(psi.expectation(&zz).unwrap(), Complex::new(-1.0, 0.));
     // Construction fixes f32 even without downstream evaluation or annotation.
     let single = SpinHalf::<Complex<f32>>::state(Ket::Up);
     let operator = SpinHalf::<Complex<f32>>::operator(Op::Sx);
@@ -26,7 +26,7 @@ fn local_and_composite_expressions_connect_to_existing_types() {
         single
             .act(&operator)
             .inner_product(&SpinHalf::<Complex<f32>>::state(Ket::Down)),
-        Complex::new(0.5_f32, 0.)
+        Complex::new(1.0_f32, 0.)
     );
     let chain = Chain::new(2, Boundary::Open);
     let sites = [a, b];
@@ -75,7 +75,7 @@ fn models_accept_multiple_leaves_and_alternate_by_site() {
             terms.push(
                 (local.at(left).unwrap().clone() * &local.at(&c).unwrap())
                     .unwrap()
-                    .scaled(Complex::new(-1., 0.)),
+                    .scaled(Complex::new(-0.25, 0.)),
             );
         }
     }
@@ -230,10 +230,36 @@ fn every_model_validates_length_and_duplicate_indices_without_edges() {
 fn model_construction_needs_only_operation_specific_coefficient_capabilities() {
     struct NoCapabilities;
     #[derive(Clone)]
-    struct Coupling(i32);
+    struct Coupling(f64);
+    impl core::ops::Add for Coupling {
+        type Output = Self;
+        fn add(self, rhs: Self) -> Self {
+            Self(self.0 + rhs.0)
+        }
+    }
+
+    impl core::ops::Mul for Coupling {
+        type Output = Self;
+        fn mul(self, rhs: Self) -> Self {
+            Self(self.0 * rhs.0)
+        }
+    }
+
+    impl core::ops::Div for Coupling {
+        type Output = Self;
+        fn div(self, rhs: Self) -> Self {
+            Self(self.0 / rhs.0)
+        }
+    }
+    impl num_traits::One for Coupling {
+        fn one() -> Self {
+            Self(1.0)
+        }
+    }
+
     impl From<i32> for Coupling {
         fn from(value: i32) -> Self {
-            Self(value)
+            Self(f64::from(value))
         }
     }
     impl core::ops::Neg for Coupling {
@@ -251,12 +277,12 @@ fn model_construction_needs_only_operation_specific_coefficient_capabilities() {
         Ket::Up,
     )
     .unwrap();
-    // Hamiltonian construction needs no addition, multiplication, Zero or One.
+    // Hamiltonian construction needs rational arithmetic, but neither Zero nor evaluation.
     // XYZ's real coupling source need not implement Clone either.
     struct Real(i32);
     impl From<Real> for Coupling {
         fn from(value: Real) -> Self {
-            Self(value.0)
+            Self(f64::from(value.0))
         }
     }
     let _ = qmb_spin_half::models::SpinHalfModels::<SpinHalf<Coupling>>::xyz(
@@ -382,7 +408,7 @@ macro_rules! construction_precision {
             .unwrap()
             .bind(&space)
             .unwrap();
-            assert_eq!(state.expectation(&h).unwrap(), Complex::new(-0.25, 0.));
+            assert_eq!(state.expectation(&h).unwrap(), Complex::new(-1.0, 0.));
             let sum = Q::state_sum(&space, [state.scaled(2.0), state.scaled(-1.0)]).unwrap();
             let tried = Q::try_state_sum(&space, [Ok(sum)]).unwrap();
             assert_eq!(state.inner_product(&tried).unwrap(), Complex::new(1., 0.));
@@ -396,19 +422,19 @@ macro_rules! construction_precision {
             assert_eq!(sx.trace(), Complex::new(0., 0.));
             assert_eq!(
                 state.expectation(&h.scaled(0.5)).unwrap(),
-                Complex::new(-0.125, 0.)
+                Complex::new(-0.5, 0.)
             );
             let lc = qmb_core::LinearCombination::<_, Complex<$real>>::primitive(0u8).scaled(0.5);
             assert_eq!(
                 lc.terms().next().unwrap().coefficient,
                 Complex::new(0.5, 0.)
             );
-            // Same-index products preserve order: Sx Sy = i Sz / 2.
+            // Same-index products preserve order: Sx Sy = i Sz.
             let up = Q::state(Ket::Up).at(&a).unwrap();
             let xy = Q::operator_product_at([(&a, Op::Sx), (&a, Op::Sy)]).unwrap();
             let yx = Q::operator_product_at([(&a, Op::Sy), (&a, Op::Sx)]).unwrap();
-            assert_eq!(up.expectation(&xy).unwrap(), Complex::new(0., 0.25));
-            assert_eq!(up.expectation(&yx).unwrap(), Complex::new(0., -0.25));
+            assert_eq!(up.expectation(&xy).unwrap(), Complex::new(0., 1.0));
+            assert_eq!(up.expectation(&yx).unwrap(), Complex::new(0., -1.0));
             let explicit = Q::operator_product([
                 Q::operator(Op::Sx).at(&a).unwrap(),
                 Q::operator(Op::Sy).at(&a).unwrap(),

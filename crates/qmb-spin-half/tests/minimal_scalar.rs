@@ -12,10 +12,10 @@ use qmb_spin_half::{
     CartesianBasis, LadderBasis, SpinHalfOperator as Op, SpinHalfState as State, SzBasis,
 };
 
-use Op::{I, SMinus, SPlus, Sx, Sy, Sz};
+use Op::{I, Sm, Sp, Sx, Sy, Sz};
 use State::{Down, Up};
 
-const OPS: [Op; 6] = [I, Sx, Sy, Sz, SPlus, SMinus];
+const OPS: [Op; 6] = [I, Sx, Sy, Sz, Sp, Sm];
 
 #[test]
 fn basis_metadata_uses_the_same_contract_as_expansion() {
@@ -27,8 +27,8 @@ fn basis_metadata_uses_the_same_contract_as_expansion() {
         }
     }
     check::<_, Natural, _>(SzBasis, &[Up, Down]);
-    check::<_, Coefficient<Signed>, _>(CartesianBasis, &[I, Sx, Sy, Sz]);
-    check::<_, Coefficient<Rational>, _>(LadderBasis, &[I, SPlus, SMinus, Sz]);
+    check::<_, Coefficient<Rational>, _>(CartesianBasis, &[I, Sx, Sy, Sz]);
+    check::<_, Coefficient<Signed>, _>(LadderBasis, &[I, Sp, Sm, Sz]);
 }
 
 macro_rules! integer_scalar {
@@ -80,7 +80,7 @@ fn inner_adjoint_trace_and_state_basis_only_need_zero_and_one() {
             assert_eq!(inner.0, if a == b { 1 } else { 0 });
         }
     }
-    for (op, expected) in OPS.into_iter().zip([I, Sx, Sy, Sz, SMinus, SPlus]) {
+    for (op, expected) in OPS.into_iter().zip([I, Sx, Sy, Sz, Sm, Sp]) {
         let adjoint = <Op as Adjoint<Natural>>::adjoint(&op);
         assert_eq!(adjoint.len(), 1);
         let term = adjoint.into_iter().next().unwrap();
@@ -106,28 +106,27 @@ fn inner_adjoint_trace_and_state_basis_only_need_zero_and_one() {
 }
 
 #[test]
-fn cartesian_basis_needs_negation_but_not_division() {
+fn ladder_basis_needs_negation_but_not_division() {
     let expected: [&[(i64, i64, Op)]; 6] = [
         &[(1, 0, I)],
-        &[(1, 0, Sx)],
-        &[(1, 0, Sy)],
+        &[(1, 0, Sp), (1, 0, Sm)],
+        &[(0, -1, Sp), (0, 1, Sm)],
         &[(1, 0, Sz)],
-        &[(1, 0, Sx), (0, 1, Sy)],
-        &[(1, 0, Sx), (0, -1, Sy)],
+        &[(1, 0, Sp)],
+        &[(1, 0, Sm)],
     ];
     let elements: Vec<_> =
-        <CartesianBasis as Basis<Op, Coefficient<Signed>>>::elements(&CartesianBasis).collect();
-    assert_eq!(elements, [I, Sx, Sy, Sz]);
+        <LadderBasis as Basis<Op, Coefficient<Signed>>>::elements(&LadderBasis).collect();
+    assert_eq!(elements, [I, Sp, Sm, Sz]);
     for (op, expected) in OPS.into_iter().zip(expected) {
-        let expanded =
-            <CartesianBasis as Basis<Op, Coefficient<Signed>>>::expand(&CartesianBasis, &op);
+        let expanded = <LadderBasis as Basis<Op, Coefficient<Signed>>>::expand(&LadderBasis, &op);
         let actual: Vec<_> = expanded
             .into_terms()
             .map(|t| (t.coefficient.re.0, t.coefficient.im.0, t.operand))
             .collect();
         assert_eq!(actual, expected);
         assert_eq!(
-            <CartesianBasis as Basis<Op, Coefficient<Signed>>>::index(&CartesianBasis, &op),
+            <LadderBasis as Basis<Op, Coefficient<Signed>>>::index(&LadderBasis, &op),
             elements.iter().position(|&p| p == op)
         );
     }
@@ -249,29 +248,23 @@ fn products_and_actions_use_exact_fractions_without_clone_copy_or_num() {
         }
     }
     assert_eq!(
-        terms(<Op as Product<Coefficient<Rational>>>::product(
-            &Sy, &SMinus
-        )),
-        [((0, 1), (-1, 4), I), ((0, 1), (-1, 2), Sz),]
+        terms(<Op as Product<Coefficient<Rational>>>::product(&Sy, &Sm)),
+        [((0, 1), (-1, 2), I), ((0, 1), (-1, 2), Sz),]
     );
     assert_eq!(
-        terms(<Op as Product<Coefficient<Rational>>>::product(
-            &SPlus, &SMinus
-        )),
-        [((1, 2), (0, 1), I), ((1, 1), (0, 1), Sz),]
+        terms(<Op as Product<Coefficient<Rational>>>::product(&Sp, &Sm)),
+        [((1, 2), (0, 1), I), ((1, 2), (0, 1), Sz),]
     );
     assert_eq!(
-        terms(<Op as Product<Coefficient<Rational>>>::product(
-            &SMinus, &SPlus
-        )),
-        [((1, 2), (0, 1), I), ((-1, 1), (0, 1), Sz),]
+        terms(<Op as Product<Coefficient<Rational>>>::product(&Sm, &Sp)),
+        [((1, 2), (0, 1), I), ((-1, 2), (0, 1), Sz),]
     );
     assert_eq!(
         terms(<State as Act<Coefficient<Rational>>>::act(&Down, &Sy)),
-        [((0, 1), (-1, 2), Up)]
+        [((0, 1), (-1, 1), Up)]
     );
-    assert!(<Op as Product<Coefficient<Rational>>>::product(&SPlus, &SPlus).is_empty());
-    assert!(<State as Act<Coefficient<Rational>>>::act(&Up, &SPlus).is_empty());
+    assert!(<Op as Product<Coefficient<Rational>>>::product(&Sp, &Sp).is_empty());
+    assert!(<State as Act<Coefficient<Rational>>>::act(&Up, &Sp).is_empty());
 }
 
 #[test]
@@ -300,18 +293,18 @@ fn local_metadata_identity_and_bases_accept_minimal_fractional_scalars() {
             &LadderBasis,
             &Sx
         )),
-        [((1, 2), (0, 1), SPlus), ((1, 2), (0, 1), SMinus),]
+        [((1, 1), (0, 1), Sp), ((1, 1), (0, 1), Sm),]
     );
     assert_eq!(
         terms(<LadderBasis as Basis<Op, Coefficient<Rational>>>::expand(
             &LadderBasis,
             &Sy
         )),
-        [((0, 1), (-1, 2), SPlus), ((0, 1), (1, 2), SMinus),]
+        [((0, 1), (-1, 1), Sp), ((0, 1), (1, 1), Sm),]
     );
     let elements: Vec<_> =
         <LadderBasis as Basis<Op, Coefficient<Rational>>>::elements(&LadderBasis).collect();
-    assert_eq!(elements, [I, SPlus, SMinus, Sz]);
+    assert_eq!(elements, [I, Sp, Sm, Sz]);
 }
 
 // This coefficient is owned by the test and deliberately does not implement

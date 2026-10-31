@@ -1,6 +1,6 @@
 # 埋め込み・複合空間の式と数学的能力
 
-更新日: 2026-10-30
+更新日: 2026-11-01
 
 ## 1. 対象と責任分担
 
@@ -62,7 +62,7 @@ Index の付与を「配置」、spectator を含む全 Hilbert 空間の確定�
 | 状態式 | Norm・正規化 | 内積による `sqrt(⟨ψ,ψ⟩)` と scalar multiplication。zero-norm state の正規化は拒否する |
 | 状態式（後続） | Bra | Hilbert 空間の内積により ket の随伴として得る。ket から bra への対応は共役線型とする |
 | 演算子式 | Commutator / anticommutator | 積と加算による `AB−BA` / `AB+BA` |
-| 演算子式 | Hilbert–Schmidt 内積 | 非正規化の `Tr(A†B)` |
+| 演算子式 | Hilbert–Schmidt 内積 | `Tr(A†B)/D`。D は全作用空間の次元 |
 | 状態・演算子式 | 期待値・正規化期待値 | 作用と内積による `⟨ψ,Aψ⟩`、および `⟨ψ,ψ⟩` による除算。後者は zero-norm state を拒否する |
 
 共通の複合式・配置・束縛・評価は `qmb-core` が担当し、具体的代数の局所規則を合成する。source の自動保持・式の構造比較・表示は、要件の 4.5 節に従って後続へ延期する。局所式と Index・局所構造・作用空間の整合性判定は維持し、数学的な等価性に式構造の一致を要求しない。
@@ -353,7 +353,7 @@ P は A の右側に置く。例えば `A ⊗g B` は `A P^p(B) ⊗ B` となる
 
 状態への作用は、選択した Act の scope 内で odd primitive の先行因子へ P を挿入する。混合 parity・もつれた状態にも P の実際の局所作用を使い、単一の定数符号に置き換えない。局所式の和・積・随伴も primitive ごとに処理する。状態全体の積和展開・全基底・密行列を共通の前処理にせず、作用しない枝を共有する。
 
-状態内積には追加符号がなく、full trace は通常表現で局所積・Trace を縮約する。P が入る可能性のある因子を下ろす前に identity spectator と判定しない。二 mode の `c_1 = P_0 ⊗ a_1` に対し、`c_1†c_1 = I_0 ⊗ n_1` の trace も検証する。通常の trace の巡回性に parity 符号を加えず、S・状態基底・usize で表せる総次元も要求しない。Hilbert–Schmidt 内積は同じ trace 経路を使う。Supertrace / partial trace は追加しない。
+状態内積には追加符号がなく、full trace は通常表現で局所積・Trace を縮約する。P が入る可能性のある因子を下ろす前に identity spectator と判定しない。二 mode の `c_1 = P_0 ⊗ a_1` に対し、`c_1†c_1 = I_0 ⊗ n_1` の trace も検証する。通常の trace の巡回性に parity 符号を加えず、S・状態基底・usize で表せる総次元も要求しない。Hilbert–Schmidt 内積は同じ通常表現への変換と局所 trace の走査を使い、各局所 trace を `Tr(I)` で割ってから縮約する。追加の Divide は HS 内積側だけに要求し、総次元 D を整数化しない。Supertrace / partial trace は追加しない。
 
 空間検証は Zero・零係数・identity でも先に行い、不正な Index や空間を見逃さない。利用例は [tensor_products.rs](../../examples/src/bin/tensor_products.rs)。この共通機構を使う製品実装は [Fermion](local-structure.md#9-fermion-の局所代数)・[Spin-one](local-structure.md#10-spin-one-の局所代数)に記録する。異種 primitive、実質的な ordinary / graded 混在、permutation、regrouping、State / Operator の統合は後続の範囲とする。
 

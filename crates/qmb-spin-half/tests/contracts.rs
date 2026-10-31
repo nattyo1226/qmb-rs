@@ -12,10 +12,10 @@ use qmb_spin_half::{
     CartesianBasis, LadderBasis, SpinHalfOperator as Op, SpinHalfState as State, SzBasis,
 };
 
-use Op::{I, SMinus, SPlus, Sx, Sy, Sz};
+use Op::{I, Sm, Sp, Sx, Sy, Sz};
 use State::{Down, Up};
 
-const OPS: [Op; 6] = [I, Sx, Sy, Sz, SPlus, SMinus];
+const OPS: [Op; 6] = [I, Sx, Sy, Sz, Sp, Sm];
 const STATES: [State; 2] = [Up, Down];
 
 trait Real: Num + Copy + Neg<Output = Self> + Debug + FromPrimitive + ToPrimitive {
@@ -51,11 +51,11 @@ fn vector(state: State) -> Vector {
 fn matrix(op: Op) -> Matrix {
     match op {
         I => [[c(1.0, 0.0), c(0.0, 0.0)], [c(0.0, 0.0), c(1.0, 0.0)]],
-        Sx => [[c(0.0, 0.0), c(0.5, 0.0)], [c(0.5, 0.0), c(0.0, 0.0)]],
-        Sy => [[c(0.0, 0.0), c(0.0, -0.5)], [c(0.0, 0.5), c(0.0, 0.0)]],
-        Sz => [[c(0.5, 0.0), c(0.0, 0.0)], [c(0.0, 0.0), c(-0.5, 0.0)]],
-        SPlus => [[c(0.0, 0.0), c(1.0, 0.0)], [c(0.0, 0.0), c(0.0, 0.0)]],
-        SMinus => [[c(0.0, 0.0), c(0.0, 0.0)], [c(1.0, 0.0), c(0.0, 0.0)]],
+        Sx => [[c(0.0, 0.0), c(1.0, 0.0)], [c(1.0, 0.0), c(0.0, 0.0)]],
+        Sy => [[c(0.0, 0.0), c(0.0, -1.0)], [c(0.0, 1.0), c(0.0, 0.0)]],
+        Sz => [[c(1.0, 0.0), c(0.0, 0.0)], [c(0.0, 0.0), c(-1.0, 0.0)]],
+        Sp => [[c(0.0, 0.0), c(1.0, 0.0)], [c(0.0, 0.0), c(0.0, 0.0)]],
+        Sm => [[c(0.0, 0.0), c(0.0, 0.0)], [c(1.0, 0.0), c(0.0, 0.0)]],
     }
 }
 fn add(a: Matrix, b: Matrix) -> Matrix {
@@ -183,12 +183,12 @@ fn check_all_local_rules<T: Real>() {
     // Once these independent output primitives are fixed, matrix equality also
     // determines their coefficients uniquely.
     let product_primitives: [[&[Op]; 6]; 6] = [
-        [&[I], &[Sx], &[Sy], &[Sz], &[SPlus], &[SMinus]],
+        [&[I], &[Sx], &[Sy], &[Sz], &[Sp], &[Sm]],
         [&[Sx], &[I], &[Sz], &[Sy], &[I, Sz], &[I, Sz]],
         [&[Sy], &[Sz], &[I], &[Sx], &[I, Sz], &[I, Sz]],
-        [&[Sz], &[Sy], &[Sx], &[I], &[SPlus], &[SMinus]],
-        [&[SPlus], &[I, Sz], &[I, Sz], &[SPlus], &[], &[I, Sz]],
-        [&[SMinus], &[I, Sz], &[I, Sz], &[SMinus], &[I, Sz], &[]],
+        [&[Sz], &[Sy], &[Sx], &[I], &[Sp], &[Sm]],
+        [&[Sp], &[I, Sz], &[I, Sz], &[Sp], &[], &[I, Sz]],
+        [&[Sm], &[I, Sz], &[I, Sz], &[Sm], &[I, Sz], &[]],
     ];
     let action_primitives: [[&[State]; 2]; 6] = [
         [&[Up], &[Down]],
@@ -198,7 +198,7 @@ fn check_all_local_rules<T: Real>() {
         [&[], &[Up]],
         [&[Down], &[]],
     ];
-    let adjoints = [I, Sx, Sy, Sz, SMinus, SPlus];
+    let adjoints = [I, Sx, Sy, Sz, Sm, Sp];
     let identity = Lc::<_, Complex<T>>::primitive(Op::identity());
     assert_eq!(identity, Lc::primitive(I));
     for (i, a) in OPS.into_iter().enumerate() {
@@ -288,7 +288,7 @@ fn check_algebra_laws<T: Real>() {
         + Lc::<_, Complex<T>>::primitive(Down).scaled(c::<T>(1.2, 0.4));
     let y = Lc::<_, Complex<T>>::primitive(Up).scaled(c::<T>(-0.2, 0.6))
         + Lc::<_, Complex<T>>::primitive(Down).scaled(c::<T>(0.1, -0.4));
-    let op = Lc::<_, Complex<T>>::primitive(SPlus).scaled(c::<T>(0.4, -0.8))
+    let op = Lc::<_, Complex<T>>::primitive(Sp).scaled(c::<T>(0.4, -0.8))
         + Lc::<_, Complex<T>>::primitive(Sy).scaled(c::<T>(0.3, 0.2));
     assert_complex::<T>(
         complex64(inner(&x, &y)),
@@ -309,12 +309,12 @@ fn check_algebra_laws<T: Real>() {
 
 fn check_spin_relations<T: Real>() {
     for (a, b, expected, factor) in [
-        (Sx, Sy, Sz, c(0.0, 1.0)),
-        (Sy, Sz, Sx, c(0.0, 1.0)),
-        (Sz, Sx, Sy, c(0.0, 1.0)),
-        (SPlus, SMinus, Sz, c(2.0, 0.0)),
-        (Sz, SPlus, SPlus, c(1.0, 0.0)),
-        (Sz, SMinus, SMinus, c(-1.0, 0.0)),
+        (Sx, Sy, Sz, c(0.0, 2.0)),
+        (Sy, Sz, Sx, c(0.0, 2.0)),
+        (Sz, Sx, Sy, c(0.0, 2.0)),
+        (Sp, Sm, Sz, c(1.0, 0.0)),
+        (Sz, Sp, Sp, c(2.0, 0.0)),
+        (Sz, Sm, Sm, c(-2.0, 0.0)),
     ] {
         let ab = <Op as Product<Complex<T>>>::product(&a, &b);
         let ba = <Op as Product<Complex<T>>>::product(&b, &a).scaled(c(-1.0, 0.0));
@@ -323,16 +323,17 @@ fn check_spin_relations<T: Real>() {
     for op in [Sx, Sy, Sz] {
         assert_matrix::<T>(
             operator_value(&<Op as Product<Complex<T>>>::product(&op, &op)),
-            scale(matrix(I), c(0.25, 0.0)),
+            matrix(I),
         );
     }
-    for op in [SPlus, SMinus] {
+    for op in [Sp, Sm] {
         assert!(<Op as Product<Complex<T>>>::product(&op, &op).is_empty());
     }
-    for (primitive, sign) in [(SPlus, 1.0), (SMinus, -1.0)] {
+    for (primitive, sign) in [(Sp, 1.0), (Sm, -1.0)] {
         let direct = Lc::<_, Complex<T>>::primitive(primitive);
-        let decomposition =
-            Lc::primitive(Sx) + Lc::<_, Complex<T>>::primitive(Sy).scaled(c(0.0, sign));
+        let decomposition = (Lc::primitive(Sx)
+            + Lc::<_, Complex<T>>::primitive(Sy).scaled(c(0.0, sign)))
+        .scaled(c(0.5, 0.0));
         assert_matrix::<T>(operator_value(&decomposition), matrix(primitive));
         for op in OPS {
             let op = Lc::primitive(op);
@@ -396,7 +397,7 @@ fn check_bases<T: Real>() {
     }
     state_basis::<T, _>(&SzBasis);
     check_operator_basis::<T, _>(&CartesianBasis, [I, Sx, Sy, Sz]);
-    check_operator_basis::<T, _>(&LadderBasis, [I, SPlus, SMinus, Sz]);
+    check_operator_basis::<T, _>(&LadderBasis, [I, Sp, Sm, Sz]);
     for op in OPS {
         let original = Lc::<_, Complex<T>>::primitive(op);
         let cartesian = expand(&CartesianBasis, &original);
@@ -416,10 +417,10 @@ fn check_bases<T: Real>() {
             assert_complex::<T>(complex64(a), complex64(b));
         }
     }
-    let sum = Lc::<_, Complex<T>>::primitive(SPlus) + Lc::primitive(SMinus);
+    let sum = Lc::<_, Complex<T>>::primitive(Sp) + Lc::primitive(Sm);
     for (a, b) in coordinates(&CartesianBasis, &sum).into_iter().zip([
         c(0.0, 0.0),
-        c(2.0, 0.0),
+        c(1.0, 0.0),
         c(0.0, 0.0),
         c(0.0, 0.0),
     ]) {
@@ -531,7 +532,7 @@ fn check_local_expressions<T: Real>() {
             );
             assert_complex::<T>(
                 complex64(a_expr.hs_inner_product(&b_expr)),
-                matrix_trace(multiply(dagger(a_matrix), b_matrix)),
+                matrix_trace(multiply(dagger(a_matrix), b_matrix)) / c(2.0, 0.0),
             );
             assert_matrix::<T>(
                 expression_matrix(&a_expr.commutator(&b_expr)),
@@ -583,7 +584,7 @@ fn check_local_expressions<T: Real>() {
     for op in [
         O::<T>::zero(),
         O::sum([]),
-        (O::primitive(SPlus).clone() * &O::primitive(SPlus)),
+        (O::primitive(Sp).clone() * &O::primitive(Sp)),
     ] {
         assert_matrix::<T>(expression_matrix(&op), [[c(0.0, 0.0); 2]; 2]);
         assert_complex::<T>(complex64(op.trace()), c(0.0, 0.0));
@@ -591,7 +592,7 @@ fn check_local_expressions<T: Real>() {
     assert_complex::<T>(complex64(O::<T>::product([]).trace()), c(2.0, 0.0));
     assert_complex::<T>(
         complex64(O::<T>::identity().hs_inner_product(&O::identity())),
-        c(2.0, 0.0),
+        c(1.0, 0.0),
     );
     assert_vector::<T>(expression_vector(&S::<T>::zero()), [c(0.0, 0.0); 2]);
 }
@@ -612,8 +613,8 @@ fn all_expression_operator_ownership_forms_agree() {
     type O = LocalOperator<qmb_spin_half::SpinHalfOperator, Complex<f64>>;
     type S =
         LocalState<qmb_spin_half::SpinHalfState, qmb_spin_half::SpinHalfOperator, Complex<f64>>;
-    let a = O::primitive(SPlus);
-    let b = O::primitive(SMinus);
+    let a = O::primitive(Sp);
+    let b = O::primitive(Sm);
     let x = S::primitive(Up);
     let y = S::primitive(Down);
     for expression in [
@@ -622,10 +623,7 @@ fn all_expression_operator_ownership_forms_agree() {
         &a + b.clone(),
         &a + &b,
     ] {
-        assert_matrix::<f64>(
-            expression_matrix(&expression),
-            add(matrix(SPlus), matrix(SMinus)),
-        );
+        assert_matrix::<f64>(expression_matrix(&expression), add(matrix(Sp), matrix(Sm)));
     }
     for expression in [
         a.clone() - b.clone(),
@@ -635,7 +633,7 @@ fn all_expression_operator_ownership_forms_agree() {
     ] {
         assert_matrix::<f64>(
             expression_matrix(&expression),
-            add(matrix(SPlus), scale(matrix(SMinus), c(-1.0, 0.0))),
+            add(matrix(Sp), scale(matrix(Sm), c(-1.0, 0.0))),
         );
     }
     for expression in [
@@ -646,7 +644,7 @@ fn all_expression_operator_ownership_forms_agree() {
     ] {
         assert_matrix::<f64>(
             expression_matrix(&expression),
-            multiply(matrix(SPlus), matrix(SMinus)),
+            multiply(matrix(Sp), matrix(Sm)),
         );
     }
     for expression in [
@@ -686,7 +684,7 @@ fn all_expression_operator_ownership_forms_agree() {
     ] {
         assert_matrix::<f64>(
             expression_matrix(&expression),
-            scale(matrix(SPlus), coefficient),
+            scale(matrix(Sp), coefficient),
         );
     }
     for expression in [
@@ -704,7 +702,7 @@ fn all_expression_operator_ownership_forms_agree() {
     for expression in [-a.clone(), -&a] {
         assert_matrix::<f64>(
             expression_matrix(&expression),
-            scale(matrix(SPlus), c(-1.0, 0.0)),
+            scale(matrix(Sp), c(-1.0, 0.0)),
         );
     }
     for expression in [-x.clone(), -&x] {
@@ -906,9 +904,9 @@ fn check_composite_expressions<T: Real>() {
                 &dense_scale(&placed_matrix(Sy, 1), c(0.2, 0.3)),
             );
             // Include repeated action on the same factor as well as separated ones.
-            let same = LO::primitive(SPlus).at(d).unwrap();
+            let same = LO::primitive(Sp).at(d).unwrap();
             let expression = ((a.clone() * &b).unwrap().clone() * &same).unwrap();
-            let expected = dense_mul(&dense_mul(&am, &bm), &placed_matrix(SPlus, 2));
+            let expected = dense_mul(&dense_mul(&am, &bm), &placed_matrix(Sp, 2));
             let result = state.act(&expression).unwrap().evaluate().unwrap();
             assert_dense_vector::<T>(
                 &global_vector(&result, &factors),
@@ -937,7 +935,7 @@ fn check_composite_expressions<T: Real>() {
             );
             assert_complex::<T>(
                 complex64(a.hs_inner_product_in(&b, &h).unwrap()),
-                dense_trace(&dense_mul(&dense_dagger(&am), &bm)),
+                dense_trace(&dense_mul(&dense_dagger(&am), &bm)) / c(8.0, 0.0),
             );
             let ab = dense_mul(&am, &bm);
             let ba = dense_mul(&bm, &am);
@@ -1093,9 +1091,9 @@ fn composite_empty_zero_spectator_and_overflow_contracts() {
     );
     assert_eq!(state.inner_product(&state).unwrap(), c(1.0, 0.0));
     let local = LO::primitive(Sz).at(factors.last().unwrap()).unwrap();
-    assert_eq!(state.expectation(&local).unwrap(), c(0.5, 0.0));
+    assert_eq!(state.expectation(&local).unwrap(), c(1.0, 0.0));
     let zero = state
-        .act(&LO::primitive(SPlus).at(&factors[0]).unwrap())
+        .act(&LO::primitive(Sp).at(&factors[0]).unwrap())
         .unwrap()
         .evaluate()
         .unwrap();

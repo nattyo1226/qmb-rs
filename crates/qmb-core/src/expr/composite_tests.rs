@@ -853,8 +853,9 @@ fn composite_scalar_reductions_require_neither_num_float_copy_nor_division() {
         MinimalComplex::new(Ring(2), Ring(-3))
     );
     assert_eq!(
-        operator
-            .hs_inner_product_in(&operator, state.space())
+        (operator.adjoint() * &operator)
+            .unwrap()
+            .trace_in(state.space())
             .unwrap(),
         MinimalComplex::new(Ring(13), Ring(0))
     );

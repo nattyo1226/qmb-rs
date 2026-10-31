@@ -25,17 +25,17 @@ pub const OPS: [O; 15] = [
     O::Sx,
     O::Sy,
     O::Sz,
-    O::SPlus,
-    O::SMinus,
+    O::Sp,
+    O::Sm,
     O::Dxy,
     O::Q0,
     O::Qxy,
     O::Qyz,
     O::Qzx,
-    O::Q1Plus,
-    O::Q1Minus,
-    O::Q2Plus,
-    O::Q2Minus,
+    O::Q1p,
+    O::Q1m,
+    O::Q2p,
+    O::Q2m,
 ];
 pub const CART: [O; 9] = [
     O::I,
@@ -50,14 +50,14 @@ pub const CART: [O; 9] = [
 ];
 pub const LADDER: [O; 9] = [
     O::I,
-    O::SPlus,
-    O::SMinus,
+    O::Sp,
+    O::Sm,
     O::Sz,
     O::Q0,
-    O::Q1Plus,
-    O::Q1Minus,
-    O::Q2Plus,
-    O::Q2Minus,
+    O::Q1p,
+    O::Q1m,
+    O::Q2p,
+    O::Q2m,
 ];
 pub const COMMON: [O; 3] = [O::I, O::Sz, O::Q0];
 pub type Matrix = Vec<Complex<f64>>;
@@ -132,7 +132,7 @@ pub fn kron(a: &[Complex<f64>], b: &[Complex<f64>]) -> Matrix {
 
 // Spins are written directly, independently of the implementation. Quadrupoles
 // are defined from these matrices, not from production match arms or helpers.
-pub fn matrix(op: O) -> Matrix {
+pub fn physical_matrix(op: O) -> Matrix {
     let z = Complex::new(0., 0.);
     let one = Complex::new(1., 0.);
     let h = Complex::new(1. / 2_f64.sqrt(), 0.);
@@ -158,18 +158,28 @@ pub fn matrix(op: O) -> Matrix {
         O::Sx => x,
         O::Sy => y,
         O::Sz => sz,
-        O::SPlus => plus,
-        O::SMinus => minus,
+        O::Sp => plus,
+        O::Sm => minus,
         O::Dxy => add(&product(&x, &x), &scale(&product(&y, &y), (-1.).into())),
         O::Q0 => vec![one, z, z, z, (-2.).into(), z, z, z, one],
         O::Qxy => anti(&x, &y),
         O::Qyz => anti(&y, &sz),
         O::Qzx => anti(&sz, &x),
-        O::Q1Plus => anti(&sz, &plus),
-        O::Q1Minus => anti(&sz, &minus),
-        O::Q2Plus => product(&plus, &plus),
-        O::Q2Minus => product(&minus, &minus),
+        O::Q1p => anti(&sz, &plus),
+        O::Q1m => anti(&sz, &minus),
+        O::Q2p => product(&plus, &plus),
+        O::Q2m => product(&minus, &minus),
     }
+}
+
+pub fn matrix(op: O) -> Matrix {
+    let physical = physical_matrix(op);
+    let factor = match op {
+        O::I => 1.0,
+        O::Q0 => 1.0 / 2_f64.sqrt(),
+        _ => (3.0_f64 / 2.0).sqrt(),
+    };
+    scale(&physical, factor.into())
 }
 pub fn state_index(s: S) -> usize {
     match s {

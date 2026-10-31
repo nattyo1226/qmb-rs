@@ -95,10 +95,10 @@ fn laws<T: Real>() {
         O::Annihilate,
         O::Create,
         O::Number,
-        O::Parity,
-        O::MajoranaX,
-        O::MajoranaY,
-        O::MajoranaZ,
+        O::Mz,
+        O::Mx,
+        O::My,
+        O::Mz,
     ]
     .map(op);
     let zero = vec![0.0.into(); 4];
@@ -114,16 +114,16 @@ fn laws<T: Real>() {
         let comm = (l.clone() * r) + (r.clone() * l).scaled(c::<T>(-1., 0.));
         values::<T>(
             &local_value(&comm),
-            &local_value(&out.scaled(c::<T>(0., 1.))),
+            &local_value(&out.scaled(c::<T>(0., 2.))),
         );
     }
     values::<T>(
         &local_value(&((x.clone() * &x) + (y.clone() * &y) + (z.clone() * &z))),
-        &scale(&matrix(O::I), 0.75.into()),
+        &scale(&matrix(O::I), 3.0.into()),
     );
     values::<T>(
-        &local_value(&(x.clone() * &y).scaled(c::<T>(0., -2.))),
-        &matrix(O::MajoranaZ),
+        &local_value(&(x.clone() * &y).scaled(c::<T>(0., -1.))),
+        &matrix(O::Mz),
     );
 }
 
@@ -156,10 +156,7 @@ fn bases<T: Real>() {
         }
     }
     check::<T, _>(LadderBasis, &[O::I, O::Annihilate, O::Create, O::Number]);
-    check::<T, _>(
-        MajoranaBasis,
-        &[O::I, O::MajoranaX, O::MajoranaY, O::MajoranaZ],
-    );
+    check::<T, _>(MajoranaBasis, &[O::I, O::Mx, O::My, O::Mz]);
     let states: Vec<_> =
         <OccupationBasis as Basis<S, Complex<T>>>::elements(&OccupationBasis).collect();
     assert_eq!(states, STATES);
@@ -171,20 +168,12 @@ fn bases<T: Real>() {
         let expanded = <OccupationBasis as Basis<S, Complex<T>>>::expand(&OccupationBasis, state);
         assert_eq!(expanded.into_iter().next().unwrap().operand, *state);
     }
-    let majoranas =
-        [O::I, O::MajoranaX, O::MajoranaY, O::MajoranaZ].map(Fermion::<Complex<T>>::operator);
+    let majoranas = [O::I, O::Mx, O::My, O::Mz].map(Fermion::<Complex<T>>::operator);
     for (i, a) in majoranas.iter().enumerate() {
         for (j, b) in majoranas.iter().enumerate() {
             close::<T>(
                 to64(a.hs_inner_product(b)),
-                (if i != j {
-                    0.
-                } else if i == 0 {
-                    2.
-                } else {
-                    0.5
-                })
-                .into(),
+                (if i != j { 0. } else { 1. }).into(),
             );
         }
     }
@@ -213,13 +202,13 @@ fn public_metadata() {
     assert_eq!(S::dim().unwrap().get(), 2);
     assert_eq!(O::dim().unwrap().get(), 4);
     assert_eq!(O::identity(), O::I);
-    assert_eq!(O::parity_operator(), O::Parity);
+    assert_eq!(O::parity_operator(), O::Mz);
     assert_eq!(S::Empty.parity(), Parity::Even);
     assert_eq!(S::Occupied.parity(), Parity::Odd);
     for op in OPS {
         assert_eq!(
             op.parity() == Parity::Odd,
-            matches!(op, O::Annihilate | O::Create | O::MajoranaX | O::MajoranaY)
+            matches!(op, O::Annihilate | O::Create | O::Mx | O::My)
         );
     }
 }

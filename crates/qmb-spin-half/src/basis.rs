@@ -16,11 +16,11 @@ pub struct SzBasis;
 
 /// The operator basis in the order `I, Sx, Sy, Sz`.
 ///
-/// Its spin elements are half the Pauli matrices, not normalized Pauli operators.
+/// Its spin elements are Pauli matrices, orthonormal under `Tr(A†B)/2`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CartesianBasis;
 
-/// The operator basis in the order `I, SPlus, SMinus, Sz`.
+/// The operator basis in the order `I, Sp, Sm, Sz`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct LadderBasis;
 
@@ -41,15 +41,18 @@ impl<C: One> Basis<SpinHalfState, C> for SzBasis {
     }
 }
 
-impl<C: One + Neg<Output = C> + ImaginaryUnit> Basis<SpinHalfOperator, C> for CartesianBasis {
+impl<C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit>
+    Basis<SpinHalfOperator, C> for CartesianBasis
+{
     fn expand(&self, primitive: &SpinHalfOperator) -> LinearCombination<SpinHalfOperator, C> {
         use SpinHalfOperator::*;
         match primitive {
-            SPlus => {
-                LinearCombination::primitive(Sx) + LinearCombination::term(imaginary(C::one()), Sy)
+            Sp => {
+                LinearCombination::term(half(), Sx) + LinearCombination::term(imaginary(half()), Sy)
             }
-            SMinus => {
-                LinearCombination::primitive(Sx) + LinearCombination::term(imaginary(-C::one()), Sy)
+            Sm => {
+                LinearCombination::term(half(), Sx)
+                    + LinearCombination::term(imaginary(-half::<C>()), Sy)
             }
             _ => LinearCombination::primitive(*primitive),
         }
@@ -62,7 +65,7 @@ impl<C: One + Neg<Output = C> + ImaginaryUnit> Basis<SpinHalfOperator, C> for Ca
             Sx => Some(1),
             Sy => Some(2),
             Sz => Some(3),
-            SPlus | SMinus => None,
+            Sp | Sm => None,
         }
     }
 
@@ -74,15 +77,15 @@ impl<C: One + Neg<Output = C> + ImaginaryUnit> Basis<SpinHalfOperator, C> for Ca
 
 impl<C> Basis<SpinHalfOperator, C> for LadderBasis
 where
-    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
+    C: One + Neg<Output = C> + ImaginaryUnit,
 {
     fn expand(&self, primitive: &SpinHalfOperator) -> LinearCombination<SpinHalfOperator, C> {
         use SpinHalfOperator::*;
         match primitive {
-            Sx => LinearCombination::term(half(), SPlus) + LinearCombination::term(half(), SMinus),
+            Sx => LinearCombination::primitive(Sp) + LinearCombination::primitive(Sm),
             Sy => {
-                LinearCombination::term(imaginary(-half::<C>()), SPlus)
-                    + LinearCombination::term(imaginary(half()), SMinus)
+                LinearCombination::term(imaginary(-C::one()), Sp)
+                    + LinearCombination::term(imaginary(C::one()), Sm)
             }
             _ => LinearCombination::primitive(*primitive),
         }
@@ -92,8 +95,8 @@ where
         use SpinHalfOperator::*;
         match primitive {
             I => Some(0),
-            SPlus => Some(1),
-            SMinus => Some(2),
+            Sp => Some(1),
+            Sm => Some(2),
             Sz => Some(3),
             Sx | Sy => None,
         }
@@ -101,6 +104,6 @@ where
 
     fn elements(&self) -> impl Iterator<Item = SpinHalfOperator> + '_ {
         use SpinHalfOperator::*;
-        [I, SPlus, SMinus, Sz].into_iter()
+        [I, Sp, Sm, Sz].into_iter()
     }
 }

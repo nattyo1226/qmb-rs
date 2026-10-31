@@ -1,8 +1,10 @@
 //! Spin-conserving Hubbard chains on caller-owned two-mode site spaces.
 
+use crate::coefficient::quarter;
 use crate::{Fermion, FermionOperator as O};
 use alloc::vec::Vec;
-use core::ops::Neg;
+use core::ops::{Add, Div, Neg};
+use num_traits::One;
 use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError, TensorKind};
 use qmb_geometry::{Chain, MappingError, NearestNeighbors, SiteMapper};
 
@@ -74,8 +76,8 @@ impl<C> FermionModels<Fermion<C>> {
     /// is discarded. For L sites and total particle number N,
     /// `H_sym(t,U) = H(t,U) - (U/2) N + UL/4 I`.
     ///
-    /// Uses `U Z_i↑ Z_i↓`, since `Z=I/2-n`, to construct the shifted interaction
-    /// without requiring numeric fractions. Validation, site order, boundaries,
+    /// Uses `(U/4) Mz_i↑ Mz_i↓`, since `Mz=I-2n`. The coefficient type must
+    /// represent mathematical quarters. Validation, site order, boundaries,
     /// parameter conventions and errors are the same as [`Self::hubbard`].
     pub fn symmetric_hubbard<I: Eq, R>(
         chain: &Chain,
@@ -84,9 +86,9 @@ impl<C> FermionModels<Fermion<C>> {
         u: R,
     ) -> Result<OperatorOf<Fermion<C>, I>, UtilityError>
     where
-        C: Clone + From<R> + Neg<Output = C>,
+        C: Clone + From<R> + Neg<Output = C> + One + Add<Output = C> + Div<Output = C>,
     {
-        Self::hubbard_with_interaction(chain, sites, C::from(t), C::from(u), O::MajoranaZ)
+        Self::hubbard_with_interaction(chain, sites, C::from(t), C::from(u) * quarter::<C>(), O::Mz)
     }
 
     fn hubbard_with_interaction<I: Eq>(

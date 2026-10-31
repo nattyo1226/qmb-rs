@@ -40,18 +40,18 @@ fn matrix<T: Real>(p: Op) -> Matrix<T> {
     use Op::*;
     match p {
         I => [[c(1.0, 0.0), c(0.0, 0.0)], [c(0.0, 0.0), c(1.0, 0.0)]],
-        Sx => [[c(0.0, 0.0), c(0.5, 0.0)], [c(0.5, 0.0), c(0.0, 0.0)]],
-        Sy => [[c(0.0, 0.0), c(0.0, -0.5)], [c(0.0, 0.5), c(0.0, 0.0)]],
-        Sz => [[c(0.5, 0.0), c(0.0, 0.0)], [c(0.0, 0.0), c(-0.5, 0.0)]],
-        SPlus => [[c(0.0, 0.0), c(1.0, 0.0)], [c(0.0, 0.0), c(0.0, 0.0)]],
-        SMinus => [[c(0.0, 0.0), c(0.0, 0.0)], [c(1.0, 0.0), c(0.0, 0.0)]],
+        Sx => [[c(0.0, 0.0), c(1.0, 0.0)], [c(1.0, 0.0), c(0.0, 0.0)]],
+        Sy => [[c(0.0, 0.0), c(0.0, -1.0)], [c(0.0, 1.0), c(0.0, 0.0)]],
+        Sz => [[c(1.0, 0.0), c(0.0, 0.0)], [c(0.0, 0.0), c(-1.0, 0.0)]],
+        Sp => [[c(0.0, 0.0), c(1.0, 0.0)], [c(0.0, 0.0), c(0.0, 0.0)]],
+        Sm => [[c(0.0, 0.0), c(0.0, 0.0)], [c(1.0, 0.0), c(0.0, 0.0)]],
     }
 }
 fn check_local<T: Real>() {
     use Op::*;
     let basis = CartesianBasis;
-    for a in [I, Sx, Sy, Sz, SPlus, SMinus] {
-        for b in [I, Sx, Sy, Sz, SPlus, SMinus] {
+    for a in [I, Sx, Sy, Sz, Sp, Sm] {
+        for b in [I, Sx, Sy, Sz, Sp, Sm] {
             let x = Lo::<T>::primitive(a);
             let y = Lo::<T>::primitive(b);
             let op = ((x.clone() * &y) + x.scaled(c(0.3, -0.7)) + y.scaled(c(-0.2, 0.6)))
@@ -70,9 +70,9 @@ fn check_local<T: Real>() {
             });
             let expected = [
                 (m[0][0] + m[1][1]) / c(2.0, 0.0),
-                m[0][1] + m[1][0],
-                c::<T>(0.0, 1.0) * (m[0][1] - m[1][0]),
-                m[0][0] - m[1][1],
+                (m[0][1] + m[1][0]) / c(2.0, 0.0),
+                c::<T>(0.0, 0.5) * (m[0][1] - m[1][0]),
+                (m[0][0] - m[1][1]) / c(2.0, 0.0),
             ];
             let expanded = op.expand(&basis).unwrap();
             let via_ladder = op.expand(&LadderBasis).unwrap().expand(&basis).unwrap();
@@ -101,8 +101,7 @@ fn check_local<T: Real>() {
             close(psi.inner_product(&psi), c(0.78, 0.0)); // The input is unchanged.
         }
     }
-    let zero =
-        Lo::<T>::primitive(SPlus) + Lo::primitive(SMinus) - Lo::primitive(Sx).scaled(c(2.0, 0.0));
+    let zero = Lo::<T>::primitive(Sp) + Lo::primitive(Sm) - Lo::primitive(Sx);
     assert!(zero.coordinates(&basis).unwrap().is_empty());
     assert!(
         zero.expand(&basis)
@@ -134,7 +133,7 @@ fn check_composite<T: Real>() {
         .unwrap()
         .scaled(c(0.3, -0.7));
     let z = Lo::<T>::primitive(Op::Sz).at(&a).unwrap();
-    let l = Lo::<T>::primitive(Op::SMinus)
+    let l = Lo::<T>::primitive(Op::Sm)
         .at(&b)
         .unwrap()
         .scaled(c(-0.2, 0.6));
@@ -154,7 +153,7 @@ fn check_composite<T: Real>() {
             matrix::<T>(Op::Sz)[i / 2][j / 2] * matrix::<T>(Op::I)[i % 2][j % 2]
                 + c::<T>(-0.2, 0.6)
                     * matrix::<T>(Op::I)[i / 2][j / 2]
-                    * matrix::<T>(Op::SMinus)[i % 2][j % 2]
+                    * matrix::<T>(Op::Sm)[i % 2][j % 2]
         })
     });
     let expected: [[Complex<T>; 4]; 4] = std::array::from_fn(|i| {
@@ -323,10 +322,10 @@ fn spaces_binding_spectators_zero_and_unit_are_preserved() {
 
     // Coordinates borrow only their basis; they survive destruction of the input.
     let basis = CartesianBasis;
-    let coords = Lo::<f64>::primitive(Op::SPlus).coordinates(&basis).unwrap();
+    let coords = Lo::<f64>::primitive(Op::Sp).coordinates(&basis).unwrap();
     assert_eq!(
         coords.into_entries().collect::<Vec<_>>(),
-        vec![(vec![1], c(1.0, 0.0)), (vec![2], c(0.0, 1.0))]
+        vec![(vec![1], c(0.5, 0.0)), (vec![2], c(0.0, 0.5))]
     );
 }
 
@@ -379,7 +378,7 @@ fn deep_expansion_and_destruction_fit_a_small_stack() {
         .stack_size(128 * 1024)
         .spawn(|| {
             let mut state = Ls::<f64>::primitive(Ket::Down);
-            let mut op = Lo::<f64>::primitive(Op::SPlus);
+            let mut op = Lo::<f64>::primitive(Op::Sp);
             let mut space = HilbertSpace::factor(0u8);
             for _ in 0..20_000 {
                 state = state.scaled(c(1.0, 0.0));

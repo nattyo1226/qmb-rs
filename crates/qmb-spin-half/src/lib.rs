@@ -1,7 +1,8 @@
 //! Spin-1/2 primitives, local rules, and ordered bases.
 //!
-//! With `hbar = 1`, the Cartesian spins are half the Pauli matrices and
-//! `SPlus = Sx + i Sy`, `SMinus = Sx - i Sy`. States are ordered `Up, Down`.
+//! Cartesian primitives are Pauli matrices: physical spins are `J = S/2`
+//! with `hbar = 1`. `Sp = (Sx + i Sy)/2`, `Sm = (Sx - i Sy)/2`.
+//! States are ordered `Up, Down`; CartesianBasis is orthonormal under `Tr(A†B)/2`.
 //! Primitive types carry no numeric precision; the coefficient type is inferred
 //! from the result, specified through a qualified trait call, or selected once
 //! using [`SpinHalf<C>`] and [`qmb_core::ExpressionFactory`].
@@ -11,11 +12,11 @@
 //! use qmb_core::{Act, LinearCombination, Product};
 //! use qmb_spin_half::{SpinHalfOperator as Op, SpinHalfState as State};
 //!
-//! let raised: LinearCombination<State, Complex<f64>> = State::Down.act(&Op::SPlus);
+//! let raised: LinearCombination<State, Complex<f64>> = State::Down.act(&Op::Sp);
 //! assert_eq!(raised, LinearCombination::primitive(State::Up));
 //!
 //! let squared = <Op as Product<Complex<f32>>>::product(&Op::Sx, &Op::Sx);
-//! assert_eq!(squared, LinearCombination::term(Complex::new(0.25, 0.0), Op::I));
+//! assert_eq!(squared, LinearCombination::primitive(Op::I));
 //! ```
 //!
 //! Local products retain natural primitives; basis expansion is a separate step:
@@ -25,11 +26,11 @@
 //! use qmb_core::{Basis, LinearCombination, Product};
 //! use qmb_spin_half::{CartesianBasis, SpinHalfOperator as Op};
 //!
-//! let product: LinearCombination<Op, Complex<f64>> = Op::I.product(&Op::SPlus);
-//! assert_eq!(product, LinearCombination::primitive(Op::SPlus));
-//! let expanded = <CartesianBasis as Basis<Op, Complex<f64>>>::expand(&CartesianBasis, &Op::SPlus);
-//! assert_eq!(expanded, LinearCombination::primitive(Op::Sx)
-//!     + LinearCombination::term(Complex::new(0.0, 1.0), Op::Sy));
+//! let product: LinearCombination<Op, Complex<f64>> = Op::I.product(&Op::Sp);
+//! assert_eq!(product, LinearCombination::primitive(Op::Sp));
+//! let expanded = <CartesianBasis as Basis<Op, Complex<f64>>>::expand(&CartesianBasis, &Op::Sp);
+//! assert_eq!(expanded, LinearCombination::term(Complex::new(0.5, 0.0), Op::Sx)
+//!     + LinearCombination::term(Complex::new(0.0, 0.5), Op::Sy));
 //! let elements: Vec<_> = <CartesianBasis as Basis<Op, Complex<f64>>>::elements(&CartesianBasis).collect();
 //! assert_eq!(elements, [Op::I, Op::Sx, Op::Sy, Op::Sz]);
 //! ```
@@ -51,8 +52,8 @@
 //! let sx = Spin::operator(Op::Sx);
 //! let down = Spin::state(State::Down);
 //! let result = up.act(&sx).evaluate();
-//! assert_eq!(down.inner_product(&result), Complex::new(0.5, 0.0));
-//! assert_eq!((sx.clone() * &sx).trace(), Complex::new(0.5, 0.0));
+//! assert_eq!(down.inner_product(&result), Complex::new(1.0, 0.0));
+//! assert_eq!((sx.clone() * &sx).trace(), Complex::new(2.0, 0.0));
 //! ```
 //!
 //! Place local expressions on independently identified factors to form a system:
@@ -71,7 +72,7 @@
 //! let state = qmb_core::State::tensor_in(&h, [up, down])?;
 //! let sz = Spin::operator(Op::Sz);
 //! let zz = (sz.at(&a)?.clone() * &sz.at(&b)?)?.bind(&h)?;
-//! assert_eq!(state.expectation(&zz)?, Complex::new(-0.25, 0.0));
+//! assert_eq!(state.expectation(&zz)?, Complex::new(-1.0, 0.0));
 //! assert_eq!(zz.trace()?, Complex::new(0.0, 0.0));
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -105,7 +106,7 @@ pub use state::SpinHalfState;
 /// type Spin = SpinHalf<Complex<f32>>;
 /// let up = Spin::state(Ket::Up);
 /// let sx = Spin::operator(Op::Sx);
-/// assert_eq!(up.act(&sx).inner_product(&Spin::state(Ket::Down)), Complex::new(0.5, 0.0));
+/// assert_eq!(up.act(&sx).inner_product(&Spin::state(Ket::Down)), Complex::new(1.0, 0.0));
 /// ```
 ///
 /// Different coefficient precisions cannot be mixed implicitly:

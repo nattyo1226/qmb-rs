@@ -18,10 +18,9 @@ pub struct OccupationBasis;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct LadderBasis;
 
-/// The Hermite operator basis `[I, MajoranaX, MajoranaY, MajoranaZ]`.
+/// The Hermite operator basis `[I, Mx, My, Mz]`.
 ///
-/// Orthogonal, but not orthonormal: its Hilbert–Schmidt Gram matrix is
-/// `diag(2, 1/2, 1/2, 1/2)`. The su(2) normalization is retained.
+/// Orthonormal under the dimension-normalized inner product `Tr(A† B)/2`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MajoranaBasis;
 
@@ -42,18 +41,17 @@ impl<C: One> Basis<FermionState, C> for OccupationBasis {
 
 impl<C> Basis<FermionOperator, C> for LadderBasis
 where
-    C: One + Add<Output = C> + Div<Output = C> + Neg<Output = C> + ImaginaryUnit,
+    C: One + Add<Output = C> + Neg<Output = C> + ImaginaryUnit,
 {
     fn expand(&self, primitive: &FermionOperator) -> LinearCombination<FermionOperator, C> {
         use FermionOperator::*;
         use LinearCombination as Lc;
         match primitive {
-            Parity => Lc::primitive(I) + Lc::term(-(C::one() + C::one()), Number),
-            MajoranaX => Lc::term(half(), Annihilate) + Lc::term(half(), Create),
-            MajoranaY => {
-                Lc::term(imaginary(-half::<C>()), Annihilate) + Lc::term(imaginary(half()), Create)
+            Mx => Lc::primitive(Annihilate) + Lc::primitive(Create),
+            My => {
+                Lc::term(imaginary(-C::one()), Annihilate) + Lc::term(imaginary(C::one()), Create)
             }
-            MajoranaZ => Lc::term(half(), I) + Lc::term(-C::one(), Number),
+            Mz => Lc::primitive(I) + Lc::term(-(C::one() + C::one()), Number),
             _ => Lc::primitive(*primitive),
         }
     }
@@ -81,10 +79,9 @@ where
         use FermionOperator::*;
         use LinearCombination as Lc;
         match primitive {
-            Annihilate => Lc::primitive(MajoranaX) + Lc::term(imaginary(C::one()), MajoranaY),
-            Create => Lc::primitive(MajoranaX) + Lc::term(imaginary(-C::one()), MajoranaY),
-            Number => Lc::term(half(), I) + Lc::term(-C::one(), MajoranaZ),
-            Parity => Lc::term(C::one() + C::one(), MajoranaZ),
+            Annihilate => Lc::term(half(), Mx) + Lc::term(imaginary(half()), My),
+            Create => Lc::term(half(), Mx) + Lc::term(imaginary(-half::<C>()), My),
+            Number => Lc::term(half(), I) + Lc::term(-half::<C>(), Mz),
             _ => Lc::primitive(*primitive),
         }
     }
@@ -92,14 +89,14 @@ where
         use FermionOperator::*;
         match primitive {
             I => Some(0),
-            MajoranaX => Some(1),
-            MajoranaY => Some(2),
-            MajoranaZ => Some(3),
+            Mx => Some(1),
+            My => Some(2),
+            Mz => Some(3),
             _ => None,
         }
     }
     fn elements(&self) -> impl Iterator<Item = FermionOperator> + '_ {
         use FermionOperator::*;
-        [I, MajoranaX, MajoranaY, MajoranaZ].into_iter()
+        [I, Mx, My, Mz].into_iter()
     }
 }
