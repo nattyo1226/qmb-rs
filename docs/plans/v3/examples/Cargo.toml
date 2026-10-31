@@ -1,0 +1,26 @@
+[package]
+name = "qmb-v3-relation-examples"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+# Design prototypes are separate from the library workspace.
+[workspace]
+
+[[bin]]
+name = "pauli-strings"
+path = "pauli_strings.rs"
+
+[[bin]]
+name = "geometry-relations"
+path = "geometry_relations.rs"
+
+[dependencies]
+qmb-core = { path = "../../../../crates/qmb-core" }
+qmb-geometry = { path = "../../../../crates/qmb-geometry" }
+qmb-spin-half = { path = "../../../../crates/qmb-spin-half" }
+num-complex = { version = "0.4.6", default-features = false }
+
+[dev-dependencies]
+qmb-export = { path = "../../../../crates/qmb-export" }
