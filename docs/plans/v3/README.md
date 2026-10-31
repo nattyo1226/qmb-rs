@@ -42,21 +42,10 @@ v3 への更新の対象は以下の4項目とする。各項目の設計状況�
 
 ## 3体以上の相互作用に対応する関係の列挙
 
-**設計採用済み・本体未実装（2026-10-31）**。Geometry・Relation<G>・SiteMapper・MappedGroup による構成を採用する。Site 数の取得名は num_sites とする。
+**設計採用済み・本体未実装（2026-10-31）**。
 
-最近接のペアに限定された幾何の列挙 API を拡張し、3体以上の相互作用の構築に使えるようにする。旧 `NearestNeighborRelation` は撤去済みだが、現在の `Chain::nn_site_pairs()` と関連する接続 API も2要素のペアを返すため、多体の組を直接列挙できない。
+Geometry・Relation<G>・SiteMapper・MappedGroup により、幾何に基づく Site の配置を外部の space 列へ借用接続する。Site 数の取得名は num_sites、Relation のエラーは関連型 Error とし、旧 API の互換性は維持しない。
 
-- 「高々 K Site に作用する Pauli string をすべて構築する」を代表的な利用例とする。関係の組を返すだけで終わらず、局所演算子の選択から式構築までを、体数ごとの個別実装や不要に多い trait bound なしで記述できるか確認する。
-- 3 Site・4 Site など、相互作用に参加する任意個数の Site を一つの組として列挙する仕組みを検討する。連続する Site の組を出す方法と、一般の多体関係へ拡張する範囲を整理する。
-- 将来の正方格子における方向付きの列・中心付き近傍なども扱えるよう、幾何ごとの関係定義と中心・方向の情報保持を検討する。正方格子自体の実装は、この v3 の範囲には追加しない。
-- Relation<G> の Group は AsRef<[usize]> を満たす。固定長配列や有効長付きの SiteGroup<CAP> などを使い、外部列への SiteMapper と借用結果の MappedGroup を提供する。
-- open／periodic での境界の扱い、Site 数が相互作用の体数より少ない場合、同一 Site の再出現、組の重複、列挙順序を定める。組内の順序が演算子積や graded な符号に関わるため、順序の保持と重複除去の規約を明示する。
-- 複数葉の標準操作は MappedGroup の leaves_cartesian・leaves_zip とし、combine_leaves(FnOnce) を共通入口にする。空 Site の位置を保ち、入力列長を検証する。Index の複製・再発行や、空間の暗黙の並べ替えは行わない。
-- 既存の2体相互作用の列挙・モデル構築との互換性と移行方法を検討する。多体の組から既存の式構築 API で相互作用項を構築し、geometry に局所代数固有の評価処理を加えない。
+複数葉の標準操作は leaves_cartesian・leaves_zip とし、共通入口に combine_leaves(FnOnce) を設ける。一般の支持集合の組み合わせ列挙は geometry の Relation に含めず、正方格子の正式実装も今回の対象外とする。
 
-検証では、3体・4体の組を open／periodic と小さい Site 数で独立な期待列と比較する。重複・順序・借用先を確認し、組から構築した多体相互作用が手作業で構築した式と一致すること、および既存の2体モデルの結果が維持されることを確認する。
-
-現行の契約は[Chain・Site と自由度の配置](../../design/geometry.md)を参照する。
-
-具体的な設計の検討は[多体相互作用の関係列挙](multi-site-relations.md)に記録する。
-採用した設計と移行方針は[幾何・Relation・space 列挙の統合設計](geometry-refactoring.md)を参照する。
+採用設計・列挙規約・移行手順・検証記録は、[qmb-geometry のリファクタリング計画](geometry-refactoring.md)に集約する。

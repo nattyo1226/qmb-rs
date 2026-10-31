@@ -26,6 +26,8 @@ impl Geometry for Chain {
 }
 
 trait Relation<G: Geometry> {
+    type Error;
+
     type Group<'a>: AsRef<[usize]>
     where
         Self: 'a,
@@ -34,7 +36,7 @@ trait Relation<G: Geometry> {
     fn groups<'a>(
         &'a self,
         geometry: &'a G,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Error>;
+    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error>;
 }
 
 struct SiteMapper<'g, 's, G, T> {
@@ -53,8 +55,7 @@ impl<'g, 's, G: Geometry, T> SiteMapper<'g, 's, G, T> {
     fn groups<'a, R: Relation<G>>(
         &'a self,
         relation: &'a R,
-    ) -> Result<impl Iterator<Item = Result<MappedGroup<'s, T, R::Group<'a>>, Error>> + 'a, Error>
-    {
+    ) -> Result<impl Iterator<Item = MappedGroupResult<'s, T, R::Group<'a>>> + 'a, R::Error> {
         let groups = relation.groups(self.geometry)?;
         let values = self.values;
         Ok(groups.map(move |source| {
@@ -70,6 +71,8 @@ struct MappedGroup<'s, T, Group> {
     values: &'s [T],
     source: Group,
 }
+
+type MappedGroupResult<'s, T, Group> = Result<MappedGroup<'s, T, Group>, Error>;
 
 impl<'s, T, Group: AsRef<[usize]>> MappedGroup<'s, T, Group> {
     fn source(&self) -> &Group {
@@ -174,12 +177,14 @@ fn zip_leaves<I>(mut streams: Vec<Leaves<'_, I>>) -> impl Iterator<Item = Vec<&H
 struct NearestNeighbors;
 
 impl Relation<Chain> for NearestNeighbors {
+    type Error = Error;
+
     type Group<'a> = [usize; 2];
 
     fn groups<'a>(
         &'a self,
         geometry: &'a Chain,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
         Ok(geometry.nn_site_pairs().map(|(a, b)| [a, b]))
     }
 }
@@ -187,12 +192,14 @@ impl Relation<Chain> for NearestNeighbors {
 struct Consecutive<const K: usize>;
 
 impl<const K: usize> Relation<Chain> for Consecutive<K> {
+    type Error = Error;
+
     type Group<'a> = [usize; K];
 
     fn groups<'a>(
         &'a self,
         geometry: &'a Chain,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
         if K == 0 {
             return Err(Error::InvalidLength);
         }
@@ -217,11 +224,16 @@ impl<const K: usize> Relation<Chain> for Consecutive<K> {
     }
 }
 
-struct ExplicitRelations {
+// Deliberately arbitrary groups for mapper tests, not a proposed geometric relation.
+#[cfg(test)]
+struct TestGroups {
     groups: Vec<Vec<usize>>,
 }
 
-impl<G: Geometry> Relation<G> for ExplicitRelations {
+#[cfg(test)]
+impl<G: Geometry> Relation<G> for TestGroups {
+    type Error = Error;
+
     type Group<'a>
         = &'a [usize]
     where
@@ -231,7 +243,7 @@ impl<G: Geometry> Relation<G> for ExplicitRelations {
     fn groups<'a>(
         &'a self,
         _geometry: &'a G,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
         Ok(self.groups.iter().map(Vec::as_slice))
     }
 }
@@ -285,12 +297,14 @@ impl Geometry for OpenSquare {
 }
 
 impl Relation<OpenSquare> for NearestNeighbors {
+    type Error = Error;
+
     type Group<'a> = [usize; 2];
 
     fn groups<'a>(
         &'a self,
         geometry: &'a OpenSquare,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
         Ok((0..geometry.num_sites()).flat_map(move |site| {
             [Direction::East, Direction::North]
                 .into_iter()
@@ -306,12 +320,14 @@ struct AlongAxis<const K: usize> {
 }
 
 impl<const K: usize> Relation<OpenSquare> for AlongAxis<K> {
+    type Error = Error;
+
     type Group<'a> = [usize; K];
 
     fn groups<'a>(
         &'a self,
         geometry: &'a OpenSquare,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
         if K == 0 {
             return Err(Error::InvalidLength);
         }
@@ -344,12 +360,14 @@ impl AsRef<[usize]> for Neighborhood {
 struct ClosedNeighborhood;
 
 impl Relation<OpenSquare> for ClosedNeighborhood {
+    type Error = Error;
+
     type Group<'a> = Neighborhood;
 
     fn groups<'a>(
         &'a self,
         geometry: &'a OpenSquare,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
         Ok((0..geometry.num_sites()).map(|center| {
             let mut group = Neighborhood {
                 sites: [center; 5],
@@ -427,11 +445,6 @@ fn main() -> Result<(), Error> {
         center_group.neighbors().count()
     );
 
-    let explicit = ExplicitRelations {
-        groups: vec![vec![], vec![0], vec![0, 2, 4]],
-    };
-    assert_eq!(mapped.groups(&explicit)?.count(), 3);
-
     let spin_sites = [
         HilbertSpace::tensor_all([HilbertSpace::factor(10), HilbertSpace::factor(11)]).unwrap(),
         HilbertSpace::tensor_all([HilbertSpace::factor(20), HilbertSpace::factor(21)]).unwrap(),
@@ -450,6 +463,39 @@ fn main() -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_relation_error_is_preserved_without_display_or_debug_bounds() {
+        struct UserError;
+        struct CustomRelation {
+            fail: bool,
+        }
+        impl Relation<Chain> for CustomRelation {
+            type Error = UserError;
+            type Group<'a> = [usize; 1];
+
+            fn groups<'a>(
+                &'a self,
+                geometry: &'a Chain,
+            ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
+                if self.fail {
+                    return Err(UserError);
+                }
+                Ok((0..geometry.num_sites()).map(|site| [site]))
+            }
+        }
+        let chain = Chain::new(3, Boundary::Open);
+        let sites: Vec<_> = (0..3).map(HilbertSpace::factor).collect();
+        let mapper = SiteMapper::new(&chain, &sites).unwrap();
+        assert!(matches!(
+            mapper.groups(&CustomRelation { fail: true }),
+            Err(UserError)
+        ));
+        assert_eq!(
+            positions(&mapper, &CustomRelation { fail: false }),
+            [[0], [1], [2]]
+        );
+    }
 
     fn leaf_ids<'a>(rows: impl Iterator<Item = Vec<&'a HilbertSpace<u8>>>) -> Vec<Vec<u8>> {
         rows.map(|row| {
@@ -524,7 +570,7 @@ mod tests {
         let chain = Chain::new(1, Boundary::Open);
         let sites = [HilbertSpace::factor(4u8)];
         let mapped = SiteMapper::new(&chain, &sites).unwrap();
-        let rule = ExplicitRelations {
+        let rule = TestGroups {
             groups: vec![vec![], vec![0]],
         };
         let groups: Vec<_> = mapped.groups(&rule).unwrap().map(Result::unwrap).collect();
@@ -571,7 +617,7 @@ mod tests {
         relation: &R,
     ) -> Vec<Vec<usize>> {
         map.groups(relation)
-            .unwrap()
+            .unwrap_or_else(|_| panic!("relation failed"))
             .map(|group| {
                 let group = group.unwrap();
                 for (&index, space) in group.source().as_ref().iter().zip(group.iter()) {
@@ -590,7 +636,7 @@ mod tests {
         let map = SiteMapper::new(&chain, &spaces).unwrap();
         assert_eq!(positions(&map, &NearestNeighbors), [[0, 1], [1, 2], [2, 3]]);
         assert_eq!(positions(&map, &Consecutive::<3>), [[0, 1, 2], [1, 2, 3]]);
-        let explicit = ExplicitRelations {
+        let explicit = TestGroups {
             groups: vec![vec![], vec![2], vec![3, 0, 1]],
         };
         assert_eq!(positions(&map, &explicit), explicit.groups);
@@ -685,7 +731,7 @@ mod tests {
         assert_eq!(groups, [[0, 1], [1, 0]]);
         assert_eq!(map.groups(&NearestNeighbors).unwrap().count(), 1);
         assert_eq!(map.groups(&Consecutive::<3>).unwrap().count(), 0);
-        let bad = ExplicitRelations {
+        let bad = TestGroups {
             groups: vec![vec![2]],
         };
         assert!(matches!(
@@ -724,7 +770,7 @@ mod tests {
         let spaces: Vec<_> = (0..3).map(|i| HilbertSpace::factor(Index(i))).collect();
         let ambient = HilbertSpace::tensor_all(spaces.iter().cloned()).unwrap();
         let map = SiteMapper::new(&chain, &spaces).unwrap();
-        let relation = ExplicitRelations {
+        let relation = TestGroups {
             groups: vec![vec![], vec![1], vec![2, 0]],
         };
         let words: Vec<_> = map

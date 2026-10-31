@@ -1,4 +1,4 @@
-//! Executable design prototype; Relation and SupportCombinations are proposed APIs.
+//! Pauli construction example using ordinary support-combination iterators.
 //! One site is one spin. All supports up to CAP, including identity, are visited.
 
 use num_complex::Complex64;
@@ -7,15 +7,6 @@ use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op};
 
 type Error = Box<dyn std::error::Error>;
 type PauliString<I, C> = OperatorOf<SpinHalf<C>, I>;
-
-trait Relation {
-    type Group<'a>: AsRef<[usize]>
-    where
-        Self: 'a;
-
-    fn num_sites(&self) -> usize;
-    fn groups(&self) -> impl Iterator<Item = Self::Group<'_>> + '_;
-}
 
 #[derive(Clone, Copy)]
 struct SiteGroup<const CAP: usize> {
@@ -39,14 +30,8 @@ impl<const CAP: usize> SupportCombinations<CAP> {
     }
 }
 
-impl<const CAP: usize> Relation for SupportCombinations<CAP> {
-    type Group<'a> = SiteGroup<CAP>;
-
-    fn num_sites(&self) -> usize {
-        self.num_sites
-    }
-
-    fn groups(&self) -> impl Iterator<Item = Self::Group<'_>> + '_ {
+impl<const CAP: usize> SupportCombinations<CAP> {
+    fn iter(&self) -> impl Iterator<Item = SiteGroup<CAP>> + '_ {
         let n = self.num_sites;
         let max_len = CAP.min(n);
         let mut current = Some(SiteGroup {
@@ -92,26 +77,23 @@ fn axis_assignments(len: usize) -> impl Iterator<Item = Vec<Op>> {
 
 // The caller needs no numeric evaluation bounds, and Index need not be Clone.
 // Supports must be distinct sets for the output strings to be globally unique.
-fn for_each_pauli_string<C, I, R>(
-    relation: &R,
+fn for_each_pauli_string<C, I, Group>(
+    supports: impl IntoIterator<Item = Group>,
     sites: &[HilbertSpace<I>],
     mut emit: impl FnMut(PauliString<I, C>),
 ) -> Result<(), Error>
 where
     C: From<f64>,
     I: Eq,
-    R: Relation,
+    Group: AsRef<[usize]>,
 {
-    if relation.num_sites() != sites.len() {
-        return Err("site count mismatch".into());
-    }
     if sites.iter().any(|site| site.factor_index().is_none()) {
         return Err("each site must be one spin (one leaf)".into());
     }
     // Shares handles; does not clone Index. Also validates index uniqueness.
     let space = HilbertSpace::tensor_all(sites.iter().cloned())?;
 
-    for group in relation.groups() {
+    for group in supports {
         let support = group.as_ref();
         if support.iter().any(|&i| i >= sites.len()) {
             return Err("site number out of range".into());
@@ -138,10 +120,10 @@ where
 
 fn main() -> Result<(), Error> {
     let sites: Vec<_> = (0..3).map(HilbertSpace::factor).collect();
-    let relation = SupportCombinations::<2>::new(sites.len());
+    let supports = SupportCombinations::<2>::new(sites.len());
     let mut strings = Vec::new();
 
-    for_each_pauli_string::<Complex64, _, _>(&relation, &sites, |word| {
+    for_each_pauli_string::<Complex64, _, _>(supports.iter(), &sites, |word| {
         strings.push(word);
     })?;
 
@@ -206,7 +188,7 @@ mod tests {
         assert_eq!(expected.len(), 37);
         let mut count = 0;
         for_each_pauli_string::<Complex64, _, _>(
-            &SupportCombinations::<2>::new(3),
+            SupportCombinations::<2>::new(3).iter(),
             &sites,
             |word| {
                 let actual = matrix(&word);
@@ -229,8 +211,8 @@ mod tests {
         for (n, expected_count) in [(0, 1), (2, 16)] {
             let sites: Vec<_> = (0..n).map(HilbertSpace::factor).collect();
             let mut count = 0;
-            let relation = SupportCombinations::<4>::new(n);
-            for_each_pauli_string::<Complex64, _, _>(&relation, &sites, |word| {
+            let supports = SupportCombinations::<4>::new(n);
+            for_each_pauli_string::<Complex64, _, _>(supports.iter(), &sites, |word| {
                 assert_eq!(
                     word.space().unwrap().dim::<SpinHalfState>().unwrap(),
                     1 << n
@@ -246,7 +228,7 @@ mod tests {
         let sites: Vec<_> = (0..2).map(HilbertSpace::factor).collect();
         let mut matrices = Vec::new();
         for_each_pauli_string::<Complex64, _, _>(
-            &SupportCombinations::<0>::new(2),
+            SupportCombinations::<0>::new(2).iter(),
             &sites,
             |word| matrices.push(matrix(&word)),
         )
@@ -271,7 +253,7 @@ mod tests {
         ];
         let mut count = 0;
         for_each_pauli_string::<Coefficient, _, _>(
-            &SupportCombinations::<2>::new(2),
+            SupportCombinations::<2>::new(2).iter(),
             &sites,
             |word| {
                 assert!(word.space().is_some());
@@ -282,40 +264,13 @@ mod tests {
         assert_eq!(count, 16);
     }
 
-    struct Explicit {
-        count: usize,
-        groups: Vec<Vec<usize>>,
-    }
-    impl Relation for Explicit {
-        type Group<'a> = &'a [usize];
-        fn num_sites(&self) -> usize {
-            self.count
-        }
-        fn groups(&self) -> impl Iterator<Item = Self::Group<'_>> + '_ {
-            self.groups.iter().map(Vec::as_slice)
-        }
-    }
-
     #[test]
     fn invalid_inputs_are_rejected_before_emitting_their_terms() {
         let sites = [HilbertSpace::factor(0usize)];
-        for relation in [
-            Explicit {
-                count: 2,
-                groups: vec![],
-            },
-            Explicit {
-                count: 1,
-                groups: vec![vec![1]],
-            },
-            Explicit {
-                count: 1,
-                groups: vec![vec![0, 0]],
-            },
-        ] {
+        for supports in [vec![vec![1]], vec![vec![0, 0]]] {
             let mut emitted = false;
             assert!(
-                for_each_pauli_string::<Complex64, _, _>(&relation, &sites, |_| emitted = true,)
+                for_each_pauli_string::<Complex64, _, _>(supports, &sites, |_| emitted = true,)
                     .is_err()
             );
             assert!(!emitted);
@@ -323,7 +278,7 @@ mod tests {
         let duplicate = [HilbertSpace::factor(0usize), HilbertSpace::factor(0)];
         assert!(
             for_each_pauli_string::<Complex64, _, _>(
-                &SupportCombinations::<0>::new(2),
+                SupportCombinations::<0>::new(2).iter(),
                 &duplicate,
                 |_| {},
             )
@@ -332,7 +287,7 @@ mod tests {
         let composite = HilbertSpace::tensor_all(sites.iter().cloned()).unwrap();
         assert!(
             for_each_pauli_string::<Complex64, _, _>(
-                &SupportCombinations::<0>::new(1),
+                SupportCombinations::<0>::new(1).iter(),
                 &[composite],
                 |_| {},
             )
