@@ -127,6 +127,28 @@ norm squared は自己内積の実部、norm はその平方根とする。`norm
 
 拡張 trait とエラーは `qmb-normalize` から直接利用する。core の libm feature は設けず、core の代数 API・norm squared・スカラー除算は正規化 crate がなくても利用できる。非零の自己内積による商を明示的に計算でき、平方根を使わない正規化期待値の拡張 trait も `qmb-normalize` に属する。
 
+### 4.2. Hilbert–Schmidt 内積の次元規格化
+
+局所では状態空間の次元 d、複合系では全作用空間の次元 D を用い、演算子の内積とそのノルムを次で定義する。演算子空間の次元 d² や primitive の variant 数で割らない。
+
+```math
+\langle A,B\rangle_D=\frac{\operatorname{Tr}(A^\dagger B)}{D},\qquad
+\|A\|_D^2=\frac{\operatorname{Tr}(A^\dagger A)}{D}.
+```
+
+この規格化では `||I||_D=1` となり、identity spectator を追加しても内積を保つ。Hermite 演算子 A では最大混合状態での二乗平均 `Tr((I/D) A²)` に対応する。相互作用項そのものを増やした場合のノルムまで一定にするものではない。
+
+```math
+\langle A\otimes I_m,B\otimes I_m\rangle_{Dm}
+=\langle A,B\rangle_D.
+```
+
+`Trace` は通常の非正規化 trace のまま、`Tr(I)=D` とする。期待値・密度行列の純度に使う trace、状態内積・norm・状態正規化も既存の意味を維持する。任意の独自代数や Basis に正規直交性を要求しない。
+
+`LocalOperator::hs_inner_product` は局所の `Tr(A†B)` を `O::identity()` の trace で割る。`Operator::hs_inner_product`・`hs_inner_product_in` は[通常表現の局所 trace の走査](composite-expression.md#124-intrinsic-な項と通常表現)で各 trace を規格化してから縮約する。各局所次元は係数型 C の非零の値として表せ、数学的な除算ができることを要求する。除算には既存の `Divide` を使い、通常の `trace` / `trace_in` に除算能力を追加しない。
+
+この計算には状態型・Dimension・総次元の整数化・整数から C への変換を要求しない。空の tensor 空間は D=1 とする。総次元の `usize` overflow と、identity spectator の次元を掛け重ねることによる中間値の増大を避けるが、一般の係数の桁あふれや丸め誤差を防ぐ保証はしない。実装は [evaluate/trace.rs](../../crates/qmb-core/src/evaluate/trace.rs)、回帰テストは [hs_inner_product.rs](../../crates/qmb-core/tests/hs_inner_product.rs)を参照する。
+
 ## 5. 線型従属性と基底との接続
 
 Primitive が線型独立でないため、同じ数学的対象に複数の式表現を許す。たとえば spin-half の `Sp` と `(Sx + i Sy)/2` をどちらも記述できる。各能力は、primitive の線型関係を保存し、同じ対象を表す異なる入力表現から数学的に同じ結果を得ることを要求する。結果の係数列や式木の構造の一致は要求しない。

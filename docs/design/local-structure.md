@@ -29,6 +29,20 @@ Dimension は `fn dim() -> Result<NonZeroUsize, DimensionOverflow>` として実
 
 局所 identity と spectator 因子の trace は、O の Identity・Trace から得る。次元の整数値を係数へ変換する経路に置き換えず、局所 trace に係数の One・整数変換を追加要求しない。外部の O に Identity を追加実装できない場合は、提供元の実装か利用者が所有する wrapper で接続する。`Identity`・`Dimension` は `qmb_core::ops` と crate root から公開する。`Identity` は局所式（`O: Identity`）と複合式（追加の能力制約なし）にも実装する。
 
+### 2.1. 提供する primitive と規格化
+
+| 代数 | 状態 primitive | 演算子 primitive |
+| --- | --- | --- |
+| spin-half | `Up, Down` | `I, Sx, Sy, Sz, Sp, Sm` |
+| fermion | `Empty, Occupied` | `I, Annihilate, Create, Number, Mx, My, Mz` |
+| spin-one | `Plus, Zero, Minus` | `I, Sx, Sy, Sz, Sp, Sm, Dxy, Q0, Qxy, Qyz, Qzx, Q1p, Q1m, Q2p, Q2m` |
+
+状態空間の次元は順に2・2・3、演算子空間の次元は4・4・9とする。variant 数や選択基底の要素数とは区別する。zero は空の線型結合・式で表す。
+
+spin-half の CartesianBasis、fermion の MajoranaBasis、spin-one の CartesianBasis は、状態空間の次元 d で割った [HS 内積](primitive-expression.md#42-hilbertschmidt-内積の次元規格化)に関して正規直交とする。この条件を全 primitive や任意の独自 Basis に要求しない。昇降演算子は Cartesian 成分との接続を基準に定義する。
+
+spin-half は [Pauli 行列の規約](../requirements.md#23-spin-12-の規約)に従い、`Sp=(Sx+iSy)/2`、`Sm=(Sx−iSy)/2` とする。物理的なスピン J は spin-half では `J=S/2`、spin-one では `J=√(2/3) S` であり、既存のスカラー倍で表す。物理的なスピンを構築する補助 API は設けない。fermion・spin-one の詳細は第9・10節、モデルの結合定数は[モデル構築の設計](geometry.md)に従う。
+
 ## 3. 数学的能力の整合性
 
 以下の `A,B,C` は対応する primitive 型 O の演算子、`ψ,φ` はその状態、`I` は恒等演算子とする。primitive の線型結合も含め、次の契約を要求する。
@@ -50,6 +64,8 @@ Dimension は `fn dim() -> Result<NonZeroUsize, DimensionOverflow>` として実
 これらは局所実装が満たす数学的な契約と検証対象である。任意の実装に対して結合則などを実行時に自動証明する機構は要求しない。初期版では S・O の型と能力実装が意味・規則を定め、追加の定義ラベルは設けない。実行時パラメータを持つ構造への拡張は後続へ延期する。
 
 等式は数学的な意味について要求し、浮動小数点計算のビット単位の一致とは区別する。数値精度、特殊値、および近似比較は要件の 4.1 節・5.6 節に従う。
+
+局所 Product・Act は数学的に整理した最終係数を直接返し、解析的に零の結果は空の線型結合とする。単位係数は One を使い、定数の生成式は private helper で揃える。旧規格化への数値変換と逆変換を実行時に繰り返さない。
 
 ## 4. 局所構造の一致条件
 
@@ -208,7 +224,7 @@ mode の順序・交換符号・先行区間の parity string は core に委ね
 
 ### 9.6. 実装時の検証記録
 
-名前・規格化の移行内容と受入検証は [v3 の修正記録](../plans/v3/primitive-normalization.md)に記録する。局所規則・基底の独立2×2行列との照合は [contracts.rs](../../crates/qmb-fermion/tests/contracts.rs)、非 Clone / Copy / Float の係数能力は [minimal_scalar.rs](../../crates/qmb-fermion/tests/minimal_scalar.rs)、式・全 backend は [local_expressions.rs](../../crates/qmb-fermion/tests/local_expressions.rs)、graded 接続・CAR・両 Hubbard の独立 Fock 空間参照は [models.rs](../../crates/qmb-fermion/tests/models.rs)で検証する。数値試験は f32 / f64 の両方を対象とする。
+名前・規格化の移行時の受入結果は[第11節](#11-規格化変更の検証記録)に記録する。局所規則・基底の独立2×2行列との照合は [contracts.rs](../../crates/qmb-fermion/tests/contracts.rs)、非 Clone / Copy / Float の係数能力は [minimal_scalar.rs](../../crates/qmb-fermion/tests/minimal_scalar.rs)、式・全 backend は [local_expressions.rs](../../crates/qmb-fermion/tests/local_expressions.rs)、graded 接続・CAR・両 Hubbard の独立 Fock 空間参照は [models.rs](../../crates/qmb-fermion/tests/models.rs)で検証する。数値試験は f32 / f64 の両方を対象とする。
 
 ## 10. Spin-one の局所代数
 
@@ -305,7 +321,7 @@ Sp・Sm の非零な遷移振幅は √3、Sx の隣接状態への振幅は √
 
 ### 10.6. 実装時の検証記録
 
-規格化の移行と受入検証は [v3 の修正記録](../plans/v3/primitive-normalization.md)にまとめる。独立な物理的 J の行列と採用倍率から参照値を作り、[contracts.rs](../../crates/qmb-spin-one/tests/contracts.rs) で全225積・45作用・随伴・trace・結合則・作用整合性・両基底と Gram 行列を f32 / f64 で検証する。
+規格化の移行時の受入結果は[第11節](#11-規格化変更の検証記録)にまとめる。独立な物理的 J の行列と採用倍率から参照値を作り、[contracts.rs](../../crates/qmb-spin-one/tests/contracts.rs) で全225積・45作用・随伴・trace・結合則・作用整合性・両基底と Gram 行列を f32 / f64 で検証する。
 
 [minimal_scalar.rs](../../crates/qmb-spin-one/tests/minimal_scalar.rs) は平方根を必要としない能力の最小 bound、[local_expressions.rs](../../crates/qmb-spin-one/tests/local_expressions.rs) は局所式と全 backend、[tensor_products.rs](../../crates/qmb-spin-one/tests/tensor_products.rs) は複合基底・ordinary / graded・全 backend、[models.rs](../../crates/qmb-spin-one/tests/models.rs) は物理的な3モデルとエネルギー・構築能力を検証する。
 
@@ -314,3 +330,32 @@ Sp・Sm の非零な遷移振幅は √3、Sx の隣接状態への振幅は √
 ### 10.7. 後続の範囲
 
 公開の MatrixUnitBasis、標準的な球面テンソル位相を付けた基底、一般 spin-S、異種局所代数の混在は後続とする。Float を満たさない厳密係数による局所 Product / Act、専用 no_std target・MSRV の検証状況は別途扱う。
+
+## 11. 規格化変更の検証記録
+
+2026-11-01、Rust 1.99.1 の direnv devShell で実装と受入検証を行った。本節は実装時の記録であり、今回の文書整理でテストを再実行したものではない。以下のコマンドはリポジトリ直下で `direnv exec .` を付けて実行し、すべて成功した。
+
+```sh
+cargo test --workspace --all-features --no-fail-fast --quiet
+cargo test --workspace --no-default-features --offline --no-fail-fast --quiet
+cargo test -p qmb-spin-one -p qmb-fermion --all-features --offline --quiet
+cargo test -p qmb-spin-one --test tensor_products -p qmb-fermion --test models --offline --quiet
+cargo check -p qmb-core -p qmb-geometry --no-default-features --offline
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features --offline -- -D warnings
+cargo clippy --workspace --all-targets --no-default-features --offline -- -D warnings
+sh -c 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps --offline'
+```
+
+qmb-export は単独でも `cargo test -p qmb-export --no-default-features --offline --quiet` を実行し、追加 feature なし・`--features ndarray`・`--features sprs` の3構成を確認した。両 backend 有効の構成は workspace の全 feature テストで確認した。
+
+確認した内容は次のとおり。
+
+- 各代数の全 primitive の積・作用・随伴・通常 trace、両演算子基底の変換と座標を、独立行列と f32 / f64 で照合した。spin-one の全225積・45作用、結合則・作用との整合性も検証した。
+- 局所の正規化 HS Gram 行列に加え、spin-one の Cartesian / Ladder tensor 基底と fermion の graded Majorana tensor 基底の Gram 行列を検証した。graded 評価の符号・CAR と通常作用行列も照合した。
+- [HS 内積の回帰テスト](../../crates/qmb-core/tests/hs_inner_product.rs)で、明示行列による `Tr(A†B)/D`、空空間、spectator の追加、明示空間による束縛の上書き、および2048因子での `⟨I,I⟩=1` を確認した。状態型・Dimension・整数変換を要求しないこと、Divide だけを持つ係数でも計算できること、通常 trace に除算能力を要求しないことも検証した。
+- 物理的なモデルの独立参照行列とエネルギー・定数シフトを維持した。微小係数の保存と厳密な相殺、解析的に零の局所規則の空性も確認した。暗黙の近似的な切り捨ては追加していない。
+
+examples の全8バイナリを `cargo run -p examples --bin <name> --offline --quiet` により、既定 feature・`--all-features`・`--no-default-features` の3構成で実行した。一重項・三重項のエネルギー −0.75 / 0.25、symmetric Hubbard のエネルギー −2、spin-one BLBQ の期待値0.5、Pauli string の37項と密疎 export の一致が保たれた。
+
+依存関係と feature 要件は変更していない。MSRV 1.85 と専用 no_std target での実ビルドは今回実行しておらず、[未実施の検証](../future-work.md#3-未実施の検証と性能)として引き続き扱う。
