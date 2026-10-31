@@ -1,46 +1,76 @@
 # Chain・Site と自由度の配置
 
-更新日: 2026-10-30
+更新日: 2026-10-31
 
 ## 1. 対象と責任分担
 
-`qmb-geometry` の `Chain` はサイト数と境界条件だけを保持する純粋な幾何である。Index・Factor・HilbertSpace・局所代数・係数型を保持せず、Index を発行しない。Site は `0..site_count` の位置番号であり、専用の SiteId や所属トークンは設けない。
+`qmb-geometry` は幾何、Site の配置規則、外部列への借用接続を分離する。公開型は crate root から利用する。core は geometry に依存せず、geometry は HilbertSpace 接続のため core に依存する。`no_std + alloc` を維持する。
 
-```rust
-struct Chain {
-    site_count: usize,
-    boundary: Boundary,
+| 型・trait | 責務 |
+| --- | --- |
+| `Geometry` | `num_sites()` を保証する最小の共通契約 |
+| `Chain` | Site 数と境界条件を保持する不変な幾何 |
+| `Relation<G>` | G の隣接・方向・境界条件などから Site 番号の Group を列挙 |
+| `SiteGroup<CAP>` | 最大容量の配列と有効長。`AsRef<[usize]>` は使用部分だけを公開 |
+| `SiteMapper<G,T>` | geometry と Site 順の `&[T]` を借用し、対応付けを検証 |
+| `MappedGroup<T,Group>` | 元の Group と外部列を保持し、組内順の `&T` を列挙 |
+
+`Chain::new(num_sites, boundary)` は検証エラーなしで Self を返し、0 Site も認める。`num_sites()` と `boundary()` で保持内容を取得する。Index・HilbertSpace・局所代数・係数型は保持・発行しない。Site は `0..num_sites()` の位置番号であり、専用の SiteId や所属トークンは設けない。
+
+同じ geometry へ複数の Relation を適用でき、同じ規則型を複数の geometry に実装できる。共通の Group 契約は `AsRef<[usize]>` だけとし、固定長配列・可変長・保存済み slice・中心や方向を持つ独自型を使える。Group の順序や重複の意味は各 Relation が定める。SiteGroup 自体はソート・重複除去を行わない。
+
+v3 では旧 `nn_*`・`site_count()`・`ChainError` を撤去した。移行設計と検証記録は[リファクタリング計画](../plans/v3/geometry-refactoring.md)に記録する。正方格子は設計用サンプルに留め、一般の支持集合の組み合わせ列挙は標準 Relation に含めない。
+
+## 2. 関係の列挙と借用接続
+
+`Relation<G>::groups(&geometry)` は独自の関連型 `Error` を返し、成功時は Group を遅延列挙する。設定の検証は Iterator の返却前に行う。エラー型に Debug・Display・Error の実装を一律には要求しない。GAT により規則や geometry 内の保存済みデータも借用できるが、生成 Iterator の可変バッファを貸し出す形式ではない。
+
+| Chain の Relation | 列挙規約 |
+| --- | --- |
+| `NearestNeighbors` | `[i,j]`（i<j）の辞書順・一意な無向辺。0・1 Site は辺なし、2 Site は両境界で一辺 |
+| `Consecutive<K>` | 役割順を保持する K Site の連続配置。open は開始位置 `0..=N-K`、periodic は `0..N` で折り返す |
+
+`Consecutive<0>` は `ConsecutiveError::ZeroLength`、K>N は配置なしとする。K=1 は各 Site を一度ずつ返す。配置内の並べ替えや、同じ支持集合になる回転の統合は行わない。2 Site の periodic で `Consecutive<2>` は `[0,1]`・`[1,0]` を返し、最近接の一辺とは区別する。NearestNeighbors の Chain 実装のエラー型は Infallible である。
+
+```rust,ignore
+use qmb_geometry::{Boundary, Chain, Consecutive, NearestNeighbors, SiteMapper};
+let chain = Chain::new(4, Boundary::Open);
+let mapper = SiteMapper::new(&chain, &site_spaces)?;
+for group in mapper.groups(&Consecutive::<3>)? {
+    let group = group?;
+    for leaves in group.leaves_cartesian() {
+        // 各 Site から葉を一つずつ選び、既存 core で配置・積を構築する。
+    }
+}
+for group in mapper.groups(&NearestNeighbors)? {
+    let group = group?;
+    // 同じ geometry と外部列に別の Relation を適用できる。
 }
 ```
 
-`Chain::new(site_count, boundary)` は検証エラーなしで Self を返し、0 Site も認める。`site_count()` と `boundary()` で保持内容を取得する。構築後に変更しない。
+`SiteMapper::new` は列長の完全一致を Relation の適用前に検証し、空の列挙でも省略しない。不一致は `MappingError::SiteCountMismatch { expected, actual }`。`groups()` の外側の Result は `R::Error`、各 Group の接続結果は `Result<MappedGroup<...>, MappingError>` とする。番号範囲は各 Group を消費する時点で検証し、不正なら `SiteOutOfRange { site, num_sites }` を返す。全件の事前収集や消費済みの結果の巻き戻しは行わない。
 
-2026-10-28 に Index 所有型の `Chain<I>`、`from_sites`・`with_sites`・Index 発行付き `new`、`ToSpace`、Index ペア用 `NearestNeighborRelation`・`index_pairs` を撤去し、以下の借用 API へ移行した。空間の構築・保持と Index 発行は利用側が担当する。core は geometry に依存せず、geometry は接続補助のため core に依存する。
+MappedGroup の `iter()` は組内順の `&T`、`get(position)` は組内位置の要素、`source()` は元の Group を返す。中心・方向なども保持されるため、独自 Group 用の拡張 trait から読み取れる。要素・Index の Clone・Eq は接続に不要であり、Index 重複は空間・モデル構築側で検証する。
 
-## 2. 関係の列挙
-
-`nn_site_pairs()` は正規化された番号対 `(i,j)`（i < j）を辞書順で遅延列挙する。open は隣接位置、periodic はさらに先頭と末尾を接続する。self-loop・重複辺は作らず、0・1 Site は辺なし、2 Site はどちらの境界条件でも一辺だけとする。
-
-| メソッド | 入力と返すペア |
-| --- | --- |
-| `nn_site_pairs_with(&values)` | Site 順の任意の要素列から、要素をそのまま借用 |
-| `nn_pairs_with(&factors)` | Site 順の局所空間列から、最近接 Site 間の葉の全組み合わせ |
-| `nn_zip_with(&factors)` | 同じ葉位置同士を短い方まで zip |
-| `nn_site_pairs_in(&space)` | トップレベル因子を Site として、その局所空間を借用 |
-| `nn_pairs_in(&space)` | トップレベル Site 間の葉の全組み合わせ |
-| `nn_zip_in(&space)` | トップレベル Site 間の葉の位置対応 |
-
-`_with` は入力列の長さと site_count の一致を Iterator を返す前に検証し、過不足を `ChainError::SiteCountMismatch` とする。0・1 Site でも省略しない。葉ペアの入口は `nn_site_pairs_with` へ委譲し、`leaves()` で実際の葉を借用する。全組み合わせは左の葉を外側・右を内側とし、Site 対順を保つ。空 Site は位置を保ち、葉ペアを生成せず前後を直接接続し直さない。
-
-`_in` は保存されたトップレベルの分割を読み取り、収集や Index の複製なしで `_with` へ委譲する。葉入力は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site、単項 Tensor は一 Site と読む。局所空間内の grouping は保持する。全葉数から Site 数を決めない。
-
-任意の要素 T に Clone・Eq・Default などを要求せず、葉ペアの列挙も Index の Clone・Eq を必要としない。Chain は入力列を保持しない。Index 重複は空間・モデル構築側の検証であり、幾何の列挙は重複を検証しない。
-
-## 3. 空間と Index
+## 3. 空間と局所自由度
 
 局所空間列 `&[HilbertSpace<I>]` の一要素を一 Site に対応させる。葉・複数葉・入れ子・単項 Tensor・空の空間を使える。利用側は既存の空間ハンドルを共有して列を構成でき、Index の Clone・再発行は不要である。
 
-Site 順序と別途存在する全空間の因子順序を区別する。接続補助は空間・状態・行列を暗黙に並べ替えない。任意の因子集合から部分系を抽出する API や、必須の配置ラッパーは導入しない。
+`SiteMapper::from_space` は保存されたトップレベル分割を Site と読む。葉入力は一 Site、空 Tensor は0 Site、`Tensor([unit])` は一つの空 Site、単項 Tensor は一 Site とする。全葉数から Site 数を決めず、局所 grouping を保持する。
+
+HilbertSpace 用 MappedGroup は次の三つの入口を持つ。
+
+| メソッド | `[A⊗B,C⊗D]` に対する結果 |
+| --- | --- |
+| `leaves_cartesian()` | `[A,C], [A,D], [B,C], [B,D]` |
+| `leaves_zip()` | `[A,C], [B,D]` |
+| `combine_leaves(FnOnce)` | Site ごとの `Vec<Leaves>` を一つの Iterator にまとめる独自処理 |
+
+任意の Site 数で同じ入口を使い、体数ごとの tuple trait を要求しない。標準の二つは `combine_leaves` を利用する。直積は先頭 Site を最も外側とし、読み取った葉への参照をキャッシュして再走査する。全結果の事前生成や Leaves・Index の Clone は不要である。zip は最短の葉列までとし、いずれも Site 内のテンソル積順を保つ。
+
+空 Site を含めば結果なしとし、位置を詰めてつなぎ直さない。Site の組自体が空なら両方とも空の葉列を一つ返す。一つの Site はその葉を一つずつ返す。独自 Fn の出力 Item は制限せず、順序や対応を変える場合の契約は利用側が定める。
+
+Site 順序と別途存在する全空間の因子順序を区別する。接続は空間・状態・行列を暗黙に並べ替えず、tensor 合成もしない。全作用空間と X/Y/Z などの選択・規格化は利用側、配置・積・bind は既存 core が担当する。各 Site から葉を一つ選ぶ操作は、複数葉に対する全 Pauli string の列挙とは区別する。
 
 ## 4. SpinHalf のモデル構築
 
@@ -52,9 +82,9 @@ Site 順序と別途存在する全空間の因子順序を区別する。接続
 | `Models::heisenberg(&chain, &factors, coupling)` | `OperatorOf<Spin, I>` |
 | `Models::neel(&chain, &factors, first)` | `StateOf<Spin, I>` |
 
-全関数は Result を返し、列長と全葉の Index 重複を、辺がなくても検証する。列長の不一致は `UtilityError::Chain(ChainError::SiteCountMismatch)`、重複は `UtilityError::Space(SpaceError::DuplicateIndex)`、配置・束縛エラーは `UtilityError::Expression` とし、元エラーを source として保持する。Index には Eq のみを要求する。
+全関数は Result を返し、列長と全葉の Index 重複を、辺がなくても検証する。列長の不一致は `UtilityError::Mapping(MappingError::SiteCountMismatch { expected, actual })`、重複は `UtilityError::Space(SpaceError::DuplicateIndex)`、配置・束縛エラーは `UtilityError::Expression` とし、元エラーを source として保持する。Index には Eq のみを要求する。
 
-XYZ は `−Σ_(i,j) Σ_(a∈Li,b∈Lj) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)` を構築する。Li は Site i の葉集合であり、`nn_pairs_with` の全組み合わせを使う。Site 内の葉間結合は追加しない。Heisenberg は三結合を J に揃え、正の J を強磁性的とする。標準モデルは位置対応を暗黙に選ばない。
+XYZ は `−Σ_(i,j) Σ_(a∈Li,b∈Lj) (Jx Sx_a Sx_b + Jy Sy_a Sy_b + Jz Sz_a Sz_b)` を構築する。Li は Site i の葉集合であり、`NearestNeighbors` と `leaves_cartesian()` の全組み合わせを使う。Site 内の葉間結合は追加しない。Heisenberg は三結合を J に揃え、正の J を強磁性的とする。標準モデルは位置対応を暗黙に選ばない。
 
 XYZ・Heisenberg の全作用空間は、入力の局所空間ハンドルを共有し、列順に tensor した空間である。局所 grouping と相互作用に現れない Site も保持し、返す演算子をその空間に bind する。別途存在する全空間の root・上位 grouping・異なる因子順序は保存しない。
 
@@ -66,7 +96,7 @@ Neel は Site 位置と first から向きを交互に決め、その Site の�
 
 ## 5. 検証対象
 
-geometry のテストは 0・1・2・3 以上の open／periodic、列長過不足、非 Clone・非 Eq 要素、借用の同一性、入れ子・空・可変長局所空間の順序、全組み合わせと位置対応、トップレベル分割の解釈と `_with`／`_in` の一致を検証する。
+geometry のテストは 0・1・2・3 以上の open／periodic、列長過不足、非 Clone・非 Eq 要素、借用の同一性、入れ子・空・可変長局所空間の順序、全組み合わせと位置対応、トップレベル分割の解釈と `new`／`from_space` の一致、3体・4体の連続配置、独自エラー・役割情報と遅延範囲検証を検証する。
 
 spin-half のテストは複数葉の全組み合わせ結合、Site ごとの向き、空 Site の偶奇と辺、全空・0 Site、重複と列長拒否、非 Clone Index、深い grouping、最小の係数能力を検証する。examples の縦断テストは両精度の独立な Pauli 行列との一致、符号・norm・期待値、および密疎 export を検証する。
 
@@ -122,7 +152,7 @@ FermionModels::<Fermion<C>>::symmetric_hubbard(&chain, &sites, t, u)
 - 全作用空間は Site 順、各 Site 内の up・down 順で graded 合成し、入力の Site 空間を共有して構築する。返す演算子はこの全空間に bind する。
 - ホッピングは隣接 Site の同じ spin 同士だけを結ぶ。spin-half の XYZ が使う全葉ペアの直積は用いない。各辺に両方向のホッピングを一度ずつ加え、符号は core の graded 合成に委ねる。
 - open / periodic の辺は既存 Chain の契約に従う。0・1 Site は辺なし、2 Site の periodic でも辺は一つとし、ホッピングを重複させない。
-- Site 数の一致、各 Site が二つの葉を持つ graded 空間であること、全 mode の Index 重複を、結合値が0でも検証する。不正な Site 構成は `UtilityError::InvalidSite { site }` とし、列長・空間・式のエラーはそれぞれ `Chain`・`Space`・`Expression` variant に元エラーを保持する。
+- Site 数の一致、各 Site が二つの葉を持つ graded 空間であること、全 mode の Index 重複を、結合値が0でも検証する。不正な Site 構成は `UtilityError::InvalidSite { site }` とし、列長・空間・式のエラーはそれぞれ `Mapping`・`Space`・`Expression` variant に元エラーを保持する。
 - 0 Site は graded な単位空間に束縛した zero Hamiltonian を返す。1 Site はホッピングなしで相互作用を保持する。
 - 両モデルの係数 bound は `C: Clone + From<R> + Neg<Output=C>`、入力 t・U は同じ R とする。symmetric 相互作用は `U Z↑Z↓` を使うため、構築に定数生成・除算・虚数単位や局所 Product・Act・Float を要求しない。t・U が実数に対応することはモデルの数学的契約とする。
 
@@ -182,7 +212,7 @@ BLBQ は bilinear 結合 J と biquadratic 結合 K を独立に受け取る。�
 - 空 Site は位置を保ち、前後を直接つなぎ直さない。0 Site は単位空間上の zero Hamiltonian、1 Site と全空 Site は入力の空間構造に束縛した zero Hamiltonian を返す。
 - 境界条件と辺は第2節の Chain に従う。0・1 Site は辺なし、2 Site は open / periodic とも一辺とする。
 
-エラーは `Chain(ChainError)`・`Space(SpaceError)`・`Expression(ExpressionError)` の3 variant とし、元エラーを source として保持する。列長不一致は SiteCountMismatch、重複 Index は DuplicateIndex とし、UtilityError を crate root から公開する。
+エラーは `Mapping(MappingError)`・`Space(SpaceError)`・`Expression(ExpressionError)` の3 variant とし、元エラーを source として保持する。列長不一致は SiteCountMismatch、重複 Index は DuplicateIndex とし、UtilityError を crate root から公開する。
 
 ### 7.3. 遅延構築と係数能力
 

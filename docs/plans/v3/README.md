@@ -42,10 +42,8 @@ v3 への更新の対象は以下の4項目とする。各項目の設計状況�
 
 ## 3体以上の相互作用に対応する関係の列挙
 
-**設計採用済み・本体未実装（2026-10-31）**。
+**実装・受入確認済み（2026-10-31）**。
 
-Geometry・Relation<G>・SiteMapper・MappedGroup により、幾何に基づく Site の配置を外部の space 列へ借用接続する。Site 数の取得名は num_sites、Relation のエラーは関連型 Error とし、旧 API の互換性は維持しない。
+幾何に基づく多体の Site 配置を列挙し、外部の HilbertSpace 列へ借用接続する。
 
-複数葉の標準操作は leaves_cartesian・leaves_zip とし、共通入口に combine_leaves(FnOnce) を設ける。一般の支持集合の組み合わせ列挙は geometry の Relation に含めず、正方格子の正式実装も今回の対象外とする。
-
-採用設計・列挙規約・移行手順・検証記録は、[qmb-geometry のリファクタリング計画](geometry-refactoring.md)に集約する。
+採用済みの判断・実装範囲・API 契約・移行手順・検証記録は、[qmb-geometry のリファクタリング計画](geometry-refactoring.md)を参照する。設計の詳細は同文書で管理する。

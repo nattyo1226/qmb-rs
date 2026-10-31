@@ -4,14 +4,14 @@ use crate::{SpinHalf, SpinHalfOperator, SpinHalfState};
 use alloc::vec::Vec;
 use core::ops::Neg;
 use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError, State, StateOf};
-use qmb_geometry::{Chain, ChainError};
+use qmb_geometry::{Chain, MappingError, NearestNeighbors, SiteMapper};
 
 /// Failure to construct a spin model on a site-ordered space assignment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UtilityError {
     /// The input site count differs from the chain's count.
     #[error("{0}")]
-    Chain(#[from] ChainError),
+    Mapping(#[from] MappingError),
     /// An index occurs more than once across the supplied site spaces.
     #[error("{0}")]
     Space(#[from] SpaceError),
@@ -25,7 +25,7 @@ fn model_space<I: Eq>(
     chain: &Chain,
     factors: &[HilbertSpace<I>],
 ) -> Result<HilbertSpace<I>, UtilityError> {
-    let _ = chain.nn_site_pairs_with(factors)?;
+    SiteMapper::new(chain, factors)?;
     Ok(HilbertSpace::tensor_all(factors.iter().cloned())?)
 }
 
@@ -60,10 +60,18 @@ impl<C> SpinHalfModels<SpinHalf<C>> {
             (SpinHalfOperator::Sz, -C::from(jz)),
         ];
         let mut terms = Vec::new();
-        for (left, right) in chain.nn_pairs_with(factors)? {
-            for (primitive, coupling) in &axes {
-                let local = SpinHalf::<C>::operator(*primitive);
-                terms.push((local.at(left)? * local.at(right)?)?.scaled(coupling.clone()));
+        let mapper = SiteMapper::new(chain, factors)?;
+        for group in mapper
+            .groups(&NearestNeighbors)
+            .unwrap_or_else(|never| match never {})
+        {
+            let group = group?;
+            for pair in group.leaves_cartesian() {
+                let (left, right) = (pair[0], pair[1]);
+                for (primitive, coupling) in &axes {
+                    let local = SpinHalf::<C>::operator(*primitive);
+                    terms.push((local.at(left)? * local.at(right)?)?.scaled(coupling.clone()));
+                }
             }
         }
         Ok(OperatorOf::<SpinHalf<C>, I>::sum(terms)?.bind(&space)?)

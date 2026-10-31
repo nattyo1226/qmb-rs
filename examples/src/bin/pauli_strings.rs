@@ -3,22 +3,11 @@
 
 use num_complex::Complex64;
 use qmb_core::{HilbertSpace, OperatorOf};
+use qmb_geometry::SiteGroup;
 use qmb_spin_half::{SpinHalf, SpinHalfOperator as Op};
 
 type Error = Box<dyn std::error::Error>;
 type PauliString<I, C> = OperatorOf<SpinHalf<C>, I>;
-
-#[derive(Clone, Copy)]
-struct SiteGroup<const CAP: usize> {
-    sites: [usize; CAP],
-    len: usize,
-}
-
-impl<const CAP: usize> AsRef<[usize]> for SiteGroup<CAP> {
-    fn as_ref(&self) -> &[usize] {
-        &self.sites[..self.len]
-    }
-}
 
 struct SupportCombinations<const CAP: usize> {
     num_sites: usize,
@@ -34,29 +23,26 @@ impl<const CAP: usize> SupportCombinations<CAP> {
     fn iter(&self) -> impl Iterator<Item = SiteGroup<CAP>> + '_ {
         let n = self.num_sites;
         let max_len = CAP.min(n);
-        let mut current = Some(SiteGroup {
-            sites: [0; CAP],
-            len: 0,
-        });
+        let mut current = Some(([0; CAP], 0));
         std::iter::from_fn(move || {
-            let result = current.take()?;
-            let mut next = result;
-            for pos in (0..result.len).rev() {
-                if next.sites[pos] < n - result.len + pos {
-                    next.sites[pos] += 1;
-                    for j in pos + 1..result.len {
-                        next.sites[j] = next.sites[j - 1] + 1;
+            let (sites, len) = current.take()?;
+            let result = SiteGroup::new(&sites[..len]).expect("within capacity");
+            let mut next = sites;
+            for pos in (0..len).rev() {
+                if next[pos] < n - len + pos {
+                    next[pos] += 1;
+                    for j in pos + 1..len {
+                        next[j] = next[j - 1] + 1;
                     }
-                    current = Some(next);
+                    current = Some((next, len));
                     return Some(result);
                 }
             }
-            if result.len < max_len {
-                next.len += 1;
-                for j in 0..next.len {
-                    next.sites[j] = j;
+            if len < max_len {
+                for (j, site) in next.iter_mut().enumerate().take(len + 1) {
+                    *site = j;
                 }
-                current = Some(next);
+                current = Some((next, len + 1));
             }
             Some(result)
         })
@@ -139,9 +125,12 @@ fn main() -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "export")]
     use qmb_export::{Export, Exported, MatrixArgs};
+    #[cfg(feature = "export")]
     use qmb_spin_half::{SpinHalfState, SzBasis};
 
+    #[cfg(feature = "export")]
     fn matrix(word: &PauliString<usize, Complex64>) -> Vec<Complex64> {
         let result: Exported<Vec<Complex64>, _> = word
             .export(MatrixArgs::<SpinHalfState, _>::new(&SzBasis))
@@ -150,6 +139,7 @@ mod tests {
     }
 
     // Independent Pauli matrices. Labels: 0=I, 1=X, 2=Y, 3=Z.
+    #[cfg(feature = "export")]
     fn reference(labels: &[usize]) -> Vec<Complex64> {
         let dim = 1usize << labels.len();
         (0..dim * dim)
@@ -177,6 +167,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export")]
     fn all_37_strings_match_independent_pauli_matrices_once() {
         let sites: Vec<_> = (0..3).map(HilbertSpace::factor).collect();
         let mut expected: Vec<_> = (0usize..64)
@@ -207,6 +198,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export")]
     fn zero_capacity_empty_system_and_cap_larger_than_system() {
         for (n, expected_count) in [(0, 1), (2, 16)] {
             let sites: Vec<_> = (0..n).map(HilbertSpace::factor).collect();

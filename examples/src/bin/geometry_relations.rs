@@ -1,228 +1,26 @@
-//! Adopted design prototype. No production geometry or API is added by this file.
-//! The open square grid below exists only to exercise the interfaces.
+//! Geometry relations using the library API and a custom open square grid.
+//! The example-local grid demonstrates custom Geometry and Relation implementations.
 
 use qmb_core::HilbertSpace;
-use qmb_core::space::Leaves;
-use qmb_geometry::{Boundary, Chain};
+use qmb_geometry::{
+    Boundary, Chain, Consecutive, Geometry, MappedGroup, NearestNeighbors, Relation, SiteMapper,
+};
+#[cfg(test)]
+use qmb_geometry::{ConsecutiveError, MappingError};
+
+type Error = Box<dyn std::error::Error>;
 
 #[derive(Debug, PartialEq, Eq)]
-enum Error {
+enum GridError {
     InvalidLength,
     InvalidGridSize,
-    SiteCountMismatch,
-    OutOfRange,
 }
-
-trait Geometry {
-    /// Number of positions in a caller-owned, site-ordered slice.
-    fn num_sites(&self) -> usize;
-}
-
-impl Geometry for Chain {
-    fn num_sites(&self) -> usize {
-        // Adapter to the current library; the adopted API will use num_sites.
-        Chain::site_count(self)
+impl std::fmt::Display for GridError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
     }
 }
-
-trait Relation<G: Geometry> {
-    type Error;
-
-    type Group<'a>: AsRef<[usize]>
-    where
-        Self: 'a,
-        G: 'a;
-
-    fn groups<'a>(
-        &'a self,
-        geometry: &'a G,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error>;
-}
-
-struct SiteMapper<'g, 's, G, T> {
-    geometry: &'g G,
-    values: &'s [T],
-}
-
-impl<'g, 's, G: Geometry, T> SiteMapper<'g, 's, G, T> {
-    fn new(geometry: &'g G, values: &'s [T]) -> Result<Self, Error> {
-        if geometry.num_sites() != values.len() {
-            return Err(Error::SiteCountMismatch);
-        }
-        Ok(Self { geometry, values })
-    }
-
-    fn groups<'a, R: Relation<G>>(
-        &'a self,
-        relation: &'a R,
-    ) -> Result<impl Iterator<Item = MappedGroupResult<'s, T, R::Group<'a>>> + 'a, R::Error> {
-        let groups = relation.groups(self.geometry)?;
-        let values = self.values;
-        Ok(groups.map(move |source| {
-            if source.as_ref().iter().any(|&site| site >= values.len()) {
-                return Err(Error::OutOfRange);
-            }
-            Ok(MappedGroup { values, source })
-        }))
-    }
-}
-
-struct MappedGroup<'s, T, Group> {
-    values: &'s [T],
-    source: Group,
-}
-
-type MappedGroupResult<'s, T, Group> = Result<MappedGroup<'s, T, Group>, Error>;
-
-impl<'s, T, Group: AsRef<[usize]>> MappedGroup<'s, T, Group> {
-    fn source(&self) -> &Group {
-        &self.source
-    }
-
-    fn iter(&self) -> impl Iterator<Item = &'s T> + '_ {
-        let values = self.values;
-        self.source.as_ref().iter().map(move |&site| &values[site])
-    }
-}
-
-impl<'s, I, Group: AsRef<[usize]>> MappedGroup<'s, HilbertSpace<I>, Group> {
-    fn combine_leaves<Out: Iterator>(
-        &self,
-        combine: impl FnOnce(Vec<Leaves<'s, I>>) -> Out,
-    ) -> Out {
-        combine(self.iter().map(HilbertSpace::leaves).collect())
-    }
-
-    fn leaves_cartesian(&self) -> impl Iterator<Item = Vec<&'s HilbertSpace<I>>> {
-        self.combine_leaves(cartesian_leaves)
-    }
-
-    fn leaves_zip(&self) -> impl Iterator<Item = Vec<&'s HilbertSpace<I>>> {
-        self.combine_leaves(zip_leaves)
-    }
-}
-
-// Cache borrowed leaves for replay: Leaves itself need not implement Clone.
-// No Eq/Clone bound on Index; the cached items are shared references.
-fn cartesian_leaves<I>(
-    mut streams: Vec<Leaves<'_, I>>,
-) -> impl Iterator<Item = Vec<&HilbertSpace<I>>> {
-    let mut cache: Vec<Vec<_>> = (0..streams.len()).map(|_| Vec::new()).collect();
-    let mut positions = vec![0; streams.len()];
-    let mut started = false;
-    let mut done = false;
-    core::iter::from_fn(move || {
-        if done {
-            return None;
-        }
-        if !started {
-            for (stream, cached) in streams.iter_mut().zip(&mut cache) {
-                let Some(first) = stream.next() else {
-                    done = true;
-                    return None;
-                };
-                cached.push(first);
-            }
-            started = true;
-        } else {
-            let mut advanced = false;
-            for slot in (0..streams.len()).rev() {
-                let next = positions[slot] + 1;
-                if next < cache[slot].len() {
-                    positions[slot] = next;
-                    advanced = true;
-                    break;
-                }
-                if let Some(leaf) = streams[slot].next() {
-                    cache[slot].push(leaf);
-                    positions[slot] = next;
-                    advanced = true;
-                    break;
-                }
-                positions[slot] = 0;
-            }
-            if !advanced {
-                done = true;
-                return None;
-            }
-        }
-        Some(
-            cache
-                .iter()
-                .zip(&positions)
-                .map(|(leaves, &pos)| leaves[pos])
-                .collect(),
-        )
-    })
-}
-
-fn zip_leaves<I>(mut streams: Vec<Leaves<'_, I>>) -> impl Iterator<Item = Vec<&HilbertSpace<I>>> {
-    let mut done = false;
-    core::iter::from_fn(move || {
-        if done {
-            return None;
-        }
-        if streams.is_empty() {
-            done = true;
-            return Some(Vec::new());
-        }
-        let row: Option<Vec<_>> = streams.iter_mut().map(Iterator::next).collect();
-        if row.is_none() {
-            done = true;
-        }
-        row
-    })
-}
-
-struct NearestNeighbors;
-
-impl Relation<Chain> for NearestNeighbors {
-    type Error = Error;
-
-    type Group<'a> = [usize; 2];
-
-    fn groups<'a>(
-        &'a self,
-        geometry: &'a Chain,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
-        Ok(geometry.nn_site_pairs().map(|(a, b)| [a, b]))
-    }
-}
-
-struct Consecutive<const K: usize>;
-
-impl<const K: usize> Relation<Chain> for Consecutive<K> {
-    type Error = Error;
-
-    type Group<'a> = [usize; K];
-
-    fn groups<'a>(
-        &'a self,
-        geometry: &'a Chain,
-    ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
-        if K == 0 {
-            return Err(Error::InvalidLength);
-        }
-        let n = geometry.num_sites();
-        let count = if K > n {
-            0
-        } else if geometry.boundary() == Boundary::Periodic {
-            n
-        } else {
-            n - K + 1
-        };
-        Ok((0..count).map(move |start| {
-            core::array::from_fn(|offset| {
-                // Both start and offset are below n. Avoid start + offset overflow.
-                if offset >= n - start {
-                    offset - (n - start)
-                } else {
-                    start + offset
-                }
-            })
-        }))
-    }
-}
+impl std::error::Error for GridError {}
 
 // Deliberately arbitrary groups for mapper tests, not a proposed geometric relation.
 #[cfg(test)]
@@ -232,7 +30,7 @@ struct TestGroups {
 
 #[cfg(test)]
 impl<G: Geometry> Relation<G> for TestGroups {
-    type Error = Error;
+    type Error = GridError;
 
     type Group<'a>
         = &'a [usize]
@@ -269,8 +67,10 @@ struct OpenSquare {
 }
 
 impl OpenSquare {
-    fn new(width: usize, height: usize) -> Result<Self, Error> {
-        let count = width.checked_mul(height).ok_or(Error::InvalidGridSize)?;
+    fn new(width: usize, height: usize) -> Result<Self, GridError> {
+        let count = width
+            .checked_mul(height)
+            .ok_or(GridError::InvalidGridSize)?;
         Ok(Self {
             width,
             height,
@@ -297,7 +97,7 @@ impl Geometry for OpenSquare {
 }
 
 impl Relation<OpenSquare> for NearestNeighbors {
-    type Error = Error;
+    type Error = GridError;
 
     type Group<'a> = [usize; 2];
 
@@ -320,7 +120,7 @@ struct AlongAxis<const K: usize> {
 }
 
 impl<const K: usize> Relation<OpenSquare> for AlongAxis<K> {
-    type Error = Error;
+    type Error = GridError;
 
     type Group<'a> = [usize; K];
 
@@ -329,7 +129,7 @@ impl<const K: usize> Relation<OpenSquare> for AlongAxis<K> {
         geometry: &'a OpenSquare,
     ) -> Result<impl Iterator<Item = Self::Group<'a>> + 'a, Self::Error> {
         if K == 0 {
-            return Err(Error::InvalidLength);
+            return Err(GridError::InvalidLength);
         }
         let direction = match self.axis {
             Axis::X => Direction::East,
@@ -360,7 +160,7 @@ impl AsRef<[usize]> for Neighborhood {
 struct ClosedNeighborhood;
 
 impl Relation<OpenSquare> for ClosedNeighborhood {
-    type Error = Error;
+    type Error = GridError;
 
     type Group<'a> = Neighborhood;
 
@@ -391,18 +191,20 @@ impl Relation<OpenSquare> for ClosedNeighborhood {
     }
 }
 
-// Optional, concrete group capabilities. Generic consumers still need only Relation<G>.
-impl<'s, T> MappedGroup<'s, T, Neighborhood> {
+// A local extension trait supplies capabilities specific to this custom group.
+trait NeighborhoodView<'s, T: 's> {
+    fn center(&self) -> &'s T;
+    fn neighbors(&self) -> impl Iterator<Item = (Direction, &'s T)> + '_;
+}
+impl<'s, T> NeighborhoodView<'s, T> for MappedGroup<'s, T, Neighborhood> {
     fn center(&self) -> &'s T {
-        &self.values[self.source.sites[0]]
+        self.get(0).expect("center")
     }
-
     fn neighbors(&self) -> impl Iterator<Item = (Direction, &'s T)> + '_ {
-        let values = self.values;
-        self.source.directions[1..self.source.len]
+        self.source().directions[1..self.source().len]
             .iter()
-            .zip(&self.source.sites[1..self.source.len])
-            .map(move |(direction, &site)| (direction.expect("neighbor direction"), &values[site]))
+            .zip(self.iter().skip(1))
+            .map(|(direction, value)| (direction.expect("neighbor direction"), value))
     }
 }
 
@@ -410,6 +212,10 @@ fn main() -> Result<(), Error> {
     let chain = Chain::new(5, Boundary::Open);
     let chain_spaces: Vec<_> = (0..5).map(HilbertSpace::factor).collect();
     let mapped = SiteMapper::new(&chain, &chain_spaces)?;
+    println!(
+        "Chain: {} nearest-neighbor edges",
+        mapped.groups(&NearestNeighbors)?.count()
+    );
     let mut count = 0;
     for group in mapped.groups(&Consecutive::<3>)? {
         let group = group?;
@@ -455,7 +261,12 @@ fn main() -> Result<(), Error> {
     let group = spin_map.groups(&rule)?.next().unwrap()?;
     assert_eq!(group.leaves_cartesian().count(), 4);
     assert_eq!(group.leaves_zip().count(), 2);
-    assert_eq!(group.combine_leaves(zip_leaves).count(), 2);
+    assert_eq!(
+        group
+            .combine_leaves(|mut streams| streams.remove(0))
+            .count(),
+        2
+    );
     println!("Two two-factor sites: 4 Cartesian pairs, 2 zipped pairs");
     Ok(())
 }
@@ -546,7 +357,17 @@ mod tests {
         assert_eq!(leaf_ids(group.leaves_zip()), [[9, 8, 6], [3, 2, 5]]);
         let custom = group.combine_leaves(|mut streams| {
             streams.reverse();
-            zip_leaves(streams)
+            let mut done = false;
+            std::iter::from_fn(move || {
+                if done {
+                    return None;
+                }
+                let row: Option<Vec<_>> = streams.iter_mut().map(Iterator::next).collect();
+                if row.is_none() {
+                    done = true;
+                }
+                row
+            })
         });
         assert_eq!(leaf_ids(custom), [[6, 8, 9], [5, 2, 3]]);
         let expected: Vec<_> = sites
@@ -621,7 +442,7 @@ mod tests {
             .map(|group| {
                 let group = group.unwrap();
                 for (&index, space) in group.source().as_ref().iter().zip(group.iter()) {
-                    assert!(std::ptr::eq(space, &map.values[index]));
+                    assert!(std::ptr::eq(space, &map.values()[index]));
                 }
                 group.source().as_ref().to_vec()
             })
@@ -716,12 +537,12 @@ mod tests {
         let values = [0, 1];
         assert!(matches!(
             SiteMapper::new(&chain, &values[..1]),
-            Err(Error::SiteCountMismatch)
+            Err(MappingError::SiteCountMismatch { .. })
         ));
         let map = SiteMapper::new(&chain, &values).unwrap();
         assert!(matches!(
             map.groups(&Consecutive::<0>),
-            Err(Error::InvalidLength)
+            Err(ConsecutiveError::ZeroLength)
         ));
         let groups: Vec<_> = map
             .groups(&Consecutive::<2>)
@@ -736,7 +557,7 @@ mod tests {
         };
         assert!(matches!(
             map.groups(&bad).unwrap().next().unwrap(),
-            Err(Error::OutOfRange)
+            Err(MappingError::SiteOutOfRange { .. })
         ));
         let empty = OpenSquare::new(0, 3).unwrap();
         let empty_map = SiteMapper::new(&empty, &[] as &[u8]).unwrap();
@@ -751,7 +572,7 @@ mod tests {
         );
         assert!(matches!(
             OpenSquare::new(usize::MAX, 2),
-            Err(Error::InvalidGridSize)
+            Err(GridError::InvalidGridSize)
         ));
     }
 

@@ -3,9 +3,9 @@
 作成日: 2026-10-31
 更新日: 2026-10-31
 
-**設計採用済み・本体未実装**。geometry と relation の採用設計、移行手順、検証条件を本書に集約する。採用した名称は `SiteMapper` と `num_sites`。旧 API の互換性は維持しない。
+**実装・受入確認済み**。geometry と relation の採用設計、移行手順、検証条件を本書に集約する。採用した名称は `SiteMapper` と `num_sites`。旧 API の互換性は維持しない。
 
-現行の契約は[Chain・Site と自由度の配置](../../design/geometry.md)、試作は[geometry_relations.rs](examples/geometry_relations.rs)を参照する。本書の API は試作内で確認したもので、ライブラリ本体にはまだ追加していない。
+現行の契約は[Chain・Site と自由度の配置](../../design/geometry.md)、利用例と独自 geometry の拡張例は[geometry_relations.rs](../../../examples/src/bin/geometry_relations.rs)を参照する。サンプルは本体の公開 API を import し、設計用の重複実装は削除した。
 
 ## 1. 目的と範囲
 
@@ -17,6 +17,20 @@
 今回の正式実装は Chain と、その最近接・連続配置、共通の借用接続を対象とする。将来の正方格子の方向付き列・中心付き近傍も追加できる設計にするが、正方格子自体の正式実装は今回に含めない。
 
 Relation は具体的な幾何の隣接・方向・境界条件などから配置を定める。候補数だけで任意の部分集合を作る一般の組み合わせ列挙は、geometry の Relation に含めない。
+
+### 採用済みの判断
+
+| 項目 | 採用内容 | 詳細 |
+| --- | --- | --- |
+| 責務と名称 | `Geometry`・`Relation<G>`・`SiteMapper`・`MappedGroup` に分け、Site 数は `num_sites()` で取得する | §2 |
+| Group | `AsRef<[usize]>` を共通契約とし、有効長・中心・方向などは具体型に保持する | §2・§3 |
+| 列挙規約 | 最近接の無向辺と、役割を持つ順序付き連続配置を区別する | §3 |
+| 局所自由度 | Site の合成空間を借用し、標準操作は `leaves_cartesian()` と `leaves_zip()`、共通入口は `combine_leaves(FnOnce)` とする | §4・§5 |
+| エラー | Relation ごとの関連型 `Error` と、SiteMapper による対応付けのエラーを分ける | §6 |
+| 式構築 | 既存 core の任意長の積・bind を使い、列挙・接続に評価用の trait bound を加えない | §7 |
+| 互換性 | 旧 `nn_*`・`site_count()` は移行後に削除し、互換エイリアスを残さない | §8 |
+
+今回の正式実装に含めるのは共通の trait・Group・借用接続と、Chain の `NearestNeighbors`・`Consecutive<K>` である。正方格子は拡張性を確認する試作に留める。一般の支持集合列挙と、複数葉に対する全 Pauli string の割り当ては利用側の処理とし、geometry の標準機能には含めない。
 
 ## 2. 型と責務
 
@@ -52,7 +66,7 @@ pub trait Relation<G: Geometry> {
 }
 ```
 
-Chain のフィールド・幾何の責務・構築入口を維持し、Site 数の取得を `site_count()` から `num_sites()` に変更して Geometry を実装する。試作では未変更の本体に接続するため、`Geometry::num_sites()` から現行の `Chain::site_count()` に委譲している。
+Chain の Site 数・境界条件という保持内容、幾何の責務、構築入口を維持し、Site 数の取得を `site_count()` から `num_sites()` に変更して Geometry を実装した。サンプルも本体の Geometry 実装を利用し、旧名称へ委譲するアダプターは残さない。
 
 Relation は設定を保持し、適用時に geometry を受け取る。同じ G に複数の規則を実装でき、同じ規則型を複数の G に実装することもできる。Geometry に単一の関連 Relation 型は割り当てず、全幾何へ共通の連続性や方向型も要求しない。適用可能性は `R: Relation<G>` で表す。
 
@@ -118,7 +132,7 @@ NearestNeighbors と Consecutive<2> は別の規約である。2 Site の period
 
 中心付き近傍の Group は中心と隣接先の方向を保持する。十分大きい open 正方格子では中心込みの長さが角・辺・内部で3・4・5となるため、有効長付きの格納が使える。境界で欠けた方向を、残った要素の位置だけで推測させない。
 
-接続後も元の Group 型を保持し、近傍用の MappedGroup に `center()`・`neighbors()` を提供できる。一般の消費側には中心・方向の能力を要求しない。近傍全体で多体項を作るか、中心と各近傍の2体項を作るかはモデル側が決める。
+接続後も元の Group 型を保持し、近傍用の MappedGroup に拡張 trait を実装し、`center()`・`neighbors()` を提供できる。一般の消費側には中心・方向の能力を要求しない。近傍全体で多体項を作るか、中心と各近傍の2体項を作るかはモデル側が決める。
 
 ## 4. SiteMapper と借用接続
 
@@ -145,7 +159,7 @@ SiteMapper は geometry と外部列への参照だけを保持する。列長�
 
 MappedGroup の `iter()` は組内順の `&T`、`source()` は元の Group を返す。要素・Index の Clone・Eq は不要であり、全件の事前収集も要求しない。結果から式を構築した後に、式が一時的な Group を借用し続ける前提にはしない。
 
-全空間のトップレベルを Site と読む現行 `_in` の経路も、共通接続への補助として整理できる。その場合は葉入力を一 Site、空 Tensor を0 Site、空の空間を一つ包んだ Tensor を一つの空 Site と読む。全葉数から Site 数を決めず、保存された grouping を保持する。
+全空間のトップレベルを Site と読む経路は `SiteMapper::from_space` にまとめた。葉入力を一 Site、空 Tensor を0 Site、空の空間を一つ包んだ Tensor を一つの空 Site と読む。全葉数から Site 数を決めず、保存された grouping を保持する。
 
 ## 5. 複数の局所自由度と leaves の組み合わせ
 
@@ -179,7 +193,7 @@ pub fn combine_leaves<Out: Iterator>(
 
 独自の組み合わせは `group.combine_leaves(my_combiner)` として指定する。Out::Item は固定せず、独自 Fn が順序や Site ごとの区切りを変える場合は、その意味も利用側で定める。専用の FactorSelection trait や追加の選択規則型は導入しない。
 
-現行 Leaves は Clone を実装していない。試作の直積は読み取った葉への参照をキャッシュして再走査し、Index・HilbertSpace・入力 Iterator の Clone を要求しない。全結果を事前生成せず、全件消費時のキャッシュは入力の葉数の和に比例する。正式実装時のキャッシュと再生成の比較は実装判断とする。
+Leaves は Clone を実装していない。本体の直積は読み取った葉への参照をキャッシュして再走査し、Index・HilbertSpace・入力 Iterator の Clone を要求しない。全結果を事前生成せず、全件消費時のキャッシュは入力の葉数の和に比例する。本体では参照のキャッシュを採用した。再生成との性能比較は今回の対象外とする。
 
 | 入力 | 直積・zip の扱い |
 | --- | --- |
@@ -199,7 +213,7 @@ pub fn combine_leaves<Out: Iterator>(
 | 各 Group の接続 | 独自 Relation の範囲外番号を、要素アクセス前に検出 |
 | モデル・core の空間構築 | Index の一意性、配置可能性、全作用空間への bind |
 
-mapper の `groups()` の外側の Result は R::Error、各 Group の接続結果は mapping 側のエラーを返す。独自エラーへの Debug・Display・Error の実装は必須にしない。公開エラー型名・診断項目は実装時に整理する。
+mapper の `groups()` の外側の Result は R::Error、各 Group の接続結果は mapping 側のエラーを返す。独自エラーへの Debug・Display・Error の実装は必須にしない。`MappingError::SiteCountMismatch { expected, actual }` と `MappingError::SiteOutOfRange { site, num_sites }` を公開する。Chain の NearestNeighbors は Infallible、Consecutive は `ConsecutiveError::ZeroLength`、SiteGroup の容量超過は `SiteGroupError::CapacityExceeded { capacity, len }` を返す。
 
 列挙は遅延処理を基本とし、エラーまでに消費済みの結果を巻き戻さない。関係の読み取り・借用接続へ数値演算・評価能力を要求せず、式構築に必要な Index の Eq などは、その処理の段階で要求する。
 
@@ -209,28 +223,30 @@ mapper の `groups()` の外側の Result は R::Error、各 Group の接続結�
 
 X/Y/Z の選択・規格化と全作用空間の選択は具体的代数・モデル側、配置・積・bind・評価は qmb-core が担当する。core から geometry への依存は追加せず、geometry は HilbertSpace 接続のための現行 core 依存と `no_std + alloc` を維持する。
 
-一般の支持集合の全列挙は geometry の Relation ではない。[pauli_strings.rs](examples/pauli_strings.rs) の SupportCombinations は通常の Iterator の補助であり、標準 Relation・今回の正式実装には含めない。統合試作の TestGroups も、不正な番号などを流す test-only fixture である。
+一般の支持集合の全列挙は geometry の Relation ではない。[pauli_strings.rs](../../../examples/src/bin/pauli_strings.rs) の SupportCombinations は通常の Iterator の補助であり、標準 Relation・今回の正式実装には含めない。拡張例の TestGroups も、不正な番号などを流す test-only fixture である。
 
 Pauli サンプルは、1 Site が1 spin の場合に、全支持集合への非恒等な X/Y/Z の割り当てを列挙する。3 Site・高々2 Site なら恒等項を含む37個となる。Sx/Sy/Sz は Pauli 行列の半分なので各因子を2倍し、全作用空間へ bind する。構築関数の制約は `C: From<f64>, I: Eq, Group: AsRef<[usize]>` と、Group を要素に持つ IntoIterator であり、評価能力・係数の Clone は要求しない。
+
+ここで「高々 K Site」は非恒等演算子が作用する支持集合の大きさを指す。N Site なら、大きさ `r = 0..=min(K, N)` の支持集合を一度ずつ選び、各集合へ `3^r` 通りの X/Y/Z を割り当てる。項数は `Σ(r=0..min(K,N)) binomial(N,r) × 3^r` となる。空の支持集合は全作用空間上の恒等項一つに対応し、`Consecutive<0>` を認めることとは別の契約である。全件を保存せず、構築した式を順に消費できる。
 
 「高々 K Site」の K と、実際に作用する葉の数は区別する。1 Site に m 個の spin-1/2 があれば、その Site 上の非恒等 Pauli string は `4^m - 1` 種類である。2葉では XI・IX・XX などを含む15種類となり、各 Site から葉を一つずつ選ぶだけでは全項を作れない。
 
 この全割り当ては利用側の Iterator や独自 combiner で扱い、geometry の標準操作を増やさない。既存 Pauli サンプルの複数葉への全割り当ては未実装である。
 
-## 8. 実装・移行手順
+## 8. 実装・移行結果
 
-1. Geometry・Relation<G>・SiteGroup・SiteMapper・MappedGroup を正式実装する。Chain の構築入口と幾何の責務を維持し、Site 数の取得を num_sites() に統一する。
-2. NearestNeighbors と Consecutive を実装し、同じ geometry・space 列へ複数の規則を適用する経路を完成させる。
-3. 葉の直積・zip・combine_leaves と、トップレベルを Site と読む接続補助を整理する。
-4. spin-half・spin-one・fermion のモデル、examples、テストを移行する。旧 nn_* と site_count() は削除し、非推奨エイリアスは残さない。
-5. 設計用サンプルの重複した実装を正式 API の利用へ置き換え、rustdoc・現行設計文書を更新する。
-6. 以下の受入確認を行い、旧 API と重複した列挙処理の残存を確認する。
+1. Geometry・Relation<G>・SiteGroup・SiteMapper・MappedGroup を本体へ実装した。Chain の構築入口と幾何の責務を維持し、Site 数の取得を num_sites() に統一した。
+2. NearestNeighbors と Consecutive を実装し、同じ geometry・space 列へ複数の規則を適用できるようにした。
+3. 葉の直積・zip・combine_leaves を実装し、トップレベルを Site と読む経路を `SiteMapper::from_space` にまとめた。
+4. spin-half・spin-one・fermion のモデル、examples、テストを移行した。旧 nn_*・site_count()・ChainError と互換エイリアスは残さない。各モデルの `UtilityError::Mapping` は MappingError を source として保持する。
+5. 設計用サンプルの重複した実装を正式 API の利用へ置き換え、rustdoc・現行設計文書を更新した。正方格子の規則と役割情報は、独自実装の例としてサンプル内に保持する。
+6. 受入確認と旧 API・重複実装の残存確認を完了した。結果は第9節に記録する。
 
 既存モデルの公開シグネチャまで無条件に任意の多項 Relation へ一般化しない。モデル固有の葉の役割、結合係数、全作用空間、符号規約、数値結果を維持する。辺なし・結合0の場合も入力検証を省略しない。
 
-内部は geometry・relation・group・connection に責務を分け、公開窓口は crate root を基本とする。ファイル分割、constructor の細部、Iterator の具体型、キャッシュ、追加の読み取り補助は、採用済みの契約を保つ範囲で実装時に判断する。追加の合意を要する大きな未決事項はない。
+内部は geometry・relation・group・connection に責務を分け、公開窓口は crate root とした。SiteMapper は `geometry()`・`values()`、MappedGroup は `get(position)`・`len()`・`is_empty()` も提供する。後続の幾何や規則は、この共通契約へ追加する。
 
-## 9. 検証計画と試作の記録
+## 9. 受入条件と検証記録
 
 ### 正式実装の受入確認
 
@@ -239,26 +255,54 @@ Pauli サンプルは、1 Site が1 spin の場合に、全支持集合への非
 - 中心・方向などの役割情報、独自 Relation のエラー、列長の先行検証と範囲外番号の逐次検証、空入力を確認する。
 - 非対称な演算子配置と graded な入力を使い、葉順・周期境界の役割・符号を維持する。多体項の手作業構築と比較する。
 - 各既存モデルの独立な参照計算・行列、Pauli の参照行列比較を回帰確認に使う。構築だけの例に評価用 bound を持ち込まない。
-- workspace の該当テスト・format・Clippy・ドキュメント生成、MSRV 1.85、専用 no_std target と必要な feature 構成を確認する。
+- workspace の該当テスト・format・Clippy・ドキュメント生成、必要な feature 構成を確認する。MSRV 1.85 と専用 no_std target の実ビルドは、利用者の指定により今回の確認対象から除外する。ソース上の `no_std + alloc` と既存依存構成は維持する。
 
-### 保存した試作と既存の検証結果
+### 公開 API を使うサンプル
 
-[独立した Cargo パッケージ](examples/Cargo.toml)に、次のサンプルを保持する。
+[workspace の examples パッケージ](../../../examples/Cargo.toml)に、次の使用例を保持する。リファクタリング時に本書の下へ保存した試作品を移設し、通常の workspace のビルド・テストに含める。実行方法は [examples の README](../../../examples/README.md)にも記録する。
 
 | サンプル | 確認対象 |
 | --- | --- |
-| [geometry_relations.rs](examples/geometry_relations.rs) | 採用した trait・mapper、Chain と設計用の open 正方格子、葉の組み合わせ |
-| [pauli_strings.rs](examples/pauli_strings.rs) | geometry と独立した支持集合 Iterator からの Pauli string 構築 |
+| [geometry_relations.rs](../../../examples/src/bin/geometry_relations.rs) | 本体の trait・mapper、Chain と設計用の open 正方格子、葉の組み合わせ |
+| [pauli_strings.rs](../../../examples/src/bin/pauli_strings.rs) | geometry と独立した支持集合 Iterator からの Pauli string 構築 |
 
 ```sh
-direnv exec . cargo run --offline --manifest-path docs/plans/v3/examples/Cargo.toml --bin geometry-relations
-direnv exec . cargo run --offline --manifest-path docs/plans/v3/examples/Cargo.toml --bin pauli-strings
-direnv exec . cargo test --offline --manifest-path docs/plans/v3/examples/Cargo.toml
-direnv exec . cargo clippy --offline --manifest-path docs/plans/v3/examples/Cargo.toml --all-targets -- -D warnings
+direnv exec . cargo run -p examples --offline --no-default-features --bin geometry_relations
+direnv exec . cargo run -p examples --offline --no-default-features --bin pauli_strings
+direnv exec . cargo test -p examples --offline --all-features --bin geometry_relations --bin pauli_strings
+direnv exec . cargo clippy -p examples --offline --all-targets --all-features -- -D warnings
 ```
 
-2026-10-31、Rust 1.99.1 で統合試作9件と Pauli サンプル4件、計13件のテスト、format、全 target の Clippy が成功した。これは既存の試作検証記録であり、今回の文書統合時にテストを再実行したものではない。
+移設後、上記の2サンプルを実行し、feature 無効時のテスト11件・全 feature 有効時のテスト13件、format、両 feature 構成での全 target の Clippy が成功した。Pauli の行列比較テスト2件は `export` feature を必要とする。
 
-統合試作では複数 Relation の適用、方向付き列、中心・近傍長の保持、直積・zip、空入力、借用、独自 FnOnce と独自エラーを確認した。Pauli サンプルでは37個すべてを独立な Pauli 行列の tensor product と比較し、重複・規格化・全作用空間を確認した。
+### 実装時の検証記録
 
-新しい Relation<G>・SiteMapper を通した全 Pauli string の数値比較、複数葉への全割り当て、周期正方格子、性能、MSRV 1.85、専用 no_std target は未検証である。正式ライブラリへの API 追加もまだ行っていない。
+Rust 1.99.1 の direnv devShell で以下が成功した。workspace 全 feature の一括実行後に追加したテスト・境界値の整理は、最終状態の geometry・数値テストと default feature 無効の workspace 全体でも確認した。
+
+```sh
+direnv exec . cargo test --workspace --all-features --offline -j2
+direnv exec . cargo test --workspace --no-default-features --offline -j2 --quiet
+direnv exec . cargo test -p qmb-geometry --all-features --offline
+direnv exec . cargo test -p examples --all-features --offline --test geometry_relations
+direnv exec . cargo fmt --all --check
+direnv exec . cargo clippy --workspace --all-targets --all-features --offline -- -D warnings
+direnv exec . sh -c 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps --offline'
+```
+
+リファクタリング時には独立パッケージの2サンプルも実行し、テスト13件と全 target の Clippy が成功した。移設後もテスト13件を保持し、Pauli の行列比較を含む2件は `export` feature を有効にして実行する。本体 geometry は単体・結合テスト計13件と doc test、examples の多体項・Pauli string・graded 積の数値比較は3件が成功した。変更した文書の相対リンク先と `git diff --check` を確認し、旧 API の名称が Rust ソース・サンプルに残っていないことも確認した。
+
+受入条件との対応は次のとおり。
+
+| 対象 | 証拠となるテスト |
+| --- | --- |
+| 最近接・3体/4体の連続配置、空入力・境界条件、容量制限、独自エラー、保存済み Group の借用、逐次検証 | [geometry.rs](../../../crates/qmb-geometry/tests/geometry.rs) |
+| 最大 Site 数での折り返し算術 | [consecutive.rs の単体テスト](../../../crates/qmb-geometry/src/relation/consecutive.rs) |
+| 入れ子・複数葉・可変長 Group、直積/zip、空/単一/0 Site、終了後の next、非 Clone・非 Eq Index、FnOnce、トップレベル解釈 | [space.rs](../../../crates/qmb-geometry/tests/space.rs) |
+| 3体/4体の非対称な Pauli 配置、全37個の Pauli string、周期境界での3体/4体 fermion 積の独立行列・手作業構築との比較 | [geometry_relations.rs](../../../examples/tests/geometry_relations.rs) |
+| 同じ geometry に複数の Relation、同じ規則型に異なる geometry、中心・方向と可変長近傍、最小限の型制約 | [拡張例のテスト](../../../examples/src/bin/geometry_relations.rs) |
+| 既存モデルの値・入力検証・構築の型制約 | spin-half・spin-one・fermion のモデルテストと [chain.rs](../../../examples/tests/chain.rs) |
+| 一般の支持集合 Iterator と Pauli の規格化・独立行列 | [pauli_strings.rs](../../../examples/src/bin/pauli_strings.rs) |
+
+Rust 1.85 と専用 no_std target での実ビルドは、利用者の指定により省略する。専用 target の試行は依存の offline 解決とネットワーク制限で完了しておらず、成功した検証には数えない。
+
+複数葉への全 Pauli string の割り当て、周期正方格子の正式実装と検証、性能測定は今回の対象外である。

@@ -3,14 +3,14 @@
 use crate::{SpinOne, SpinOneOperator as O};
 use core::ops::Neg;
 use qmb_core::{ExpressionError, HilbertSpace, OperatorOf, SpaceError};
-use qmb_geometry::{Chain, ChainError};
+use qmb_geometry::{Chain, MappingError, NearestNeighbors, SiteMapper};
 
 /// Failure to construct a spin-1 model on a site-ordered space assignment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UtilityError {
     /// The input site count differs from the chain's count.
     #[error("{0}")]
-    Chain(#[from] ChainError),
+    Mapping(#[from] MappingError),
     /// An index occurs more than once across the supplied site spaces.
     #[error("{0}")]
     Space(#[from] SpaceError),
@@ -24,7 +24,7 @@ fn model_space<I: Eq>(
     chain: &Chain,
     sites: &[HilbertSpace<I>],
 ) -> Result<HilbertSpace<I>, UtilityError> {
-    let _ = chain.nn_site_pairs_with(sites)?;
+    SiteMapper::new(chain, sites)?;
     Ok(HilbertSpace::tensor_all(sites.iter().cloned())?)
 }
 
@@ -64,12 +64,20 @@ impl<C> SpinOneModels<SpinOne<C>> {
             (O::Sz, -C::from(jz)),
         ];
         let mut terms = Vec::new();
-        for (left, right) in chain.nn_pairs_with(sites)? {
-            for (axis, coupling) in &axes {
-                terms.push(
-                    SpinOne::<C>::operator_product_at([(left, *axis), (right, *axis)])?
-                        .scaled(coupling.clone()),
-                );
+        let mapper = SiteMapper::new(chain, sites)?;
+        for group in mapper
+            .groups(&NearestNeighbors)
+            .unwrap_or_else(|never| match never {})
+        {
+            let group = group?;
+            for pair in group.leaves_cartesian() {
+                let (left, right) = (pair[0], pair[1]);
+                for (axis, coupling) in &axes {
+                    terms.push(
+                        SpinOne::<C>::operator_product_at([(left, *axis), (right, *axis)])?
+                            .scaled(coupling.clone()),
+                    );
+                }
             }
         }
         Ok(SpinOne::<C>::operator_sum(terms)?.bind(&space)?)
@@ -128,13 +136,21 @@ impl<C> SpinOneModels<SpinOne<C>> {
         let minus_j = -C::from(j);
         let minus_k = -C::from(k);
         let mut terms = Vec::new();
-        for (left, right) in chain.nn_pairs_with(sites)? {
-            let bilinear = SpinOne::<C>::try_operator_sum(
-                [O::Sx, O::Sy, O::Sz]
-                    .map(|axis| SpinOne::<C>::operator_product_at([(left, axis), (right, axis)])),
-            )?;
-            terms.push(bilinear.scaled(minus_j.clone()));
-            terms.push((bilinear.clone() * &bilinear)?.scaled(minus_k.clone()));
+        let mapper = SiteMapper::new(chain, sites)?;
+        for group in mapper
+            .groups(&NearestNeighbors)
+            .unwrap_or_else(|never| match never {})
+        {
+            let group = group?;
+            for pair in group.leaves_cartesian() {
+                let (left, right) = (pair[0], pair[1]);
+                let bilinear =
+                    SpinOne::<C>::try_operator_sum([O::Sx, O::Sy, O::Sz].map(|axis| {
+                        SpinOne::<C>::operator_product_at([(left, axis), (right, axis)])
+                    }))?;
+                terms.push(bilinear.scaled(minus_j.clone()));
+                terms.push((bilinear.clone() * &bilinear)?.scaled(minus_k.clone()));
+            }
         }
         Ok(SpinOne::<C>::operator_sum(terms)?.bind(&space)?)
     }

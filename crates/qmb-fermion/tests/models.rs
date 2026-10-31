@@ -5,7 +5,7 @@ use qmb_fermion::{
     Fermion, FermionOperator as O, FermionState as S, LadderBasis, MajoranaBasis, OccupationBasis,
     UtilityError,
 };
-use qmb_geometry::{Boundary, Chain, ChainError};
+use qmb_geometry::{Boundary, Chain, MappingError};
 use qmb_normalize::{Norm, Normalize, NormalizedExpectation};
 use support::*;
 
@@ -170,7 +170,13 @@ fn invalid_sites_lengths_kinds_indices_and_error_sources() {
             ));
         }
         let mismatch = build(&chain, &[], 0., 0.).err().unwrap();
-        assert_eq!(mismatch, UtilityError::Chain(ChainError::SiteCountMismatch));
+        assert_eq!(
+            mismatch,
+            UtilityError::Mapping(MappingError::SiteCountMismatch {
+                expected: 1,
+                actual: 0
+            })
+        );
         assert!(std::error::Error::source(&mismatch).is_some());
         let pair = sites(1).pop().unwrap();
         let duplicate = build(
